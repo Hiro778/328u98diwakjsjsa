@@ -1,0 +1,75 @@
+// _shared/auth.ts
+// JWT verification and business ownership check for Edge Functions.
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { supabaseAdmin } from "./supabase-admin.ts";
+
+export interface AuthContext {
+  userId: string;
+  businessId: string;
+}
+
+/**
+ * Verify the JWT from the Authorization header and return auth context.
+ * Throws on failure — callers should catch and return error response.
+ */
+export async function verifyAuth(req: Request): Promise<AuthContext> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    throw new Error("Missing Authorization header");
+  }
+
+  const token = authHeader.replace("Bearer ", "");
+  if (!token) {
+    throw new Error("Missing token");
+  }
+
+  // Create a client with the user's JWT to verify it
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+
+  const {
+    data: { user },
+    error,
+  } = await userClient.auth.getUser();
+
+  if (error || !user) {
+    throw new Error("Invalid or expired token");
+  }
+
+  // Look up business ownership
+  const { data: business, error: bizError } = await supabaseAdmin
+    .from("businesses")
+    .select("id")
+    .eq("owner_id", user.id)
+    .single();
+
+  if (bizError || !business) {
+    throw new Error("No business found for this user");
+  }
+
+  return {
+    userId: user.id,
+    businessId: business.id,
+  };
+}
+
+/**
+ * Verify that a connection belongs to the authenticated user's business.
+ */
+export async function verifyConnectionOwnership(
+  connectionId: string,
+  businessId: string
+): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("marketplace_connections")
+    .select("id")
+    .eq("id", connectionId)
+    .eq("business_id", businessId)
+    .single();
+
+  return !error && !!data;
+}
