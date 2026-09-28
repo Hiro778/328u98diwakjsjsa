@@ -50,6 +50,9 @@ function getMidtransConfig() {
   const baseUrl = isProduction
     ? "https://app.midtrans.com"
     : "https://app.sandbox.midtrans.com";
+  const apiBaseUrl = isProduction
+    ? "https://api.midtrans.com"
+    : "https://api.sandbox.midtrans.com";
 
   // Safe diagnostics — never log the key value
   const hasKey = !!serverKey;
@@ -70,9 +73,10 @@ function getMidtransConfig() {
     looksLikeServerKey,
     isProduction,
     baseUrl,
+    apiBaseUrl,
   }));
 
-  return { serverKey, baseUrl, isProduction };
+  return { serverKey, baseUrl, apiBaseUrl, isProduction };
 }
 
 // ── Verify user auth (for QR menu, order is created by anon) ──

@@ -43,9 +43,14 @@ async function verifySignature(
 
 // ── Status Mapping ──
 function mapPaymentStatus(transactionStatus: string, fraudStatus?: string): string {
+  if (fraudStatus === "challenge") {
+    return "challenge";
+  }
+  if (fraudStatus === "deny") {
+    return "failed";
+  }
   switch (transactionStatus) {
     case "capture":
-      return fraudStatus === "challenge" ? "challenge" : "paid";
     case "settlement":
       return "paid";
     case "pending":
@@ -60,9 +65,14 @@ function mapPaymentStatus(transactionStatus: string, fraudStatus?: string): stri
 }
 
 function mapOrderStatus(transactionStatus: string, fraudStatus?: string): string {
+  if (fraudStatus === "challenge") {
+    return "pending";
+  }
+  if (fraudStatus === "deny") {
+    return "dibatalkan";
+  }
   switch (transactionStatus) {
     case "capture":
-      return fraudStatus === "challenge" ? "pending" : "selesai";
     case "settlement":
       return "selesai";
     case "pending":
@@ -139,9 +149,16 @@ Deno.serve(async (req) => {
       return new Response("OK", { status: 200 }); // Return OK so Midtrans doesn't bombard retries
     }
 
-    if (!order_id || !signature_key) {
-      console.warn("[midtrans-notification] Missing order_id or signature_key");
-      return new Response("OK", { status: 200 });
+    if (!order_id || !signature_key || !status_code || gross_amount === undefined || gross_amount === null) {
+      console.warn("[midtrans-notification] Missing required fields in notification payload");
+      return new Response("Invalid notification payload: missing required fields", { status: 400 });
+    }
+
+    // Optional Merchant ID verification against configured environment variable
+    const expectedMerchantId = (Deno.env.get("MIDTRANS_MERCHANT_ID") || "").trim();
+    if (expectedMerchantId && notification.merchant_id && notification.merchant_id !== expectedMerchantId) {
+      console.error(`[midtrans-notification] Merchant ID mismatch: received ${notification.merchant_id}, expected ${expectedMerchantId}`);
+      return new Response("Invalid merchant_id", { status: 403 });
     }
 
     // 1. Verify Midtrans Signature
@@ -300,6 +317,12 @@ Deno.serve(async (req) => {
       }
 
       if (newPaymentStatus === "paid") {
+        // Amount verification
+        if (Number(gross_amount) < Number(purchase.amount_idr)) {
+          console.error(`[midtrans-notification] Paid gross_amount ${gross_amount} less than expected ${purchase.amount_idr}`);
+          return new Response("Invalid gross_amount", { status: 400 });
+        }
+
         // Atomic status transition: only grant credits if status is updated from pending -> paid
         const { data: updatedPurchase, error: updateErr } = await supabaseAdmin
           .from("credit_purchases")
@@ -364,6 +387,12 @@ Deno.serve(async (req) => {
     if (order.payment_status === "paid" && newPaymentStatus === "paid") {
       console.log(`[midtrans-notification] Order ${order.id} already paid, skipping.`);
       return new Response("OK", { status: 200 });
+    }
+
+    // Amount verification: paid gross_amount cannot be less than order.total
+    if (newPaymentStatus === "paid" && Number(gross_amount) < Number(order.total)) {
+      console.error(`[midtrans-notification] Paid gross_amount ${gross_amount} less than order total ${order.total}`);
+      return new Response("Invalid gross_amount", { status: 400 });
     }
 
     // Update order status

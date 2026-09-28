@@ -217,7 +217,7 @@ async function runBrowserAndLiveE2E() {
 
   // Note: supabaseAdmin has service_role (auth.uid() is null unless impersonated),
   // but if the function requires auth.uid(), let's check:
-  if (processErr && processErr.message?.includes('UNAUTHORIZED')) {
+  if (processErr && processErr.message?.toLowerCase().includes('unauthorized')) {
     // Expected because supabaseAdmin without JWT has auth.uid() null.
     // Verify the function strictly guards against unauthorized callers!
     log('22. merchant_process_order enforces auth.uid() authentication', true)
