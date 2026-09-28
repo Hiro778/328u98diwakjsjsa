@@ -285,7 +285,7 @@ export default function BusinessQrisSettings({ businessId, onToast }) {
       </div>
 
       {/* Main Content Area */}
-      <div className="p-6 sm:p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         {localError && (
           <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/10 p-3.5 text-xs text-red-400 flex items-center justify-between">
             <span>{localError}</span>
@@ -459,7 +459,7 @@ export default function BusinessQrisSettings({ businessId, onToast }) {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.15 }}
-              className="w-full max-w-md rounded-2xl border border-border bg-surface-elevated p-6 shadow-2xl"
+              className="w-full max-w-[calc(100vw-2rem)] sm:max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-surface-elevated p-5 sm:p-6 shadow-2xl"
             >
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-400">

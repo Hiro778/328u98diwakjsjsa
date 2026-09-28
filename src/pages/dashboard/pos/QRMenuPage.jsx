@@ -138,15 +138,15 @@ export default function QRMenuPage() {
     <div>
       <Toast message={toast?.message} type={toast?.type} onDismiss={() => {}} />
       <BackButton fallbackUrl="/dashboard/pos" />
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold text-navy-700">QR Menu & Pesanan</h1>
-          <p className="mt-1 text-sm text-text-secondary">Buat menu digital, terima pesanan dari meja, dan kelola semuanya dari kasir.</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between min-w-0">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-extrabold text-navy-700">QR Menu & Pesanan</h1>
+          <p className="mt-1 text-xs sm:text-sm text-text-secondary">Buat menu digital, terima pesanan dari meja, dan kelola semuanya dari kasir.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link
             to="/dashboard/pos/qr-menu/designer"
-            className="rounded-xl border border-warm-400 bg-warm-50/70 px-4 py-2.5 text-sm font-bold text-warm-600 transition-colors hover:bg-warm-100 flex items-center gap-1.5"
+            className="rounded-xl border border-warm-400 bg-warm-50/70 px-4 py-2.5 text-xs sm:text-sm font-bold text-warm-600 transition-colors hover:bg-warm-100 flex items-center gap-1.5"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
@@ -158,7 +158,7 @@ export default function QRMenuPage() {
               href={menuUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-xl border border-border bg-surface px-5 py-2.5 text-sm font-medium text-navy-700 transition-colors hover:bg-cream"
+              className="rounded-xl border border-border bg-surface px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-medium text-navy-700 transition-colors hover:bg-cream"
             >
               Lihat Menu
             </a>
@@ -215,8 +215,8 @@ export default function QRMenuPage() {
           </div>
         </div>
         {business?.is_menu_published && menuUrl && (
-          <div className="mt-3 flex items-center gap-2">
-            <code className="flex-1 truncate rounded-lg bg-white/60 px-3 py-2 text-xs text-navy-600">
+          <div className="mt-3 flex items-center gap-2 min-w-0">
+            <code className="flex-1 min-w-0 truncate rounded-lg bg-white/60 px-3 py-2 text-xs text-navy-600">
               {menuUrl}
             </code>
             <button
@@ -231,7 +231,7 @@ export default function QRMenuPage() {
 
       {/* Empty state CTA */}
       {stats.products === 0 && !business?.is_menu_published && (
-        <div className="mt-6 rounded-2xl border-2 border-dashed border-warm-200 bg-warm-50 p-8 text-center">
+        <div className="mt-6 rounded-2xl border-2 border-dashed border-warm-200 bg-warm-50 p-6 sm:p-8 text-center">
           <svg className="mx-auto h-10 w-10 text-warm-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
@@ -247,7 +247,7 @@ export default function QRMenuPage() {
       )}
 
       {/* Stats */}
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
         <Link to="/dashboard/pos/products" className="group rounded-2xl border border-border bg-surface p-5 transition-all hover:border-warm-200 hover:shadow-sm">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-warm-50">
@@ -295,7 +295,7 @@ export default function QRMenuPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="mt-8 grid gap-4 sm:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Link
           to="/dashboard/pos"
           className="group flex items-center gap-4 rounded-2xl border border-border bg-surface p-5 transition-all hover:border-warm-200 hover:shadow-sm"

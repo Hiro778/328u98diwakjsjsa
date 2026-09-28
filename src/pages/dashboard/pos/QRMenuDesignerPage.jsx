@@ -83,6 +83,9 @@ export default function QRMenuDesignerPage() {
   const [isSocialModalOpen, setIsSocialModalOpen] = useState(false)
   const [editingSocial, setEditingSocial] = useState(null)
 
+  // Mobile / Tablet Tab Switcher (bug.md responsive design)
+  const [mobileTab, setMobileTab] = useState('preview') // 'sections' | 'preview' | 'inspector'
+
   // Sample cart for simulator
   const [simulatorCart, setSimulatorCart] = useState([
     {
@@ -599,26 +602,26 @@ export default function QRMenuDesignerPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden bg-background">
       {/* Top Navigation Bar */}
-      <header className="shrink-0 flex items-center justify-between border-b border-border bg-surface px-4 py-3 shadow-2xs">
-        <div className="flex items-center gap-3">
+      <header className="shrink-0 flex items-center justify-between gap-2 border-b border-border bg-surface px-3 py-2.5 sm:px-4 sm:py-3 shadow-2xs">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <BackButton fallbackUrl="/dashboard/pos/qr-menu" label="Kembali" />
-          <div>
-            <h1 className="text-base font-extrabold text-navy-700 leading-tight">
+          <div className="min-w-0">
+            <h1 className="text-sm sm:text-base font-extrabold text-navy-700 leading-tight truncate">
               QR Menu Designer
             </h1>
-            <p className="text-[11px] text-text-muted">
+            <p className="hidden sm:block text-[11px] text-text-muted truncate">
               Kustomisasi tampilan menu publik agar mencerminkan identitas tokomu.
             </p>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 shrink-0">
           <a
             href={publicMenuUrl}
             target="_blank"
             rel="noreferrer"
-            className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-semibold text-text-secondary hover:bg-cream transition-colors"
+            className="hidden md:inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-semibold text-text-secondary hover:bg-cream transition-colors"
           >
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
@@ -630,29 +633,69 @@ export default function QRMenuDesignerPage() {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-1.5 rounded-xl bg-warm-400 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-warm-500 disabled:opacity-60 transition-all hover:shadow-md"
+            className="flex items-center gap-1.5 rounded-xl bg-warm-400 px-3.5 sm:px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-warm-500 disabled:opacity-60 transition-all hover:shadow-md"
           >
             {saving ? (
               <>
                 <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                Menyimpan...
+                <span>Menyimpan...</span>
               </>
             ) : (
               <>
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                 </svg>
-                Simpan Desain
+                <span>Simpan Desain</span>
               </>
             )}
           </button>
         </div>
       </header>
 
+      {/* Mobile & Tablet Tab Bar (< lg screens per bug.md) */}
+      <div className="lg:hidden shrink-0 flex items-center justify-around border-b border-border bg-surface px-2 py-1.5 shadow-2xs">
+        <button
+          type="button"
+          onClick={() => setMobileTab('sections')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+            mobileTab === 'sections'
+              ? 'bg-warm-400 text-white shadow-xs'
+              : 'text-text-secondary hover:bg-cream'
+          }`}
+        >
+          <span>📋</span>
+          <span>Tata Letak</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab('preview')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+            mobileTab === 'preview'
+              ? 'bg-warm-400 text-white shadow-xs'
+              : 'text-text-secondary hover:bg-cream'
+          }`}
+        >
+          <span>📱</span>
+          <span>Simulator</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab('inspector')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+            mobileTab === 'inspector'
+              ? 'bg-warm-400 text-white shadow-xs'
+              : 'text-text-secondary hover:bg-cream'
+          }`}
+        >
+          <span>⚙️</span>
+          <span>Tampilan</span>
+        </button>
+      </div>
+
       {/* Main 3-Column Layout Workspace */}
       <div className="flex-1 flex overflow-hidden">
         {/* ── LEFT PANEL: SECTIONS & DRAG REORDER ── */}
-        <aside className="w-72 shrink-0 border-r border-border bg-surface flex flex-col overflow-hidden">
+        <aside className={`w-full lg:w-72 shrink-0 border-r border-border bg-surface flex-col overflow-hidden ${mobileTab === 'sections' ? 'flex' : 'hidden lg:flex'}`}>
           <div className="p-3.5 border-b border-border flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-navy-700">
               Tata Letak Seksi
@@ -682,7 +725,10 @@ export default function QRMenuDesignerPage() {
                   key={item.id}
                   item={item}
                   isSelected={selectedSectionId === item.id}
-                  onSelect={() => setSelectedSectionId(item.id)}
+                  onSelect={() => {
+                    setSelectedSectionId(item.id)
+                    setMobileTab('inspector')
+                  }}
                   onToggleVisibility={() => toggleSectionVisibility(item.id)}
                 />
               ))}
@@ -695,7 +741,10 @@ export default function QRMenuDesignerPage() {
             <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
-                onClick={() => setSelectedSectionId('theme')}
+                onClick={() => {
+                  setSelectedSectionId('theme')
+                  setMobileTab('inspector')
+                }}
                 className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg text-left transition-colors ${
                   selectedSectionId === 'theme'
                     ? 'bg-warm-400 text-white shadow-xs'
@@ -706,7 +755,10 @@ export default function QRMenuDesignerPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setSelectedSectionId('typography')}
+                onClick={() => {
+                  setSelectedSectionId('typography')
+                  setMobileTab('inspector')
+                }}
                 className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg text-left transition-colors ${
                   selectedSectionId === 'typography'
                     ? 'bg-warm-400 text-white shadow-xs'
@@ -717,7 +769,10 @@ export default function QRMenuDesignerPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setSelectedSectionId('social')}
+                onClick={() => {
+                  setSelectedSectionId('social')
+                  setMobileTab('inspector')
+                }}
                 className={`col-span-2 px-2.5 py-1.5 text-xs font-semibold rounded-lg text-left transition-colors ${
                   selectedSectionId === 'social'
                     ? 'bg-warm-400 text-white shadow-xs'
@@ -731,63 +786,63 @@ export default function QRMenuDesignerPage() {
         </aside>
 
         {/* ── CENTER PANEL: LIVE SIMULATOR CANVAS ── */}
-        <main className="flex-1 bg-cream/60 flex flex-col overflow-hidden">
+        <main className={`w-full flex-1 bg-cream/60 flex-col overflow-hidden ${mobileTab === 'preview' ? 'flex' : 'hidden lg:flex'}`}>
           {/* Device Size Switcher Bar */}
-          <div className="shrink-0 flex items-center justify-center gap-2 py-2 border-b border-border/60 bg-surface/50">
+          <div className="shrink-0 flex items-center justify-center gap-1.5 sm:gap-2 py-2 px-2 border-b border-border/60 bg-surface/50 overflow-x-auto">
             <button
               type="button"
               onClick={() => setDeviceMode('mobile')}
-              className={`flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+              className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
                 deviceMode === 'mobile'
                   ? 'bg-warm-50 text-warm-500 border border-warm-200'
                   : 'text-text-muted hover:text-navy-700'
               }`}
             >
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
               </svg>
-              Mobile (390px)
+              <span>Mobile (390px)</span>
             </button>
 
             <button
               type="button"
               onClick={() => setDeviceMode('tablet')}
-              className={`flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+              className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
                 deviceMode === 'tablet'
                   ? 'bg-warm-50 text-warm-500 border border-warm-200'
                   : 'text-text-muted hover:text-navy-700'
               }`}
             >
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5h3m-6.75 2.25h10.5a2.25 2.25 0 002.25-2.25v-15a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 4.5v15a2.25 2.25 0 002.25 2.25z" />
               </svg>
-              Tablet (640px)
+              <span>Tablet (640px)</span>
             </button>
 
             <button
               type="button"
               onClick={() => setDeviceMode('desktop')}
-              className={`flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+              className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
                 deviceMode === 'desktop'
                   ? 'bg-warm-50 text-warm-500 border border-warm-200'
                   : 'text-text-muted hover:text-navy-700'
               }`}
             >
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />
               </svg>
-              Desktop
+              <span>Desktop</span>
             </button>
           </div>
 
           {/* Simulator Viewport Container */}
-          <div className="flex-1 overflow-y-auto p-4 flex items-start justify-center">
+          <div className="flex-1 overflow-y-auto p-2 sm:p-4 flex items-start justify-center">
             <div
               className={`transition-all duration-300 relative ${
                 deviceMode === 'mobile'
-                  ? 'w-[390px] rounded-[36px] shadow-2xl border-8 border-slate-800 bg-white overflow-hidden my-auto'
+                  ? 'w-full max-w-[390px] rounded-3xl sm:rounded-[36px] shadow-2xl border-4 sm:border-8 border-slate-800 bg-white overflow-hidden my-auto'
                   : deviceMode === 'tablet'
-                  ? 'w-[640px] rounded-3xl shadow-2xl border-8 border-slate-800 bg-white overflow-hidden my-auto'
+                  ? 'w-full max-w-[640px] rounded-2xl sm:rounded-3xl shadow-2xl border-4 sm:border-8 border-slate-800 bg-white overflow-hidden my-auto'
                   : 'w-full max-w-3xl rounded-2xl shadow-lg border border-border bg-white overflow-hidden'
               }`}
             >
@@ -836,11 +891,19 @@ export default function QRMenuDesignerPage() {
         </main>
 
         {/* ── RIGHT PANEL: PROPERTIES & APPEARANCE INSPECTOR ── */}
-        <aside className="w-80 shrink-0 border-l border-border bg-surface flex flex-col overflow-hidden">
-          <div className="p-3.5 border-b border-border">
+        <aside className={`w-full lg:w-80 shrink-0 border-l border-border bg-surface flex-col overflow-hidden ${mobileTab === 'inspector' ? 'flex' : 'hidden lg:flex'}`}>
+          <div className="p-3.5 border-b border-border flex items-center justify-between">
             <h2 className="text-xs font-bold uppercase tracking-wider text-navy-700">
               Pengaturan Tampilan
             </h2>
+            <button
+              type="button"
+              onClick={() => setMobileTab('preview')}
+              className="lg:hidden text-xs font-bold text-warm-500 hover:text-warm-600 flex items-center gap-1"
+            >
+              <span>Lihat Simulator</span>
+              <span>&rarr;</span>
+            </button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -1650,7 +1713,7 @@ function BannerModal({ isOpen, onClose, banner, onSave, uploading }) {
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className="relative w-full max-w-md rounded-2xl bg-surface p-5 shadow-2xl z-10 space-y-4 max-h-[90vh] overflow-y-auto"
+            className="relative w-full max-w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl bg-surface p-4 sm:p-5 shadow-2xl z-10 space-y-4 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="text-sm font-bold text-navy-800">
@@ -1864,7 +1927,7 @@ function SocialModal({ isOpen, onClose, link, onSave }) {
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className="relative w-full max-w-md rounded-2xl bg-surface p-5 shadow-2xl z-10 space-y-4"
+            className="relative w-full max-w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl bg-surface p-4 sm:p-5 shadow-2xl z-10 space-y-4 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="text-sm font-bold text-navy-800">

@@ -807,7 +807,7 @@ function ProductGridCard({
       </div>
 
       {/* 2. Product Information Area */}
-      <div className="p-3 flex flex-col justify-between flex-1">
+      <div className="p-2.5 sm:p-3 flex flex-col justify-between flex-1 min-w-0">
         <div>
           {/* Nama Produk */}
           <h3

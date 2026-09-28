@@ -42,7 +42,7 @@ export default function QRMenuPublishedPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg">
+    <div className="mx-auto w-full max-w-lg px-4 sm:px-0">
       <BackButton fallbackUrl="/dashboard/pos/qr-menu" label="Kembali ke QR Menu" />
       {/* Success Header */}
       <motion.div
@@ -55,8 +55,8 @@ export default function QRMenuPublishedPage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h1 className="mt-6 text-2xl font-extrabold text-navy-700">Menu Anda Sudah Siap!</h1>
-        <p className="mt-2 text-sm text-text-secondary">Menu publik berhasil dipublish dan siap diakses customer.</p>
+        <h1 className="mt-6 text-xl sm:text-2xl font-extrabold text-navy-700">Menu Anda Sudah Siap!</h1>
+        <p className="mt-2 text-xs sm:text-sm text-text-secondary">Menu publik berhasil dipublish dan siap diakses customer.</p>
       </motion.div>
 
       {/* Business Info Card */}
@@ -64,20 +64,20 @@ export default function QRMenuPublishedPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="mt-8 rounded-2xl border border-profit-200 bg-profit-50 p-6"
+        className="mt-8 rounded-2xl border border-profit-200 bg-profit-50 p-4 sm:p-6"
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
           {business?.logo_url ? (
-            <img src={business.logo_url} alt="" className="h-14 w-14 rounded-xl object-cover" />
+            <img src={business.logo_url} alt="" className="h-12 w-12 sm:h-14 sm:w-14 rounded-xl object-cover shrink-0" />
           ) : (
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-navy-600">
-              <span className="text-lg font-extrabold text-white">
+            <div className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-xl bg-navy-600 shrink-0">
+              <span className="text-base sm:text-lg font-extrabold text-white">
                 {(business?.name || 'BS').slice(0, 2).toUpperCase()}
               </span>
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <p className="text-lg font-extrabold text-navy-700 truncate">{business?.name}</p>
+            <p className="text-base sm:text-lg font-extrabold text-navy-700 truncate">{business?.name}</p>
             <div className="flex items-center gap-2 mt-1">
               <span className="inline-flex items-center gap-1 rounded-full bg-profit-100 px-2.5 py-0.5 text-xs font-bold text-profit-700">
                 <span className="h-1.5 w-1.5 rounded-full bg-profit-500" />
@@ -89,8 +89,8 @@ export default function QRMenuPublishedPage() {
 
         {/* Public URL */}
         {menuUrl && (
-          <div className="mt-4 flex items-center gap-2">
-            <code className="flex-1 truncate rounded-lg bg-white/70 px-3 py-2.5 text-xs text-navy-600">
+          <div className="mt-4 flex items-center gap-2 min-w-0">
+            <code className="flex-1 min-w-0 truncate rounded-lg bg-white/70 px-3 py-2.5 text-xs text-navy-600">
               {menuUrl}
             </code>
             <button
