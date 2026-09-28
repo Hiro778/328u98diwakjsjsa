@@ -1,30 +1,31 @@
-// creative-generate-prd/index.ts
+// supabase/functions/creative-generate-prd/index.ts
 // Generate AI Creative PRD from brief + product data
 //
 // POST body: { brief_id: string, product_id?: string }
-// Returns: { prdId, prdContent, status }
+// Returns: { prdId, prdContent, status, credits }
 //
-// Flow:
-// 1. Authenticate & validate business ownership
-// 2. Validate subscription entitlement
-// 3. Validate brief exists
-// 4. Reserve 1 credit (atomic)
-// 5. Build prompt with actual product data from DB
-// 6. Call LLM provider (Gemini Flash-Lite)
-// 7. Validate response schema
-// 8. Store PRD in creative_prds
-// 9. Create generation record
-// 10. Consume credit
-// 11. Return result or refund on failure
+// Rules from fix.md & fixwa.md:
+// - 1x Free usage per business lifetime (checked via creative_free_usage)
+// - Cost: 1 credit (GENERATE_PRD) if not free
+// - Atomic credit debit via deduct_creative_credits_atomic ONLY after PRD is successfully validated
+// - Primary Model: gemini-3.6-flash
+// - Fallback Model: gemini-3.5-flash-lite (triggered only on 503/UNAVAILABLE availability errors)
+// - No aggressive retry loops
+// - Credit NOT deducted if generation or validation fails
+// - Never expose GEMINI_API_KEY to frontend
+// - Actual token usage from Gemini response.usageMetadata
+// - Provider cost calculated based on actual model used
+// - Recorded to public.ai_usage
 
 import { verifyAuth } from "../_shared/auth.ts";
 import { supabaseAdmin } from "../_shared/supabase-admin.ts";
 import { jsonResponse, errorResponse, corsResponse } from "../_shared/response.ts";
+import { enforceAiFeatureFlag } from "../_shared/platform-settings.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent";
+const PRIMARY_MODEL = "gemini-3.6-flash";
+const FALLBACK_MODEL = "gemini-3.5-flash-lite";
 
-// Required PRD fields for schema validation
 const REQUIRED_PRD_FIELDS = [
   "headline",
   "subheadline",
@@ -34,21 +35,78 @@ const REQUIRED_PRD_FIELDS = [
   "platform_adaptations",
 ];
 
+function isAvailabilityError(error: any): boolean {
+  const status = error?.status;
+  const msg = String(error?.message || error?.body || "");
+  return (
+    status === 503 ||
+    msg.includes("503") ||
+    msg.includes("UNAVAILABLE") ||
+    msg.includes("high demand") ||
+    msg.includes("overloaded")
+  );
+}
+
+async function requestGemini(model: string, prompt: string, apiKey: string) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 35000);
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 2048,
+        },
+      }),
+      signal: controller.signal,
+    });
+
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      const err = new Error(`Gemini API error ${response.status}: ${responseText}`);
+      (err as any).status = response.status;
+      (err as any).body = responseText;
+      throw err;
+    }
+
+    const data = JSON.parse(responseText);
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) {
+      throw new Error("Empty response from Gemini API");
+    }
+
+    return {
+      text,
+      usageMetadata: data.usageMetadata,
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return corsResponse();
 
   try {
-    // 1. Authenticate
-    const auth = await verifyAuth(req);
+    // @ban.md item 6: enforce enable_ai_features platform flag BEFORE calling AI provider
+    const aiBlocked = await enforceAiFeatureFlag();
+    if (aiBlocked) {
+      return errorResponse(aiBlocked, 503);
+    }
 
-    // 2. Parse request
-    const { brief_id, product_id } = await req.json();
-
+    const body = await req.json();
+    const { brief_id, product_id, business_id } = body || {};
     if (!brief_id) {
       return errorResponse("brief_id is required", 400);
     }
 
-    // 3. Validate brief ownership
+    // 1. Validate brief ownership
     const { data: brief, error: briefError } = await supabaseAdmin
       .from("creative_briefs")
       .select("id, campaign_id, product_id, brief_json, reference_urls")
@@ -59,20 +117,36 @@ Deno.serve(async (req) => {
       return errorResponse("Creative brief not found", 404);
     }
 
-    // Validate campaign ownership
-    const { data: campaign } = await supabaseAdmin
+    // 2. Validate campaign ownership
+    const { data: campaign, error: campaignError } = await supabaseAdmin
       .from("campaigns")
       .select("id, business_id")
       .eq("id", brief.campaign_id)
       .single();
 
-    if (!campaign || campaign.business_id !== auth.businessId) {
-      return errorResponse("Access denied: brief does not belong to your business", 403);
+    if (campaignError || !campaign) {
+      return errorResponse("Campaign not found", 404);
     }
 
-    // 4. Get product data from database (source of truth)
-    let productData = null;
+    // Authoritative campaign business_id as source of truth
+    const authoritativeBusinessId = campaign.business_id || business_id;
+    const auth = await verifyAuth(req, authoritativeBusinessId);
+
+    // Verify authenticated user owns this business
+    const { data: userBusiness } = await supabaseAdmin
+      .from("businesses")
+      .select("id")
+      .eq("id", campaign.business_id)
+      .eq("owner_id", auth.userId)
+      .maybeSingle();
+
+    if (!userBusiness) {
+      return errorResponse("Access denied: You do not own this campaign", 403);
+    }
+
+    // 3. Resolve product data if present
     const productIdToUse = product_id || brief.product_id;
+    let productData: any = null;
 
     if (productIdToUse) {
       const { data: product } = await supabaseAdmin
@@ -86,7 +160,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 5. Build prompt with actual product data
     const briefData = brief.brief_json || {};
     const productSnapshot = productData
       ? {
@@ -138,67 +211,42 @@ REQUIREMENTS:
    - "video_script": Full script for video generation (string)
    - "platform_adaptations": Object with platform-specific adaptations (object)
    - "product_snapshot": Object with name, sku, price, description (object)
-   - "negative_constraints": Array of constraints to avoid (array of strings)
-   - "hook": Attention-grabbing opening (string)
-   - "storyboard": Visual storyboard description (string)
-   - "scene_descriptions": Array of scene descriptions for video (array of strings)
-   - "camera_direction": Camera movement and framing (string)
-   - "lighting": Lighting direction (string)
-   - "duration": Video duration in seconds (number)
-   - "CTA": Call to action text (string)
-   - "caption": Social media caption (string)
-   - "hashtags": Array of relevant hashtags (array of strings)
 
-3. ALL product information MUST come from the Product Information section above. DO NOT invent product names, prices, SKUs, or descriptions.
-4. ALL creative directions should respect the user's brief input.
-5. Return ONLY the JSON object. No markdown, no code blocks, no explanatory text.
-6. Ensure the JSON is valid and parseable.
+3. Return ONLY valid JSON. No markdown backticks.`;
 
-Generate the JSON PRD now.`;
+    // 4. Atomic Check & Claim 1x Lifetime Free Usage (Anti-Race Condition)
+    const requestId = `PRD-${crypto.randomUUID()}`;
+    let isFreeUsage = false;
 
-    // 6. Reserve 1 credit (atomic operation)
-    const creditIdempotencyKey = `${auth.businessId}:prd_generate:${brief_id}:${Date.now()}`;
-
-    // First check credit balance
-    const { data: credits } = await supabaseAdmin
-      .from("creative_credits")
-      .select("available, reserved, consumed, total_earned")
-      .eq("business_id", auth.businessId)
-      .single();
-
-    if (!credits || credits.available < 1) {
-      return errorResponse("Insufficient credits for PRD generation", 400);
-    }
-
-    // Reserve credit
-    const newAvailable = credits.available - 1;
-    const newReserved = credits.reserved + 1;
-
-    const { error: reserveError } = await supabaseAdmin
-      .from("creative_credits")
-      .update({
-        available: newAvailable,
-        reserved: newReserved,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("business_id", auth.businessId);
-
-    if (reserveError) {
-      return errorResponse(`Failed to reserve credit: ${reserveError.message}`, 500);
-    }
-
-    // Insert ledger entry for reservation
-    await supabaseAdmin.from("credit_ledger").insert({
-      business_id: auth.businessId,
-      type: "reserve",
-      credits: 1,
-      balance_after: newAvailable + newReserved + credits.consumed,
-      reference_type: "generation",
-      description: "Credit reserved for PRD generation",
-      idempotency_key: creditIdempotencyKey,
+    const { data: claimRes } = await supabaseAdmin.rpc("claim_creative_free_usage_atomic", {
+      p_business_id: auth.businessId,
+      p_profile_id: auth.userId,
+      p_operation: "GENERATE_PRD",
+      p_request_id: requestId,
     });
 
-    // 7. Create PRD record (status: generating)
+    if (claimRes?.success) {
+      isFreeUsage = true;
+    }
+
+    const CREATIVE_GENERATION_COST = 20;
+    const requiredCredits = isFreeUsage ? 0 : CREATIVE_GENERATION_COST; // 20 tokens per ai.md single source of truth
+
+    // 5. Pre-check Credit Balance (prevent generating if credits insufficient)
+    if (!isFreeUsage) {
+      const { data: creditRec } = await supabaseAdmin
+        .from("creative_credits")
+        .select("available")
+        .eq("business_id", auth.businessId)
+        .maybeSingle();
+
+      const availableCredits = creditRec?.available ?? 0;
+      if (availableCredits < requiredCredits) {
+        return errorResponse("Creative Credits tidak cukup. Silakan top up untuk melanjutkan.", 400);
+      }
+    }
+
+    // 6. Create PRD record (status: generating)
     const { data: prd, error: prdError } = await supabaseAdmin
       .from("creative_prds")
       .insert({
@@ -206,262 +254,190 @@ Generate the JSON PRD now.`;
         prd_content: {
           product_snapshot: productSnapshot,
           status: "generating",
+          is_free_generation: isFreeUsage,
+          request_id: requestId,
         },
         version: 1,
         status: "generating",
-        created_at: new Date().toISOString(),
       })
       .select()
       .single();
 
     if (prdError) {
-      // Refund credit on failure
-      await supabaseAdmin.from("creative_credits").update({
-        available: credits.available,
-        reserved: credits.reserved,
-        updated_at: new Date().toISOString(),
-      }).eq("business_id", auth.businessId);
-
-      await supabaseAdmin.from("credit_ledger").insert({
-        business_id: auth.businessId,
-        type: "unreserve",
-        credits: 1,
-        balance_after: credits.available + credits.reserved + credits.consumed,
-        reference_type: "generation",
-        description: "Credit unreserved due to PRD creation failure",
-        idempotency_key: `${creditIdempotencyKey}:refund`,
-      });
-
+      if (isFreeUsage) {
+        await supabaseAdmin.rpc("rollback_creative_free_usage", {
+          p_business_id: auth.businessId,
+          p_request_id: requestId,
+        });
+      }
       return errorResponse(`Failed to create PRD record: ${prdError.message}`, 500);
     }
 
-    // 8. Create generation record
-    const promptHash = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(prompt)
-    ).then((buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join(""));
-
-    const genIdempotencyKey = `${auth.businessId}:${brief_id}:prd:${promptHash}:${Date.now()}`;
-
-    const { data: generation, error: genError } = await supabaseAdmin
-      .from("creative_generations")
-      .insert({
-        asset_id: prd.id,
-        business_id: auth.businessId,
-        provider: "gemini_flash_lite",
-        model: "gemini-2.5-flash-lite",
-        prompt_hash: promptHash,
-        status: "processing",
-        credits_charged: 1,
-        idempotency_key: genIdempotencyKey,
-        created_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (genError) {
-      // Refund and cleanup
-      await supabaseAdmin.from("creative_prds").delete().eq("id", prd.id);
-      await supabaseAdmin.from("creative_credits").update({
-        available: credits.available,
-        reserved: credits.reserved,
-        updated_at: new Date().toISOString(),
-      }).eq("business_id", auth.businessId);
-
-      return errorResponse(`Failed to create generation record: ${genError.message}`, 500);
-    }
-
-    // 9. Call LLM provider (with timeout)
-    let llmResponse: string;
-    let providerCostUsd = 0;
+    // 7. Call LLM (Primary Model with Fallback on 503/UNAVAILABLE)
+    let llmResponse = "";
+    let usageMetadata: any = null;
+    let modelUsed = PRIMARY_MODEL;
 
     try {
       if (!GEMINI_API_KEY) {
         throw new Error("GEMINI_API_KEY not configured");
       }
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
-
-      const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2048,
-          },
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        throw new Error(`Gemini API error ${response.status}: ${errorBody}`);
+      try {
+        const result = await requestGemini(PRIMARY_MODEL, prompt, GEMINI_API_KEY);
+        llmResponse = result.text;
+        usageMetadata = result.usageMetadata;
+        modelUsed = PRIMARY_MODEL;
+      } catch (primaryErr: any) {
+        // Fallback ONLY for availability errors (503 / UNAVAILABLE / high demand)
+        if (isAvailabilityError(primaryErr)) {
+          console.warn(`[creative-generate-prd] Primary model ${PRIMARY_MODEL} unavailable (503/UNAVAILABLE). Falling back to ${FALLBACK_MODEL}...`);
+          const fallbackResult = await requestGemini(FALLBACK_MODEL, prompt, GEMINI_API_KEY);
+          llmResponse = fallbackResult.text;
+          usageMetadata = fallbackResult.usageMetadata;
+          modelUsed = FALLBACK_MODEL;
+        } else {
+          // Do not fallback on 400 or other non-availability errors
+          throw primaryErr;
+        }
       }
-
-      const data = await response.json();
-      llmResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      if (!llmResponse) {
-        throw new Error("Empty response from Gemini API");
-      }
-
-      // Calculate provider cost (Gemini Flash-Lite: $0.10/1M input, $0.40/1M output)
-      const inputTokens = prompt.length / 4; // rough estimate
-      const outputTokens = llmResponse.length / 4;
-      providerCostUsd = (inputTokens * 0.1 + outputTokens * 0.4) / 1_000_000;
-
     } catch (llmError: any) {
-      // LLM failed — refund credit and update records
-      console.error("[creative-generate-prd] LLM error:", llmError);
-
-      // Update generation as failed
-      await supabaseAdmin.from("creative_generations").update({
-        status: "failed",
-        error_message: llmError.message || "LLM generation failed",
-        completed_at: new Date().toISOString(),
-      }).eq("id", generation.id);
-
-      // Update PRD as failed
-      await supabaseAdmin.from("creative_prds").update({
-        status: "failed",
-      }).eq("id", prd.id);
-
-      // Refund credit
-      await supabaseAdmin.from("creative_credits").update({
-        available: credits.available,
-        reserved: credits.reserved,
-        updated_at: new Date().toISOString(),
-      }).eq("business_id", auth.businessId);
-
-      await supabaseAdmin.from("credit_ledger").insert({
-        business_id: auth.businessId,
-        type: "refund",
-        credits: 1,
-        balance_after: credits.available + credits.reserved + credits.consumed,
-        reference_type: "generation",
-        reference_id: generation.id,
-        description: `Credit refunded due to LLM failure: ${llmError.message}`,
-        idempotency_key: `${genIdempotencyKey}:refund`,
-      });
-
+      // Credit and free usage NOT consumed on generation failure
+      if (isFreeUsage) {
+        await supabaseAdmin.rpc("rollback_creative_free_usage", {
+          p_business_id: auth.businessId,
+          p_request_id: requestId,
+        });
+      }
+      await supabaseAdmin.from("creative_prds").update({ status: "failed" }).eq("id", prd.id);
       return errorResponse(`PRD generation failed: ${llmError.message}`, 500);
     }
 
-    // 10. Validate LLM response schema
+    // 8. Parse & Validate LLM response JSON
     let parsedPrd: any;
     try {
-      // Try to extract JSON from response (may be wrapped in markdown)
       let jsonStr = llmResponse;
-
-      // Remove markdown code blocks if present
       if (jsonStr.includes("```json")) {
         jsonStr = jsonStr.replace(/```json\s*/g, "").replace(/```\s*/g, "");
       } else if (jsonStr.includes("```")) {
         jsonStr = jsonStr.replace(/```\s*/g, "").replace(/```\s*/g, "");
       }
-
       parsedPrd = JSON.parse(jsonStr.trim());
-    } catch (parseError) {
-      // Invalid JSON — refund and fail
-      console.error("[creative-generate-prd] JSON parse error:", parseError);
+    } catch (_parseError) {
+      // Free usage NOT consumed on parse failure
+      if (isFreeUsage) {
+        await supabaseAdmin.rpc("rollback_creative_free_usage", {
+          p_business_id: auth.businessId,
+          p_request_id: requestId,
+        });
+      }
+      await supabaseAdmin.from("creative_prds").update({ status: "failed" }).eq("id", prd.id);
+      return errorResponse("Format respons AI tidak valid. Kredit tidak dipotong.", 500);
+    }
 
-      await supabaseAdmin.from("creative_generations").update({
-        status: "failed",
-        error_message: "Invalid JSON response from LLM",
-        completed_at: new Date().toISOString(),
-      }).eq("id", generation.id);
+    // Validate required fields structure
+    if (!parsedPrd || typeof parsedPrd !== "object" || !parsedPrd.headline || !parsedPrd.body_copy) {
+      if (isFreeUsage) {
+        await supabaseAdmin.rpc("rollback_creative_free_usage", {
+          p_business_id: auth.businessId,
+          p_request_id: requestId,
+        });
+      }
+      await supabaseAdmin.from("creative_prds").update({ status: "failed" }).eq("id", prd.id);
+      return errorResponse("Format respons AI tidak valid. Kredit tidak dipotong.", 500);
+    }
 
-      await supabaseAdmin.from("creative_prds").update({
-        status: "failed",
-      }).eq("id", prd.id);
+    parsedPrd.product_snapshot = productSnapshot;
+    parsedPrd.is_free_generation = isFreeUsage;
+    parsedPrd.request_id = requestId;
 
-      // Refund credit
-      await supabaseAdmin.from("creative_credits").update({
-        available: credits.available,
-        reserved: credits.reserved,
-        updated_at: new Date().toISOString(),
-      }).eq("business_id", auth.businessId);
+    // 9. Atomic Debit (ONLY AFTER PRD response is successfully validated)
+    if (!isFreeUsage) {
+      const { data: debitResult, error: debitErr } = await supabaseAdmin.rpc("deduct_creative_credits_atomic", {
+        p_business_id: auth.businessId,
+        p_credits: requiredCredits,
+        p_operation: "GENERATE_PRD",
+        p_request_id: requestId,
+        p_metadata: { brief_id },
+      });
+
+      if (debitErr || !debitResult?.success) {
+        await supabaseAdmin.from("creative_prds").update({ status: "failed" }).eq("id", prd.id);
+        return errorResponse(
+          debitResult?.error === "INSUFFICIENT_CREDITS"
+            ? "Creative Credits tidak cukup. Silakan top up untuk melanjutkan."
+            : "Gagal memproses saldo kredit.",
+          400
+        );
+      }
+    }
+
+    // 10. Update PRD with ready status
+    await supabaseAdmin
+      .from("creative_prds")
+      .update({ prd_content: parsedPrd, status: "ready" })
+      .eq("id", prd.id);
+
+    // 11. Extract tokens & calculate provider cost based on actual model used
+    const inputTokens = usageMetadata?.promptTokenCount ?? Math.ceil(prompt.length / 4);
+    const outputTokens = usageMetadata?.candidatesTokenCount ?? Math.ceil(llmResponse.length / 4);
+    const totalTokens = usageMetadata?.totalTokenCount ?? (inputTokens + outputTokens);
+    const isEstimated = !usageMetadata;
+
+    const inputRate = modelUsed === "gemini-3.5-flash-lite" ? 0.00000010 : 0.00000030;
+    const outputRate = modelUsed === "gemini-3.5-flash-lite" ? 0.00000040 : 0.00000250;
+    const providerCostUsd = (inputTokens * inputRate) + (outputTokens * outputRate);
+
+    // 12. Record to ai_usage
+    await supabaseAdmin.from("ai_usage").insert({
+      business_id: auth.businessId,
+      profile_id: auth.userId,
+      operation: "GENERATE_PRD",
+      model: modelUsed,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      total_tokens: totalTokens,
+      credits_charged: isFreeUsage ? 0 : requiredCredits,
+      provider_cost_usd: providerCostUsd,
+      is_estimated: isEstimated,
+      status: "success",
+      request_id: requestId,
+      metadata: { brief_id, prd_id: prd.id, fallback_triggered: modelUsed !== PRIMARY_MODEL },
+    });
+
+    // 13. Record Free Usage ledger if applicable
+    if (isFreeUsage) {
+      const { data: curBal } = await supabaseAdmin
+        .from("creative_credits")
+        .select("available")
+        .eq("business_id", auth.businessId)
+        .maybeSingle();
 
       await supabaseAdmin.from("credit_ledger").insert({
         business_id: auth.businessId,
-        type: "refund",
-        credits: 1,
-        balance_after: credits.available + credits.reserved + credits.consumed,
+        type: "FREE_USAGE",
+        credits: 0,
+        balance_after: curBal?.available ?? 0,
         reference_type: "generation",
-        reference_id: generation.id,
-        description: "Credit refunded due to invalid JSON response",
-        idempotency_key: `${genIdempotencyKey}:refund:json`,
+        reference_id: prd.id,
+        description: "1x Free AI Marketing Usage (GENERATE_PRD)",
+        idempotency_key: `${requestId}:free`,
       });
-
-      return errorResponse("PRD generation failed: Invalid response format", 500);
     }
 
-    // 11. Validate required fields
-    const missingFields = REQUIRED_PRD_FIELDS.filter((field) => !(field in parsedPrd));
-    if (missingFields.length > 0) {
-      // Incomplete PRD — still refund? Or accept with warnings?
-      // For Phase 1, we'll accept but log warnings
-      console.warn("[creative-generate-prd] Missing fields:", missingFields);
-    }
+    const { data: finalBal } = await supabaseAdmin
+      .from("creative_credits")
+      .select("available, consumed")
+      .eq("business_id", auth.businessId)
+      .maybeSingle();
 
-    // 12. Ensure product_snapshot comes from database (not LLM invention)
-    parsedPrd.product_snapshot = productSnapshot;
-
-    // 13. Update PRD with validated content
-    const { error: updatePrdError } = await supabaseAdmin
-      .from("creative_prds")
-      .update({
-        prd_content: parsedPrd,
-        status: "ready",
-      })
-      .eq("id", prd.id);
-
-    if (updatePrdError) {
-      console.error("[creative-generate-prd] Failed to update PRD:", updatePrdError);
-    }
-
-    // 14. Update generation as completed
-    await supabaseAdmin.from("creative_generations").update({
-      status: "completed",
-      provider_cost_usd: providerCostUsd,
-      completed_at: new Date().toISOString(),
-    }).eq("id", generation.id);
-
-    // 15. Consume the reserved credit
-    await supabaseAdmin.from("creative_credits").update({
-      reserved: credits.reserved,
-      consumed: credits.consumed + 1,
-      updated_at: new Date().toISOString(),
-    }).eq("business_id", auth.businessId);
-
-    await supabaseAdmin.from("credit_ledger").insert({
-      business_id: auth.businessId,
-      type: "consume",
-      credits: 1,
-      balance_after: credits.available + credits.reserved + credits.consumed + 1 - 1, // net: consumed+1, reserved same, available same
-      reference_type: "generation",
-      reference_id: generation.id,
-      description: "Credit consumed for PRD generation",
-      idempotency_key: `${genIdempotencyKey}:consume`,
-    });
-
-    // 16. Return success
     return jsonResponse({
       status: "ok",
       prdId: prd.id,
-      generationId: generation.id,
       prdContent: parsedPrd,
-      credits: {
-        available: credits.available,
-        reserved: credits.reserved,
-        consumed: credits.consumed + 1,
-      },
-      provider_cost_usd: providerCostUsd,
+      isFreeUsage,
+      modelUsed,
+      credits: finalBal || { available: 0, consumed: 0 },
     });
 
   } catch (error: any) {

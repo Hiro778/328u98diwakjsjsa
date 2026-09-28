@@ -203,6 +203,20 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return corsResponse();
   if (req.method !== "POST") return errorResponse("Method not allowed", 405);
 
+  // Server-side safety: LOGO_ANALYZER_ENABLED defaults to false
+  const isEnabled = Deno.env.get("LOGO_ANALYZER_ENABLED") === "true";
+  if (!isEnabled) {
+    console.warn("[legalitas-logo-check] Feature disabled by LOGO_ANALYZER_ENABLED flag");
+    return jsonResponse({
+      data: {
+        checkId: null,
+        overallStatus: "COMING_SOON",
+        error: "Layanan pemeriksaan logo sedang dalam tahap pengembangan (Segera Hadir).",
+        results: [],
+      },
+    });
+  }
+
   const startTime = Date.now();
   console.log("[legalitas-logo-check] Request received");
 

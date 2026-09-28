@@ -5,6 +5,7 @@ import { useAuth } from '../../../context/AuthContext'
 import QRGenerator from '../../../components/pos/QRGenerator'
 import useToast from '../../../hooks/useToast'
 import Toast from '../../../components/Toast'
+import BackButton from '../../../components/BackButton'
 
 export default function TableManager() {
   const { business } = useAuth()
@@ -98,6 +99,7 @@ export default function TableManager() {
   return (
     <div>
       <Toast message={toast?.message} type={toast?.type} onDismiss={() => {}} />
+      <BackButton fallbackUrl="/dashboard/pos" label="Kembali" />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-extrabold text-navy-700">Meja</h1>

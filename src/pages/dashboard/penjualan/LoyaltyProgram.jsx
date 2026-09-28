@@ -13,6 +13,7 @@ import LoyaltyMemberDetail from '../../../sections/LoyaltyProgram/LoyaltyMemberD
 import RewardCatalog, { RewardForm } from '../../../sections/LoyaltyProgram/RewardCatalog'
 import RedeemForm from '../../../sections/LoyaltyProgram/RedeemForm'
 import PointAdjustForm from '../../../sections/LoyaltyProgram/PointAdjustForm'
+import BackButton from '../../../components/BackButton'
 
 const TABS = [
   { key: 'dashboard', label: 'Dashboard' },
@@ -265,6 +266,7 @@ export default function LoyaltyProgram() {
       )}
 
       {/* Header */}
+      <BackButton fallbackUrl="/dashboard/penjualan" label="Kembali" />
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-[#10B981]">Penjualan & CRM</p>

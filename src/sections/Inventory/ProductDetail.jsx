@@ -7,6 +7,7 @@ import {
   getEffectiveStock,
   getEffectiveMinStock,
   getEffectiveMaxStock,
+  getEffectiveLocation,
   calcInventoryValue,
 } from '../../lib/inventoryUtils'
 import StockStatusBadge from './StockStatusBadge'
@@ -23,14 +24,14 @@ export default function ProductDetail({ product, onBack, onEdit }) {
   const [currentProduct, setCurrentProduct] = useState(product)
 
   // Ensure stock uses the most current currentProduct state.
-// If currentProduct lacks inventory data (e.g. initial mount before refreshProduct runs),
-// we still call getEffectiveStock which will return 0 for missing inventory,
-// but the refetch via refreshKey will correct it on next render.
-const stock = getEffectiveStock(currentProduct)
+  // If currentProduct lacks inventory data (e.g. initial mount before refreshProduct runs),
+  // we still call getEffectiveStock which will return 0 for missing inventory,
+  // but the refetch via refreshKey will correct it on next render.
+  const stock = getEffectiveStock(currentProduct)
   const minStock = getEffectiveMinStock(currentProduct)
   const maxStock = getEffectiveMaxStock(currentProduct)
   const value = calcInventoryValue(currentProduct.cost_price, stock)
-  const location = currentProduct.inventory?.location || ''
+  const location = getEffectiveLocation(currentProduct)
 
   useEffect(() => {
     loadMovements()
@@ -134,7 +135,7 @@ const stock = getEffectiveStock(currentProduct)
         </div>
         <div className="flex gap-2">
           <button
-            onClick={onEdit}
+            onClick={() => onEdit?.(currentProduct)}
             className="rounded-xl border border-border px-3 py-2 text-xs font-semibold text-text-secondary transition-colors hover:bg-cream"
           >
             Edit
@@ -182,7 +183,7 @@ const stock = getEffectiveStock(currentProduct)
           className="rounded-xl border border-border bg-surface p-4"
         >
           <p className="text-[11px] text-text-muted">Stok Maksimal</p>
-          <p className="mt-1 text-xl font-extrabold text-navy-700">{maxStock || '-'}</p>
+          <p className="mt-1 text-xl font-extrabold text-navy-700">{maxStock != null && !Number.isNaN(maxStock) ? maxStock : '-'}</p>
           <p className="text-[10px] text-text-muted">{currentProduct.unit || 'pcs'}</p>
         </motion.div>
 

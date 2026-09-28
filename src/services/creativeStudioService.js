@@ -18,8 +18,11 @@ async function getSessionToken() {
 /**
  * Resolve business_id for the current authenticated user.
  * Queries businesses table by owner_id (correct FK relationship).
+ * Safely handles users with multiple businesses by ordering by created_at desc.
  */
-async function resolveBusinessId() {
+export async function resolveBusinessId(explicitBusinessId = null) {
+  if (explicitBusinessId) return explicitBusinessId;
+
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
@@ -27,7 +30,9 @@ async function resolveBusinessId() {
     .from('businesses')
     .select('id')
     .eq('owner_id', user.id)
-    .single();
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (error || !business?.id) throw new Error('No business found');
   return business.id;
@@ -36,18 +41,29 @@ async function resolveBusinessId() {
 /**
  * Call an Edge Function with auth
  */
-async function callEdgeFunction(functionName, body) {
+async function callEdgeFunction(functionName, body, businessId = null) {
   const token = await getSessionToken();
   if (!token) throw new Error('Not authenticated');
 
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    'apikey': (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY) || (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_ANON_KEY) || '',
+  };
+
+  if (businessId) {
+    headers['x-business-id'] = businessId;
+  }
+
+  const payload = { ...body };
+  if (businessId && !payload.business_id) {
+    payload.business_id = businessId;
+  }
+
   const response = await fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify(body),
+    headers,
+    body: JSON.stringify(payload),
   });
 
   const data = await response.json();
@@ -66,14 +82,14 @@ async function callEdgeFunction(functionName, body) {
 /**
  * Get current credit balance
  */
-export async function getCreditBalance() {
-  const businessId = await resolveBusinessId();
+export async function getCreditBalance(businessId = null) {
+  const resolvedBusinessId = await resolveBusinessId(businessId);
 
   const { data } = await supabase
     .from('creative_credits')
     .select('available, reserved, consumed, total_earned')
-    .eq('business_id', businessId)
-    .single();
+    .eq('business_id', resolvedBusinessId)
+    .maybeSingle();
 
   return data || { available: 0, reserved: 0, consumed: 0, total_earned: 0 };
 }
@@ -94,13 +110,13 @@ function generateIdempotencyKey(action, context) {
 /**
  * Create a new campaign
  */
-export async function createCampaign(name) {
-  const businessId = await resolveBusinessId();
+export async function createCampaign(name, businessId = null) {
+  const resolvedBusinessId = await resolveBusinessId(businessId);
 
   const { data, error } = await supabase
     .from('campaigns')
     .insert({
-      business_id: businessId,
+      business_id: resolvedBusinessId,
       name: name || 'New Campaign',
       status: 'draft',
     })
@@ -114,13 +130,13 @@ export async function createCampaign(name) {
 /**
  * List campaigns for current business
  */
-export async function listCampaigns() {
-  const businessId = await resolveBusinessId();
+export async function listCampaigns(businessId = null) {
+  const resolvedBusinessId = await resolveBusinessId(businessId);
 
   const { data, error } = await supabase
     .from('campaigns')
     .select('*')
-    .eq('business_id', businessId)
+    .eq('business_id', resolvedBusinessId)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -171,22 +187,24 @@ export async function getCreativeBrief(briefId) {
  * Generate PRD from creative brief
  * Cost: 1 credit (determined server-side)
  */
-export async function generatePRD(briefId, productId = null) {
+export async function generatePRD(briefId, productId = null, businessId = null) {
   return callEdgeFunction('creative-generate-prd', {
     brief_id: briefId,
     product_id: productId,
-  });
+    business_id: businessId,
+  }, businessId);
 }
 
 /**
  * Revise existing PRD
  * Cost: 1 credit (determined server-side)
  */
-export async function revisePRD(prdId, revisionInstructions) {
+export async function revisePRD(prdId, revisionInstructions, businessId = null) {
   return callEdgeFunction('creative-revise-prd', {
     prd_id: prdId,
     revision_instructions: revisionInstructions,
-  });
+    business_id: businessId,
+  }, businessId);
 }
 
 /**
@@ -294,3 +312,48 @@ export async function pollGeneration(generationId, maxAttempts = 60) {
 
   throw new Error('Generation timed out');
 }
+
+// ============================================================
+// VIDEO GENERATOR (ATLAS CLOUD)
+// ============================================================
+
+/**
+ * Generate video using Atlas Cloud provider (bytedance/seedance-2.0-mini/text-to-video)
+ * Backend edge function: creative-generate-video
+ */
+export async function generateVideo({ prdId = null, prompt = '', imageUrl = null, duration = 8 } = {}) {
+  return callEdgeFunction('creative-generate-video', {
+    action: 'generate',
+    prd_id: prdId,
+    prompt,
+    image_url: imageUrl,
+    duration,
+  });
+}
+
+/**
+ * Check Atlas Cloud video generation status
+ */
+export async function getVideoGenerationStatus(taskId, generationId = null, assetId = null) {
+  return callEdgeFunction('creative-generate-video', {
+    action: 'status',
+    task_id: taskId,
+    generation_id: generationId,
+    asset_id: assetId,
+  });
+}
+
+/**
+ * Poll Atlas Cloud video generation until complete or failed (max 60 attempts, 5s interval)
+ */
+export async function pollVideoGeneration(taskId, generationId = null, assetId = null, maxAttempts = 60) {
+  for (let i = 0; i < maxAttempts; i++) {
+    const res = await getVideoGenerationStatus(taskId, generationId, assetId);
+    if (res.status === 'completed' || res.status === 'failed') {
+      return res;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
+  throw new Error('Video generation timed out');
+}
+

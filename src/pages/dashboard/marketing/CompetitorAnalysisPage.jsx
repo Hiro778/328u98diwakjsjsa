@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../../context/AuthContext';
+import BackButton from '../../../components/BackButton';
 import {
   createAnalysis,
   updateAnalysis,
@@ -8,12 +9,22 @@ import {
   removeCompetitor,
   startAllResearch,
   pollResearchTask,
+  checkResearchComplete,
   startAnalysis,
   getAnalysis,
   listAnalyses,
+  buildGroundedComparativeAnalysis,
   checkCompetitorCache,
   clearCache,
 } from '../../../services/competitorAnalysisService';
+import {
+  isValidGoogleMapsUrl,
+  normalizeGoogleMapsUrl,
+  isValidWebsiteUrl,
+  normalizeWebsiteUrl,
+  UNAVAILABLE_MAPS_SOURCE_TEXT,
+  INSUFFICIENT_EVIDENCE_TEXT,
+} from '../../../lib/googleMapsUtils';
 
 const STATUS = {
   idle: 'idle',
@@ -28,7 +39,7 @@ export default function CompetitorAnalysisPage() {
   const { user, business } = useAuth();
 
   // Page state
-  const [pageStatus, setPageStatus] = useState('empty'); // empty | input | researching | analyzing | results | history
+  const [pageStatus, setPageStatus] = useState('empty'); // empty | input | researching | analyzing | results | history | failed
   const [analyses, setAnalyses] = useState([]);
 
   // Analysis state
@@ -37,11 +48,12 @@ export default function CompetitorAnalysisPage() {
 
   // Form state
   const [newCompetitor, setNewCompetitor] = useState({
+    google_maps_url: '',
     name: '',
     website: '',
-    location: '',
-    industry: '',
   });
+  const [formError, setFormError] = useState('');
+  const [analysisError, setAnalysisError] = useState('');
 
   // Research progress
   const [researchProgress, setResearchProgress] = useState(0);
@@ -73,18 +85,45 @@ export default function CompetitorAnalysisPage() {
   // ============================================================
 
   function handleAddCompetitor() {
-    if (!newCompetitor.name.trim()) {
-      alert('Nama kompetitor wajib diisi');
+    setFormError('');
+
+    const mapsUrl = newCompetitor.google_maps_url.trim();
+    if (!mapsUrl) {
+      setFormError('Google Maps URL wajib diisi.');
       return;
     }
 
+    if (!isValidGoogleMapsUrl(mapsUrl)) {
+      setFormError(
+        'Format Google Maps URL tidak valid. Masukkan URL resmi (misal: https://maps.google.com/..., https://www.google.com/maps/..., atau https://maps.app.goo.gl/...). Domain sembarang atau link berbahaya ditolak.'
+      );
+      return;
+    }
+
+    const websiteUrl = newCompetitor.website.trim();
+    if (websiteUrl && !isValidWebsiteUrl(websiteUrl)) {
+      setFormError('Format Website URL tidak valid. Gunakan format http:// atau https://.');
+      return;
+    }
+
+    if (competitors.length >= 5) {
+      setFormError('Maksimal 5 kompetitor per sesi analisis.');
+      return;
+    }
+
+    const competitorName = newCompetitor.name.trim() || `Kompetitor ${competitors.length + 1}`;
+
     const competitor = {
       id: crypto.randomUUID(),
-      ...newCompetitor,
+      name: competitorName,
+      google_maps_url: normalizeGoogleMapsUrl(mapsUrl),
+      website: websiteUrl ? normalizeWebsiteUrl(websiteUrl) : '',
+      location: '',
+      industry: '',
     };
 
     setCompetitors((prev) => [...prev, competitor]);
-    setNewCompetitor({ name: '', website: '', location: '', industry: '' });
+    setNewCompetitor({ google_maps_url: '', name: '', website: '' });
   }
 
   function handleRemoveCompetitor(index) {
@@ -101,122 +140,92 @@ export default function CompetitorAnalysisPage() {
   // ANALYSIS FLOW
   // ============================================================
 
-  async function handleCreateAnalysis() {
-    if (competitors.length === 0) {
-      alert('Minimal 1 kompetitor harus ditambahkan');
+  async function handleExecuteAnalysis() {
+    setAnalysisError('');
+
+    // 1. Validate minimum 2 competitors
+    if (competitors.length < 2) {
+      setAnalysisError('Minimal 2 kompetitor harus ditambahkan untuk melakukan analisis perbandingan.');
       return;
     }
 
-    setPageStatus('creating');
-
-    try {
-      const analysis = await createAnalysis('Analisis Kompetitor', competitors);
-      setCurrentAnalysis(analysis);
-      setPageStatus('input');
-    } catch (err) {
-      alert(`Gagal membuat analisis: ${err.message}`);
-      setPageStatus('input');
+    // 2. Validate URLs of all competitors
+    for (const c of competitors) {
+      if (!c.google_maps_url || !isValidGoogleMapsUrl(c.google_maps_url)) {
+        setAnalysisError(`Link Google Maps untuk "${c.name}" tidak valid. Mohon periksa kembali.`);
+        return;
+      }
+      if (c.website && !isValidWebsiteUrl(c.website)) {
+        setAnalysisError(`URL Website untuk "${c.name}" tidak valid.`);
+        return;
+      }
     }
-  }
 
-  async function handleStartResearch() {
-    if (!currentAnalysis) return;
-    if (competitors.length === 0) return;
-
+    // 3. Show loading state
     setPageStatus('researching');
-    setResearchProgress(0);
-    setResearchStatus('Mengumpulkan data...');
+    setResearchProgress(10);
+    setResearchStatus('Menyiapkan analisis kompetitor...');
 
     try {
-      // Update analysis input
-      await updateAnalysis(currentAnalysis.id, {
-        input_data: { competitors },
-      });
+      // 4. Create analysis record
+      const title = `Analisis ${competitors.length} Kompetitor`;
+      const created = await createAnalysis(title, competitors);
+      setCurrentAnalysis(created);
 
-      // Start all research tasks
-      const taskIds = await startAllResearch(currentAnalysis.id);
+      // 5. Execute research tasks
+      setResearchProgress(25);
+      setResearchStatus('Menghubungkan data kompetitor...');
 
-      // Monitor progress
-      let completedTasks = 0;
+      const taskIds = await startAllResearch(created.id);
       setTasks(taskIds.map((id) => ({ id, status: 'pending', progress: 0 })));
 
-      for (const taskId of taskIds) {
-        setResearchStatus(`Meneliti ${competitors[completedTasks]?.name || 'kompetitor'}...`);
-        setResearchProgress(Math.round(((completedTasks + 1) / taskIds.length) * 50));
+      let completedTasks = 0;
+      for (let i = 0; i < taskIds.length; i++) {
+        const taskId = taskIds[i];
+        const comp = competitors[i];
+        setResearchStatus(`Meneliti ${comp?.name || 'kompetitor'}...`);
+        setResearchProgress(Math.round(25 + ((i + 1) / taskIds.length) * 35));
 
-        const task = await pollResearchTask(taskId);
-
-        setTasks((prev) =>
-          prev.map((t) => (t.id === taskId ? { ...t, ...task } : t))
-        );
-
-        if (task.status === 'completed' || task.status === 'cached') {
+        try {
+          const task = await pollResearchTask(taskId, 15);
+          setTasks((prev) =>
+            prev.map((t) => (t.id === taskId ? { ...t, ...task } : t))
+          );
           completedTasks++;
-        } else {
-          console.error('Task failed:', task);
+        } catch (pollErr) {
+          console.warn(`Task polling notice:`, pollErr);
         }
       }
 
-      // Check if all research complete
-      const allComplete = await checkCompetitorCache(currentAnalysis.id);
-      if (allComplete) {
-        setResearchProgress(100);
-        setResearchStatus('Research selesai!');
-        setPageStatus('analyzing');
-        setTimeout(() => handleStartAnalysis(), 1000);
-      }
-    } catch (err) {
-      console.error('Research failed:', err);
-      setResearchStatus('Gagal mengumpulkan data');
+      setResearchProgress(100);
+      setResearchStatus('Data kompetitor terkumpul!');
+
+      // 6. Run analysis phase
       setPageStatus('analyzing');
-      setTimeout(() => handleStartAnalysis(), 1000);
-    }
-  }
+      setAnalysisProgress(30);
+      setAnalysisStatus('Menganalisis perbandingan & menyusun rekomendasi...');
 
-  async function handleStartAnalysis() {
-    if (!currentAnalysis) return;
+      await startAnalysis(created.id);
+      setAnalysisProgress(85);
+      setAnalysisStatus('Menyelesaikan laporan analisis...');
 
-    setPageStatus('analyzing');
-    setAnalysisProgress(0);
-    setAnalysisStatus('Menganalisis...');
-
-    try {
-      const result = await startAnalysis(currentAnalysis.id);
-
-      // Update analysis
-      const updated = await getAnalysis(currentAnalysis.id);
+      const updated = await getAnalysis(created.id);
       setCurrentAnalysis(updated);
 
       setAnalysisProgress(100);
       setAnalysisStatus('Analisis selesai!');
       setPageStatus('results');
-      loadAnalyses(); // Refresh list
+      loadAnalyses();
     } catch (err) {
-      console.error('Analysis failed:', err);
-      setAnalysisStatus(`Gagal menganalisis: ${err.message}`);
+      console.error('Analysis execution failed:', err);
+      setAnalysisError(`Gagal menjalankan analisis: ${err.message || 'Terjadi kesalahan sistem'}`);
       setPageStatus('failed');
     }
   }
 
   function handleUpdateAnalysis() {
     if (!currentAnalysis) return;
-    setPageStatus('researching');
-    setResearchProgress(0);
-    setResearchStatus('Memperbarui data...');
-
-    // Update input first
-    updateAnalysis(currentAnalysis.id, {
-      input_data: { competitors },
-    });
-
-    // Clear cache for competitors with new data
-    const clearPromises = competitors
-      .filter((c) => c.name && (c.website || c.location || c.industry))
-      .map((c) => clearCache(c.name, c));
-
-    Promise.all(clearPromises).then(() => {
-      setTimeout(() => handleStartResearch(), 500);
-    });
+    handleExecuteAnalysis();
   }
 
   function handleViewAnalysis(analysis) {
@@ -230,6 +239,8 @@ export default function CompetitorAnalysisPage() {
     setCompetitors([]);
     setResearchProgress(0);
     setAnalysisProgress(0);
+    setFormError('');
+    setAnalysisError('');
     setPageStatus('input');
   }
 
@@ -280,6 +291,7 @@ export default function CompetitorAnalysisPage() {
   if (pageStatus === 'empty' && analyses.length === 0) {
     return (
       <div className="p-6 max-w-4xl mx-auto">
+        <BackButton fallbackUrl="/dashboard/marketing" label="Kembali" />
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -328,43 +340,67 @@ export default function CompetitorAnalysisPage() {
           </button>
           <h1 className="text-2xl font-extrabold text-navy-700">Tambah Kompetitor</h1>
           <p className="text-sm text-text-secondary mt-1">
-            Masukkan data kompetitor yang ingin dianalisis. Minimal 1, maksimal 5.
+            Masukkan link Google Maps kompetitor untuk dianalisis. Minimal 2, maksimal 5 kompetitor.
           </p>
         </div>
 
         {/* Competitor List */}
         {competitors.length > 0 && (
           <div className="space-y-4 mb-8">
-            <h2 className="text-sm font-semibold text-navy-700 uppercase">
-              Kompetitor ({competitors.length})
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-navy-700 uppercase">
+                Kompetitor Terpilih ({competitors.length})
+              </h2>
+              <span className="text-xs text-text-muted">
+                {competitors.length < 2 ? '⚠️ Minimal 2 kompetitor untuk analisis' : '✅ Siap untuk dianalisis'}
+              </span>
+            </div>
             {competitors.map((c, i) => (
               <motion.div
                 key={c.id}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="bg-surface border border-border rounded-xl p-4"
+                className="bg-surface border border-border rounded-xl p-4 flex items-center justify-between gap-4"
               >
-                <div className="flex items-start justify-between">
-                  <div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">
+                      {i + 1}
+                    </span>
                     <p className="font-semibold text-navy-700">{c.name}</p>
-                    {c.website && <p className="text-sm text-text-muted">{c.website}</p>}
-                    {(c.location || c.industry) && (
-                      <p className="text-xs text-text-muted mt-1">
-                        {c.location && <span>{c.location} • </span>}
-                        {c.industry && <span>{c.industry}</span>}
-                      </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-xs pl-7">
+                    <a
+                      href={c.google_maps_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center gap-1 underline"
+                    >
+                      <span>📍</span>
+                      <span>Lihat di Google Maps</span>
+                    </a>
+                    {c.website && (
+                      <a
+                        href={c.website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-gray-600 hover:text-navy-700 inline-flex items-center gap-1 underline"
+                      >
+                        <span>🌐</span>
+                        <span>Lihat Website</span>
+                      </a>
                     )}
                   </div>
-                  <button
-                    onClick={() => handleRemoveCompetitor(i)}
-                    className="text-text-muted hover:text-error-600 p-1"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
                 </div>
+                <button
+                  onClick={() => handleRemoveCompetitor(i)}
+                  className="text-text-muted hover:text-error-600 p-1.5 transition-colors"
+                  title="Hapus kompetitor"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </motion.div>
             ))}
           </div>
@@ -375,89 +411,117 @@ export default function CompetitorAnalysisPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-surface border border-border rounded-xl p-6"
+          className="bg-surface border border-border rounded-xl p-6 shadow-sm"
         >
-          <h2 className="text-sm font-semibold text-navy-700 uppercase mb-4">
-            Tambah Kompetitor Baru
+          <h2 className="text-sm font-semibold text-navy-700 uppercase mb-4 tracking-wide">
+            Tambah Kompetitor
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-text-muted mb-1">
-                Nama bisnis / brand *
+              <label className="block text-xs font-semibold text-navy-700 mb-1">
+                Google Maps URL <span className="text-red-500">*</span>
               </label>
               <input
-                type="text"
-                value={newCompetitor.name}
-                onChange={(e) => setNewCompetitor({ ...newCompetitor, name: e.target.value })}
-                placeholder="e.g. Kopi Kenangan"
-                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                type="url"
+                value={newCompetitor.google_maps_url}
+                onChange={(e) => {
+                  setNewCompetitor({ ...newCompetitor, google_maps_url: e.target.value });
+                  if (formError) setFormError('');
+                }}
+                placeholder="https://maps.google.com/... atau https://maps.app.goo.gl/..."
+                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm"
               />
+              <p className="text-xs text-text-muted mt-1.5 flex items-center gap-1.5">
+                <span>💡</span>
+                <span>Buka Google Maps → cari bisnis → Bagikan → Salin link → tempel di sini.</span>
+              </p>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-1">
-                Website (opsional)
-              </label>
-              <input
-                type="text"
-                value={newCompetitor.website}
-                onChange={(e) => setNewCompetitor({ ...newCompetitor, website: e.target.value })}
-                placeholder="https://..."
-                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-              />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1">
+                  Nama bisnis <span className="text-xs text-text-muted font-normal">(opsional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={newCompetitor.name}
+                  onChange={(e) => setNewCompetitor({ ...newCompetitor, name: e.target.value })}
+                  placeholder="e.g. Kopi Kenangan (otomatis jika kosong)"
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1">
+                  Website <span className="text-xs text-text-muted font-normal">(opsional)</span>
+                </label>
+                <input
+                  type="url"
+                  value={newCompetitor.website}
+                  onChange={(e) => {
+                    setNewCompetitor({ ...newCompetitor, website: e.target.value });
+                    if (formError) setFormError('');
+                  }}
+                  placeholder="https://..."
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-1">
-                Lokasi (opsional)
-              </label>
-              <input
-                type="text"
-                value={newCompetitor.location}
-                onChange={(e) => setNewCompetitor({ ...newCompetitor, location: e.target.value })}
-                placeholder="e.g. Jakarta"
-                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-              />
+
+            {formError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-start gap-2">
+                <span className="font-bold">⚠️</span>
+                <span>{formError}</span>
+              </div>
+            )}
+
+            <div className="pt-2 flex">
+              <button
+                type="button"
+                onClick={handleAddCompetitor}
+                disabled={!newCompetitor.google_maps_url.trim()}
+                className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium shadow-sm"
+              >
+                + Tambah Kompetitor
+              </button>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-1">
-                Industri / kategori (opsional)
-              </label>
-              <input
-                type="text"
-                value={newCompetitor.industry}
-                onChange={(e) => setNewCompetitor({ ...newCompetitor, industry: e.target.value })}
-                placeholder="e.g. Coffee Shop"
-                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-              />
-            </div>
-          </div>
-          <div className="mt-4 flex gap-3">
-            <button
-              onClick={handleAddCompetitor}
-              disabled={!newCompetitor.name.trim()}
-              className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              + Tambah Kompetitor
-            </button>
           </div>
         </motion.div>
 
+        {/* Global Analysis Error Banner if any */}
+        {analysisError && (
+          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 flex items-start gap-2.5">
+            <span className="text-base font-bold">⚠️</span>
+            <div>
+              <p className="font-semibold">Peringatan Analisis</p>
+              <p className="text-xs mt-0.5">{analysisError}</p>
+            </div>
+          </div>
+        )}
+
         {/* Action Buttons */}
-        <div className="mt-8 flex items-center justify-end gap-4">
-          <button
-            onClick={() => setPageStatus('empty')}
-            className="px-6 py-2 text-text-muted hover:text-navy-700 transition-colors"
-          >
-            Batal
-          </button>
-          <button
-            onClick={handleCreateAnalysis}
-            disabled={competitors.length === 0}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {competitors.length === 0
-              ? 'Masukkan minimal 1 kompetitor'
-              : `Analisis ${competitors.length} kompetitor`}
-          </button>
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-6">
+          <div className="text-xs text-text-muted">
+            {competitors.length < 2
+              ? 'Pilih minimal 2 kompetitor untuk membandingkan.'
+              : `${competitors.length} kompetitor dipilih untuk analisis perbandingan.`}
+          </div>
+          <div className="flex items-center gap-4 w-full sm:w-auto justify-end">
+            <button
+              onClick={() => setPageStatus('empty')}
+              className="px-6 py-2.5 text-text-muted hover:text-navy-700 transition-colors text-sm"
+            >
+              Batal
+            </button>
+            <button
+              onClick={handleExecuteAnalysis}
+              disabled={competitors.length < 2}
+              className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm shadow"
+            >
+              {competitors.length < 2
+                ? 'Pilih minimal 2 kompetitor'
+                : `Analisis ${competitors.length} Kompetitor`}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -631,6 +695,44 @@ export default function CompetitorAnalysisPage() {
   }
 
   // ============================================================
+  // RENDER: FAILED STATE
+  // ============================================================
+
+  if (pageStatus === 'failed') {
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center py-12 bg-surface border border-red-200 rounded-2xl p-8 shadow-sm"
+        >
+          <div className="w-16 h-16 mx-auto mb-4 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-3xl font-bold">
+            ⚠️
+          </div>
+          <h2 className="text-2xl font-extrabold text-navy-700 mb-2">Analisis Gagal</h2>
+          <p className="text-sm text-red-700 max-w-md mx-auto mb-6 bg-red-50 p-3 rounded-lg border border-red-100 font-medium">
+            {analysisError || analysisStatus || 'Terjadi kesalahan saat memproses data analisis kompetitor.'}
+          </p>
+          <div className="flex flex-col sm:flex-row justify-center gap-3">
+            <button
+              onClick={() => setPageStatus('input')}
+              className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium text-sm transition-colors shadow"
+            >
+              Kembali ke Form Input
+            </button>
+            <button
+              onClick={handleExecuteAnalysis}
+              className="px-6 py-2.5 border border-border text-navy-700 rounded-lg hover:bg-gray-50 font-medium text-sm transition-colors"
+            >
+              Coba Lagi
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // ============================================================
   // RENDER: RESULTS DASHBOARD
   // ============================================================
 
@@ -705,6 +807,141 @@ export default function CompetitorAnalysisPage() {
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
           >
+            {/* COMPETITOR CARDS: GOOGLE MAPS LINK, WEBSITE & EVIDENCE */}
+            <section className="mb-10">
+              <h2 className="text-lg font-bold text-navy-700 mb-4 flex items-center justify-between">
+                <span>Daftar Kompetitor Terdaftar</span>
+                <span className="text-xs font-normal text-text-muted bg-gray-100 px-2.5 py-1 rounded-full">
+                  Tanpa Google Places API / Scraping
+                </span>
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {competitorsData.map((c, i) => (
+                  <div
+                    key={c.id || i}
+                    className="bg-surface border border-border rounded-xl p-5 shadow-sm space-y-4"
+                  >
+                    <div className="flex items-center justify-between border-b border-border pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center">
+                          {i + 1}
+                        </span>
+                        <h3 className="font-bold text-navy-800 text-base">
+                          {c.name || `Kompetitor ${i + 1}`}
+                        </h3>
+                      </div>
+                      <span className="text-xs text-text-muted">Kompetitor {i + 1}</span>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <span className="text-text-muted font-semibold uppercase block mb-1">
+                          Google Maps
+                        </span>
+                        {c.google_maps_url ? (
+                          <a
+                            href={c.google_maps_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 font-medium underline"
+                          >
+                            <span>📍</span>
+                            <span>Lihat di Google Maps</span>
+                          </a>
+                        ) : (
+                          <span className="text-text-muted">Tidak tersedia</span>
+                        )}
+                      </div>
+
+                      <div>
+                        <span className="text-text-muted font-semibold uppercase block mb-1">
+                          Website
+                        </span>
+                        {c.website ? (
+                          <a
+                            href={c.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-navy-600 hover:text-navy-800 font-medium underline"
+                          >
+                            <span>🌐</span>
+                            <span>Lihat Website ({c.website})</span>
+                          </a>
+                        ) : (
+                          <span className="text-text-muted">{UNAVAILABLE_MAPS_SOURCE_TEXT}</span>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-border">
+                        <span className="text-text-muted font-semibold uppercase block mb-1.5">
+                          Data Terstruktur Google Maps
+                        </span>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <div className="bg-gray-50 p-2 rounded">
+                            <span className="text-text-muted block text-[10px]">Rating</span>
+                            <span className="text-text-secondary">{UNAVAILABLE_MAPS_SOURCE_TEXT}</span>
+                          </div>
+                          <div className="bg-gray-50 p-2 rounded">
+                            <span className="text-text-muted block text-[10px]">Jumlah Ulasan</span>
+                            <span className="text-text-secondary">{UNAVAILABLE_MAPS_SOURCE_TEXT}</span>
+                          </div>
+                          <div className="bg-gray-50 p-2 rounded">
+                            <span className="text-text-muted block text-[10px]">Alamat</span>
+                            <span className="text-text-secondary">{UNAVAILABLE_MAPS_SOURCE_TEXT}</span>
+                          </div>
+                          <div className="bg-gray-50 p-2 rounded">
+                            <span className="text-text-muted block text-[10px]">Nomor Telepon</span>
+                            <span className="text-text-secondary">{UNAVAILABLE_MAPS_SOURCE_TEXT}</span>
+                          </div>
+                          <div className="bg-gray-50 p-2 rounded">
+                            <span className="text-text-muted block text-[10px]">Kategori</span>
+                            <span className="text-text-secondary">{UNAVAILABLE_MAPS_SOURCE_TEXT}</span>
+                          </div>
+                          <div className="bg-gray-50 p-2 rounded">
+                            <span className="text-text-muted block text-[10px]">Jam Operasional</span>
+                            <span className="text-text-secondary">{UNAVAILABLE_MAPS_SOURCE_TEXT}</span>
+                          </div>
+                          <div className="bg-gray-50 p-2 rounded">
+                            <span className="text-text-muted block text-[10px]">Kisaran Harga</span>
+                            <span className="text-text-secondary">{UNAVAILABLE_MAPS_SOURCE_TEXT}</span>
+                          </div>
+                          <div className="bg-gray-50 p-2 rounded">
+                            <span className="text-text-muted block text-[10px]">Lokasi Terstruktur</span>
+                            <span className="text-text-secondary">{UNAVAILABLE_MAPS_SOURCE_TEXT}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-border">
+                        <span className="text-text-muted font-semibold uppercase block mb-1">
+                          Bukti yang Tersedia (Available Evidence)
+                        </span>
+                        {c.website ? (
+                          <div className="bg-blue-50/60 p-2.5 rounded border border-blue-100 text-text-secondary">
+                            <p className="font-semibold text-navy-700 mb-0.5">Website: {c.website}</p>
+                            <p>Data diekstrak dari sumber website publik yang dapat diverifikasi secara objektif.</p>
+                          </div>
+                        ) : (
+                          <div className="bg-gray-50 p-2.5 rounded border border-gray-100 text-text-muted italic">
+                            {INSUFFICIENT_EVIDENCE_TEXT} (Hanya tautan Google Maps yang terdaftar tanpa sumber website pendukung).
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <div className="border-t border-border my-8" />
+
+            <div className="mb-6">
+              <h2 className="text-2xl font-extrabold text-navy-800 mb-1">Analisis Perbandingan</h2>
+              <p className="text-xs text-text-muted">
+                Wawasan strategis disusun hanya dari bukti objektif yang terkumpul.
+              </p>
+            </div>
+
             {/* EXECUTIVE SUMMARY */}
             {analysisData.executive_summary && (
               <section className="mb-8">
@@ -1051,6 +1288,7 @@ export default function CompetitorAnalysisPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
+      <BackButton fallbackUrl="/dashboard/marketing" label="Kembali" />
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-extrabold text-navy-700">Riwayat Analisis</h1>
         <button

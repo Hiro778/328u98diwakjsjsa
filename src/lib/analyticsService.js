@@ -8,11 +8,13 @@
  * The database stores dates in UTC; we convert to WIB for display/filtering.
  */
 
-import { supabase } from './supabase'
-
-// ─── Timezone Helpers ──────────────────────────────────────────
-
-const WIB_OFFSET_MS = 7 * 60 * 60 * 1000
+import { supabase } from './supabase.js'
+import {
+  fetchCanonicalOrders,
+  aggregateSalesMetrics,
+  getWibDateString,
+  WIB_OFFSET_MS,
+} from '../services/canonicalSalesService.js'
 
 /**
  * Get current WIB date as YYYY-MM-DD string
@@ -111,56 +113,50 @@ export function weekRangeWIB(offset = 0) {
 // ─── Revenue Queries ───────────────────────────────────────────
 
 /**
- * Get total revenue from sales table for a date range.
- * Uses server-side filtering with indexed business_id.
+ * Get total revenue and transaction count from canonical final orders for a date range.
+ * Uses shared canonicalSalesService as single source of truth.
  */
 export async function getRevenue(businessId, startDate, endDate) {
-  const { data, error } = await supabase
-    .from('sales')
-    .select('total')
-    .eq('business_id', businessId)
-    .gte('sale_date', startDate)
-    .lte('sale_date', endDate)
+  const { orders, error } = await fetchCanonicalOrders(businessId, { startDate, endDate, onlyFinal: true })
 
   if (error) {
     console.error('[analytics] getRevenue error:', error.code, error.message, error.details, error.hint)
     return { total: 0, count: 0, error }
   }
 
-  const total = data.reduce((sum, r) => sum + (Number(r.total) || 0), 0)
-  return { total, count: data.length, error: null }
+  const metrics = aggregateSalesMetrics(orders)
+  return { total: metrics.totalRevenue, count: metrics.totalTransaksi, error: null }
 }
 
 /**
- * Get revenue breakdown by product for a date range.
+ * Get revenue breakdown by product for a date range from canonical final orders.
  */
 export async function getRevenueByProduct(businessId, startDate, endDate) {
-  const { data, error } = await supabase
-    .from('sales')
-    .select('product_id, quantity, total, products(name)')
-    .eq('business_id', businessId)
-    .gte('sale_date', startDate)
-    .lte('sale_date', endDate)
+  const { orders, error } = await fetchCanonicalOrders(businessId, { startDate, endDate, onlyFinal: true })
 
   if (error) {
     console.error('[analytics] getRevenueByProduct error:', error.code, error.message)
     return { products: [], error }
   }
 
-  // Aggregate by product
+  // Aggregate by product from final order items
   const map = {}
-  for (const row of data) {
-    const key = row.product_id || 'unknown'
-    if (!map[key]) {
-      map[key] = {
-        product_id: row.product_id,
-        name: row.products?.name || 'Produk tidak dikenal',
-        total_quantity: 0,
-        total_revenue: 0,
+  for (const order of orders) {
+    for (const item of order.items || []) {
+      const key = item.product_id || item.product_name || 'unknown'
+      if (!map[key]) {
+        map[key] = {
+          product_id: item.product_id,
+          name: item.product_name || 'Produk tidak dikenal',
+          total_quantity: 0,
+          total_revenue: 0,
+        }
       }
+      const qty = Number(item.quantity) || 0
+      const sub = Number(item.subtotal) || (Number(item.unit_price) || 0) * qty
+      map[key].total_quantity += qty
+      map[key].total_revenue += sub
     }
-    map[key].total_quantity += Number(row.quantity) || 0
-    map[key].total_revenue += Number(row.total) || 0
   }
 
   const products = Object.values(map).sort((a, b) => b.total_revenue - a.total_revenue)
@@ -170,39 +166,27 @@ export async function getRevenueByProduct(businessId, startDate, endDate) {
 // ─── Transaction Queries ───────────────────────────────────────
 
 /**
- * Get transaction count and total from orders table.
- * Orders represent POS/QR menu transactions.
+ * Get transaction count and total revenue from canonical final orders.
+ * Strictly consistent with getRevenue().
  */
 export async function getTransactions(businessId, startDate, endDate) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('id, total, created_at')
-    .eq('business_id', businessId)
-    .gte('created_at', startDate + 'T00:00:00Z')
-    .lte('created_at', endDate + 'T23:59:59Z')
+  const { orders, error } = await fetchCanonicalOrders(businessId, { startDate, endDate, onlyFinal: true })
 
   if (error) {
     console.error('[analytics] getTransactions error:', error.code, error.message)
     return { count: 0, totalRevenue: 0, error }
   }
 
-  const count = data.length
-  const totalRevenue = data.reduce((sum, r) => sum + (Number(r.total) || 0), 0)
-  return { count, totalRevenue, error: null }
+  const metrics = aggregateSalesMetrics(orders)
+  return { count: metrics.totalTransaksi, totalRevenue: metrics.totalRevenue, error: null }
 }
 
 /**
- * Get transaction breakdown by date for chart/trend data.
+ * Get transaction breakdown by date for chart/trend data from canonical final orders.
  * Returns array of { date, count, revenue }.
  */
 export async function getTransactionTrend(businessId, startDate, endDate) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('total, created_at')
-    .eq('business_id', businessId)
-    .gte('created_at', startDate + 'T00:00:00Z')
-    .lte('created_at', endDate + 'T23:59:59Z')
-    .order('created_at', { ascending: true })
+  const { orders, error } = await fetchCanonicalOrders(businessId, { startDate, endDate, onlyFinal: true })
 
   if (error) {
     console.error('[analytics] getTransactionTrend error:', error.code, error.message)
@@ -211,17 +195,13 @@ export async function getTransactionTrend(businessId, startDate, endDate) {
 
   // Group by date (WIB)
   const map = {}
-  for (const row of data) {
-    // Convert UTC created_at to WIB date
-    const utc = new Date(row.created_at)
-    const wib = new Date(utc.getTime() + WIB_OFFSET_MS)
-    const dateStr = wib.toISOString().slice(0, 10)
-
+  for (const order of orders) {
+    const dateStr = getWibDateString(order.created_at)
     if (!map[dateStr]) {
       map[dateStr] = { date: dateStr, count: 0, revenue: 0 }
     }
     map[dateStr].count += 1
-    map[dateStr].revenue += Number(row.total) || 0
+    map[dateStr].revenue += Number(order.total) || 0
   }
 
   const trend = Object.values(map).sort((a, b) => a.date.localeCompare(b.date))
@@ -231,17 +211,11 @@ export async function getTransactionTrend(businessId, startDate, endDate) {
 // ─── Revenue Trend ─────────────────────────────────────────────
 
 /**
- * Get revenue breakdown by date for trend display.
+ * Get revenue breakdown by date for trend display from canonical final orders.
  * Returns array of { date, revenue }.
  */
 export async function getRevenueTrend(businessId, startDate, endDate) {
-  const { data, error } = await supabase
-    .from('sales')
-    .select('total, sale_date')
-    .eq('business_id', businessId)
-    .gte('sale_date', startDate)
-    .lte('sale_date', endDate)
-    .order('sale_date', { ascending: true })
+  const { orders, error } = await fetchCanonicalOrders(businessId, { startDate, endDate, onlyFinal: true })
 
   if (error) {
     console.error('[analytics] getRevenueTrend error:', error.code, error.message)
@@ -249,12 +223,12 @@ export async function getRevenueTrend(businessId, startDate, endDate) {
   }
 
   const map = {}
-  for (const row of data) {
-    const dateStr = row.sale_date
+  for (const order of orders) {
+    const dateStr = getWibDateString(order.created_at)
     if (!map[dateStr]) {
       map[dateStr] = { date: dateStr, revenue: 0 }
     }
-    map[dateStr].revenue += Number(row.total) || 0
+    map[dateStr].revenue += Number(order.total) || 0
   }
 
   const trend = Object.values(map).sort((a, b) => a.date.localeCompare(b.date))
@@ -353,34 +327,29 @@ export async function getInventoryHealth(businessId) {
 // ─── HPP/COGS & Profitability ──────────────────────────────────
 
 /**
- * Get HPP (cost of goods) data for products.
- * Joins sales with hpp_calculations to compute gross profit.
- * Only returns data if hpp_calculations exist for the products.
+ * Get HPP (cost of goods) and gross profitability from canonical final orders.
+ * Joins final order items with hpp_calculations to compute gross profit.
+ * Strictly consistent with Dashboard and Excel.
  */
 export async function getProfitability(businessId, startDate, endDate) {
-  // Get sales data with product info
-  const { data: salesData, error: salesErr } = await supabase
-    .from('sales')
-    .select('product_id, quantity, total, products(name)')
-    .eq('business_id', businessId)
-    .gte('sale_date', startDate)
-    .lte('sale_date', endDate)
+  const { orders, error: ordersErr } = await fetchCanonicalOrders(businessId, { startDate, endDate, onlyFinal: true })
 
-  if (salesErr) {
-    console.error('[analytics] getProfitability sales error:', salesErr.code, salesErr.message)
-    return { hasData: false, grossRevenue: 0, cogs: 0, grossProfit: 0, margin: 0, error: salesErr }
+  if (ordersErr) {
+    console.error('[analytics] getProfitability orders error:', ordersErr.code, ordersErr.message)
+    return { hasData: false, grossRevenue: 0, cogs: 0, grossProfit: 0, margin: 0, error: ordersErr }
   }
 
-  if (!salesData || salesData.length === 0) {
+  if (!orders || orders.length === 0) {
     return { hasData: false, grossRevenue: 0, cogs: 0, grossProfit: 0, margin: 0, error: null }
   }
 
-  // Get HPP calculations for these products
-  const productIds = [...new Set(salesData.map(s => s.product_id).filter(Boolean))]
+  const metrics = aggregateSalesMetrics(orders)
+  const grossRevenue = metrics.totalRevenue
+
+  const allItems = orders.flatMap(o => o.items || [])
+  const productIds = [...new Set(allItems.map(i => i.product_id).filter(Boolean))]
 
   if (productIds.length === 0) {
-    // Sales exist but no product_id linked - can't calculate COGS
-    const grossRevenue = salesData.reduce((sum, r) => sum + (Number(r.total) || 0), 0)
     return {
       hasData: false,
       grossRevenue,
@@ -400,7 +369,6 @@ export async function getProfitability(businessId, startDate, endDate) {
 
   if (hppErr) {
     console.error('[analytics] getProfitability hpp error:', hppErr.code, hppErr.message)
-    const grossRevenue = salesData.reduce((sum, r) => sum + (Number(r.total) || 0), 0)
     return { hasData: false, grossRevenue, cogs: 0, grossProfit: 0, margin: 0, error: hppErr }
   }
 
@@ -410,13 +378,12 @@ export async function getProfitability(businessId, startDate, endDate) {
     hppMap[h.product_id] = Number(h.hpp_per_unit) || 0
   }
 
-  const grossRevenue = salesData.reduce((sum, r) => sum + (Number(r.total) || 0), 0)
   let cogs = 0
   let hasAnyHpp = false
 
-  for (const sale of salesData) {
-    if (sale.product_id && hppMap[sale.product_id] !== undefined) {
-      cogs += hppMap[sale.product_id] * (Number(sale.quantity) || 1)
+  for (const item of allItems) {
+    if (item.product_id && hppMap[item.product_id] !== undefined) {
+      cogs += hppMap[item.product_id] * (Number(item.quantity) || 1)
       hasAnyHpp = true
     }
   }

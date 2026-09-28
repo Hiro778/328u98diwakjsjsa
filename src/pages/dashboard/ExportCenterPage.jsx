@@ -4,6 +4,7 @@ import useExchangeRates from '../../hooks/useExchangeRates'
 import AnimatedNumber from '../../components/AnimatedNumber'
 import CurrencyConverter from '../../sections/CurrencyIntelligence/CurrencyConverter'
 import CurrencyCard from '../../sections/CurrencyIntelligence/CurrencyCard'
+import BackButton from '../../components/BackButton'
 import {
   formatIDR,
   calcChange,
@@ -56,6 +57,7 @@ export default function ExportCenterPage() {
 
   return (
     <div>
+      <BackButton fallbackUrl="/dashboard" label="Kembali" />
       {/* Page header */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}

@@ -6,6 +6,8 @@ import { formatCurrency } from '../../../lib/orderNumber'
 import ImageUpload from '../../../components/pos/ImageUpload'
 import useToast from '../../../hooks/useToast'
 import Toast from '../../../components/Toast'
+import BackButton from '../../../components/BackButton'
+import { parseProductMetadata } from '../../../lib/productMetadata'
 
 /**
  * Extract storage file path from a Supabase public URL.
@@ -23,6 +25,193 @@ function extractStoragePath(url) {
   }
 }
 
+function preventFileDropOnInput(e) {
+  if (
+    e.dataTransfer?.files?.length > 0 ||
+    e.dataTransfer?.types?.includes('Files') ||
+    e.dataTransfer?.types?.includes('text/uri-list')
+  ) {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+}
+
+function VariantOptionImagePicker({ option, onUpdate, businessId, onError }) {
+  const [uploading, setUploading] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
+  const fileInputRef = useRef(null)
+
+  const imageUrl = option.imageUrl || option.image_url
+
+  async function processFile(file) {
+    if (!file) return
+    if (!businessId) {
+      onError?.('Business ID tidak ditemukan. Harap simpan bisnis terlebih dahulu.')
+      return
+    }
+
+    const ext = file.name ? file.name.split('.').pop().toLowerCase() : ''
+    const validExts = ['jpg', 'jpeg', 'png', 'webp']
+    const validMimes = ['image/jpeg', 'image/png', 'image/webp']
+
+    const isExtValid = validExts.includes(ext)
+    const isMimeValid = validMimes.includes(file.type)
+
+    if (!isExtValid && !isMimeValid) {
+      onError?.('Format gambar harus JPG, PNG, atau WEBP.')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      onError?.('Ukuran file gambar maksimal 5MB.')
+      return
+    }
+
+    setUploading(true)
+    const resolvedExt = isExtValid ? ext : 'png'
+    const filePath = `${businessId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${resolvedExt}`
+
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(filePath, file, { upsert: true })
+
+      if (uploadError) {
+        throw uploadError
+      }
+
+      const { data } = supabase.storage.from('product-images').getPublicUrl(filePath)
+      onUpdate({
+        ...option,
+        imageUrl: data.publicUrl,
+        image_url: data.publicUrl,
+      })
+    } catch (err) {
+      console.error('Failed to upload variant option image:', err)
+      onError?.(`Gagal upload gambar varian: ${err.message}`)
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  function handleFileSelect(e) {
+    const file = e.target.files?.[0]
+    if (file) {
+      processFile(file)
+    }
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!isDragOver) setIsDragOver(true)
+  }
+
+  function handleDragEnter(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(true)
+  }
+
+  function handleDragLeave(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setIsDragOver(false)
+    }
+  }
+
+  async function handleDrop(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+
+    // IMPORTANT: Prioritize e.dataTransfer.files, NEVER inject URL or text
+    const files = Array.from(e.dataTransfer?.files || [])
+    if (files.length === 0) {
+      return
+    }
+
+    await processFile(files[0])
+  }
+
+  function handleRemove() {
+    onUpdate({
+      ...option,
+      imageUrl: null,
+      image_url: null,
+    })
+  }
+
+  return (
+    <div
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`flex items-center gap-1 shrink-0 rounded p-0.5 transition ${
+        isDragOver ? 'ring-2 ring-indigo-500 bg-indigo-50/70' : ''
+      }`}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={handleFileSelect}
+        className="hidden"
+      />
+      {imageUrl ? (
+        <div className="flex items-center gap-1">
+          <img
+            src={imageUrl}
+            alt={option.name || 'Varian'}
+            className="h-7 w-7 rounded object-cover border border-border shrink-0 bg-slate-100"
+          />
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+            className="text-[10px] text-warm-600 hover:text-warm-700 bg-warm-50 hover:bg-warm-100 border border-warm-200 px-1.5 py-0.5 rounded transition disabled:opacity-50"
+            title="Ganti gambar varian (Klik atau Drag & Drop gambar ke sini)"
+          >
+            {uploading ? '...' : isDragOver ? 'Drop!' : 'Ganti'}
+          </button>
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={handleRemove}
+            className="text-[10px] text-red-500 hover:text-red-700 hover:bg-red-50 px-1 py-0.5 rounded transition"
+            title="Hapus gambar varian"
+          >
+            ✕
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+          className={`flex items-center gap-1 text-[10px] font-medium px-1.5 py-1 rounded border transition disabled:opacity-50 ${
+            isDragOver
+              ? 'border-indigo-500 bg-indigo-50 text-indigo-700 font-bold'
+              : 'text-text-muted hover:text-navy-700 bg-slate-50 hover:bg-slate-100 border-border'
+          }`}
+          title="Upload gambar untuk opsi varian ini (Klik atau Drag & Drop gambar ke sini)"
+        >
+          {uploading ? (
+            <span className="text-[10px] animate-pulse">...</span>
+          ) : isDragOver ? (
+            <span>📥 Drop Foto</span>
+          ) : (
+            <span>📷 +Foto</span>
+          )}
+        </button>
+      )}
+    </div>
+  )
+}
+
 const EMPTY_PRODUCT = {
   name: '',
   description: '',
@@ -33,6 +222,8 @@ const EMPTY_PRODUCT = {
   is_available: true,
   is_best_seller: false,
   sort_order: 0,
+  variant_groups: [],
+  discount: { discount_type: 'percentage', discount_value: 0, is_published: false, is_active: true },
 }
 
 function normalizeCategory(name) {
@@ -44,6 +235,7 @@ export default function ProductManager() {
   const { toast, showToast } = useToast()
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
+  const [menuCategories, setMenuCategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -73,21 +265,33 @@ export default function ProductManager() {
   }, [showCatDropdown])
 
   async function loadProducts() {
-    const { data } = await supabase
-      .from('products')
-      .select('*')
-      .eq('business_id', business.id)
-      .order('sort_order', { ascending: true })
+    const [prodRes, catRes] = await Promise.all([
+      supabase
+        .from('products')
+        .select('*, inventory ( id, quantity, min_stock, maximum_stock, supplier_id, location )')
+        .eq('business_id', business.id)
+        .order('sort_order', { ascending: true }),
+      supabase
+        .from('menu_categories')
+        .select('*')
+        .eq('business_id', business.id)
+        .order('sort_order', { ascending: true })
+    ])
 
-    setProducts(data || [])
+    const prods = prodRes.data || []
+    const cats = catRes.data || []
+    setProducts(prods)
+    setMenuCategories(cats)
+
+    const allCatNames = [
+      ...new Set([
+        ...cats.map(c => c.name),
+        ...prods.map(p => p.category).filter(Boolean)
+      ])
+    ].sort()
+    setCategories(allCatNames)
     setLoading(false)
   }
-
-  // Derive categories from products (text-based)
-  useEffect(() => {
-    const names = [...new Set(products.map(p => p.category).filter(Boolean))]
-    setCategories(names.sort())
-  }, [products])
 
   function set(field, value) {
     setForm(f => ({ ...f, [field]: value }))
@@ -103,12 +307,14 @@ export default function ProductManager() {
 
   function openAdd() {
     setEditingId(null)
-    setForm({ ...EMPTY_PRODUCT })
+    setForm({ ...EMPTY_PRODUCT, current_stock: 0, min_stock: 0, maximum_stock: 0 })
     setErrors({})
     setShowForm(true)
   }
 
   function openEdit(p) {
+    const meta = parseProductMetadata(p)
+    const invRow = Array.isArray(p.inventory) ? p.inventory[0] : p.inventory
     setEditingId(p.id)
     setForm({
       name: p.name,
@@ -120,6 +326,11 @@ export default function ProductManager() {
       is_available: p.is_available ?? true,
       is_best_seller: p.is_best_seller ?? false,
       sort_order: p.sort_order || 0,
+      current_stock: invRow?.quantity != null ? invRow.quantity : 0,
+      min_stock: invRow?.min_stock != null ? invRow.min_stock : 0,
+      maximum_stock: invRow?.maximum_stock != null ? invRow.maximum_stock : 0,
+      variant_groups: meta?.variantGroups || [],
+      discount: meta?.discount || { discount_type: 'percentage', discount_value: 0, is_published: false, is_active: true },
     })
     setErrors({})
     setShowForm(true)
@@ -131,19 +342,52 @@ export default function ProductManager() {
 
     setSaving(true)
 
+    const catName = form.category_name.trim()
+    let matchedCat = menuCategories.find(c => normalizeCategory(c.name) === normalizeCategory(catName))
+
+    if (catName && !matchedCat) {
+      const { data: newCat } = await supabase
+        .from('menu_categories')
+        .insert({
+          business_id: business.id,
+          name: catName,
+          sort_order: menuCategories.length + 1,
+          is_active: true,
+        })
+        .select()
+        .single()
+      if (newCat) {
+        matchedCat = newCat
+        setMenuCategories(prev => [...prev, newCat])
+      }
+    }
+
     const payload = {
       name: form.name.trim(),
       description: form.description.trim(),
       slogan: form.slogan.trim(),
       unit_price: Number(form.unit_price),
       cost_price: Number(form.cost_price) || 0,
-      category: form.category_name.trim(),
+      category: catName,
+      menu_category_id: matchedCat ? matchedCat.id : null,
       unit: form.unit || 'pcs',
       sku: form.sku || '',
       image_url: form.image_url,
       is_available: form.is_available,
       is_best_seller: form.is_best_seller,
       sort_order: Number(form.sort_order),
+      notes: JSON.stringify({
+        variant_groups: form.variant_groups || [],
+        discount: form.discount || null,
+      }),
+    }
+
+    const sanitized = {
+      current_stock: Number(form.current_stock) || 0,
+      minimum_stock: Number(form.min_stock) || 0,
+      maximum_stock: Number(form.maximum_stock) || 0,
+      supplier_id: form.supplier_id || null,
+      location: form.location || null,
     }
 
     if (editingId) {
@@ -355,6 +599,7 @@ export default function ProductManager() {
   return (
     <div>
       <Toast message={toast?.message} type={toast?.type} onDismiss={() => {}} />
+      <BackButton fallbackUrl="/dashboard/pos" />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-extrabold text-navy-700">Menu Produk</h1>
@@ -403,6 +648,12 @@ export default function ProductManager() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-navy-900/40 p-5 pt-10 pb-10"
             onClick={() => setShowForm(false)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              if (e.dataTransfer?.files?.length > 0 || e.dataTransfer?.types?.includes('Files')) {
+                e.preventDefault()
+              }
+            }}
           >
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.97 }}
@@ -436,6 +687,8 @@ export default function ProductManager() {
                     type="text"
                     value={form.name}
                     onChange={(e) => set('name', e.target.value)}
+                    onDrop={preventFileDropOnInput}
+                    onDragOver={preventFileDropOnInput}
                     placeholder="Nasi Goreng Spesial"
                     className={`mt-1 w-full rounded-lg border bg-surface px-3 py-2.5 text-sm text-navy-700 placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-warm-400/50 ${
                       errors.name ? 'border-red-400' : 'border-border focus:border-warm-400'
@@ -451,6 +704,8 @@ export default function ProductManager() {
                     type="text"
                     value={form.slogan}
                     onChange={(e) => set('slogan', e.target.value)}
+                    onDrop={preventFileDropOnInput}
+                    onDragOver={preventFileDropOnInput}
                     placeholder="Favorit pelanggan"
                     className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-navy-700 placeholder:text-text-muted focus:border-warm-400 focus:outline-none focus:ring-1 focus:ring-warm-400/50"
                   />
@@ -462,6 +717,8 @@ export default function ProductManager() {
                   <textarea
                     value={form.description}
                     onChange={(e) => set('description', e.target.value)}
+                    onDrop={preventFileDropOnInput}
+                    onDragOver={preventFileDropOnInput}
                     placeholder="Deskripsi lengkap produk..."
                     rows={2}
                     className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-navy-700 placeholder:text-text-muted focus:border-warm-400 focus:outline-none focus:ring-1 focus:ring-warm-400/50"
@@ -475,6 +732,8 @@ export default function ProductManager() {
                     type="number"
                     value={form.unit_price}
                     onChange={(e) => set('unit_price', e.target.value)}
+                    onDrop={preventFileDropOnInput}
+                    onDragOver={preventFileDropOnInput}
                     min="0"
                     className={`mt-1 w-full rounded-lg border bg-surface px-3 py-2.5 text-sm text-navy-700 focus:outline-none focus:ring-1 focus:ring-warm-400/50 ${
                       errors.unit_price ? 'border-red-400' : 'border-border focus:border-warm-400'
@@ -491,6 +750,8 @@ export default function ProductManager() {
                     type="text"
                     value={form.category_name}
                     onChange={(e) => handleCategoryInput(e.target.value)}
+                    onDrop={preventFileDropOnInput}
+                    onDragOver={preventFileDropOnInput}
                     onFocus={() => {
                       if (form.category_name.trim()) {
                         const normalized = normalizeCategory(form.category_name)
@@ -528,6 +789,204 @@ export default function ProductManager() {
                       </div>
                     </div>
                   )}
+                </div>
+                {/* ── DISCOUNT (Section 6 & 7) ── */}
+                <div className="rounded-xl border border-border bg-cream/50 p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-navy-700 uppercase tracking-wider">Diskon Produk</label>
+                    <label className="flex items-center gap-2 cursor-pointer text-xs">
+                      <input
+                        type="checkbox"
+                        checked={form.discount?.is_published ?? false}
+                        onChange={(e) => {
+                          set('discount', {
+                            ...(form.discount || {}),
+                            is_published: e.target.checked,
+                            is_active: true,
+                          })
+                        }}
+                        className="h-3.5 w-3.5 rounded border-border text-warm-400 focus:ring-warm-400"
+                      />
+                      <span className="font-semibold text-warm-500">
+                        {form.discount?.is_published ? 'Terbit (Aktif di Menu)' : 'Draft (Nonaktif)'}
+                      </span>
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-[11px] text-text-muted">Tipe Diskon</span>
+                      <select
+                        value={form.discount?.discount_type || 'percentage'}
+                        onChange={(e) => set('discount', { ...(form.discount || {}), discount_type: e.target.value })}
+                        className="mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-navy-700"
+                      >
+                        <option value="percentage">Persentase (%)</option>
+                        <option value="fixed">Potongan Tetap (Rp)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-text-muted">Nilai Diskon</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={form.discount?.discount_value || 0}
+                        onChange={(e) => set('discount', { ...(form.discount || {}), discount_value: Number(e.target.value) })}
+                        placeholder="Contoh: 20"
+                        className="mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-navy-700"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── DYNAMIC VARIANT GROUPS (Section 4) ── */}
+                <div className="rounded-xl border border-border bg-cream/50 p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-xs font-bold text-navy-700 uppercase tracking-wider">Grup Varian (Custom)</label>
+                      <p className="text-[11px] text-text-muted">Contoh: Rasa, Level Pedas, Ukuran, Topping</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newGroup = {
+                          id: 'grp_' + Date.now(),
+                          name: '',
+                          options: [
+                            { id: 'opt_' + Date.now() + '_1', name: '', price_adjustment: 0, stock: 10 }
+                          ]
+                        }
+                        set('variant_groups', [...(form.variant_groups || []), newGroup])
+                      }}
+                      className="rounded-lg bg-navy-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-navy-700"
+                    >
+                      + Tambah Grup
+                    </button>
+                  </div>
+
+                  {(form.variant_groups || []).map((grp, gIdx) => (
+                    <div key={grp.id || gIdx} className="rounded-lg border border-border bg-surface p-3 space-y-2.5">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={grp.name}
+                          onChange={(e) => {
+                            const nextGroups = [...(form.variant_groups || [])]
+                            nextGroups[gIdx] = { ...grp, name: e.target.value }
+                            set('variant_groups', nextGroups)
+                          }}
+                          onDrop={preventFileDropOnInput}
+                          onDragOver={preventFileDropOnInput}
+                          placeholder="Nama Grup Varian (cth: Level Pedas)"
+                          className="flex-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-bold text-navy-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextGroups = form.variant_groups.filter((_, idx) => idx !== gIdx)
+                            set('variant_groups', nextGroups)
+                          }}
+                          className="text-red-500 hover:text-red-700 text-xs px-2 py-1"
+                        >
+                          Hapus
+                        </button>
+                      </div>
+
+                      {/* Options in this group */}
+                      <div className="space-y-1.5 pl-2 border-l-2 border-warm-200">
+                        {grp.options?.map((opt, oIdx) => (
+                          <div key={opt.id || oIdx} className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={opt.name}
+                              onChange={(e) => {
+                                const nextGroups = [...(form.variant_groups || [])]
+                                const nextOpts = [...(grp.options || [])]
+                                nextOpts[oIdx] = { ...opt, name: e.target.value }
+                                nextGroups[gIdx] = { ...grp, options: nextOpts }
+                                set('variant_groups', nextGroups)
+                              }}
+                              onDrop={preventFileDropOnInput}
+                              onDragOver={preventFileDropOnInput}
+                              placeholder="Opsi (cth: Sedang)"
+                              className="flex-1 rounded border border-border px-2 py-1 text-xs text-navy-700"
+                            />
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] text-text-muted">+Rp</span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={opt.price_adjustment || 0}
+                                onChange={(e) => {
+                                  const nextGroups = [...(form.variant_groups || [])]
+                                  const nextOpts = [...(grp.options || [])]
+                                  nextOpts[oIdx] = { ...opt, price_adjustment: Number(e.target.value) }
+                                  nextGroups[gIdx] = { ...grp, options: nextOpts }
+                                  set('variant_groups', nextGroups)
+                                }}
+                                onDrop={preventFileDropOnInput}
+                                onDragOver={preventFileDropOnInput}
+                                className="w-16 rounded border border-border px-1.5 py-1 text-xs text-navy-700"
+                              />
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] text-text-muted">Stok</span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={opt.stock != null ? opt.stock : 10}
+                                onChange={(e) => {
+                                  const nextGroups = [...(form.variant_groups || [])]
+                                  const nextOpts = [...(grp.options || [])]
+                                  nextOpts[oIdx] = { ...opt, stock: Number(e.target.value) }
+                                  nextGroups[gIdx] = { ...grp, options: nextOpts }
+                                  set('variant_groups', nextGroups)
+                                }}
+                                onDrop={preventFileDropOnInput}
+                                onDragOver={preventFileDropOnInput}
+                                className="w-14 rounded border border-border px-1.5 py-1 text-xs text-navy-700"
+                              />
+                            </div>
+                            <VariantOptionImagePicker
+                              option={opt}
+                              businessId={business?.id}
+                              onError={(msg) => setErrors(e => ({ ...e, submit: msg }))}
+                              onUpdate={(updatedOpt) => {
+                                const nextGroups = [...(form.variant_groups || [])]
+                                const nextOpts = [...(grp.options || [])]
+                                nextOpts[oIdx] = updatedOpt
+                                nextGroups[gIdx] = { ...grp, options: nextOpts }
+                                set('variant_groups', nextGroups)
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextGroups = [...(form.variant_groups || [])]
+                                const nextOpts = grp.options.filter((_, idx) => idx !== oIdx)
+                                nextGroups[gIdx] = { ...grp, options: nextOpts }
+                                set('variant_groups', nextGroups)
+                              }}
+                              className="text-text-muted hover:text-red-500 text-xs px-1"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextGroups = [...(form.variant_groups || [])]
+                            const nextOpts = [...(grp.options || []), { id: 'opt_' + Date.now(), name: '', price_adjustment: 0, stock: 10 }]
+                            nextGroups[gIdx] = { ...grp, options: nextOpts }
+                            set('variant_groups', nextGroups)
+                          }}
+                          className="text-[11px] font-bold text-warm-500 hover:text-warm-600 mt-1"
+                        >
+                          + Tambah Opsi
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 {/* Toggles */}
@@ -633,7 +1092,12 @@ export default function ProductManager() {
                         </span>
                       )}
                     </div>
-                    <p className="text-sm font-bold text-warm-500 whitespace-nowrap">{formatCurrency(p.unit_price)}</p>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-warm-500 whitespace-nowrap">{formatCurrency(p.unit_price)}</p>
+                      <p className="text-[10px] font-semibold text-text-muted mt-0.5">
+                        Stok: {Array.isArray(p.inventory) ? p.inventory[0]?.quantity ?? 0 : p.inventory?.quantity ?? 0}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="mt-3 flex items-center gap-1 border-t border-border pt-3">

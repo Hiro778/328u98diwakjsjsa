@@ -3,8 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../context/AuthContext'
 import { formatCurrency, formatDateTime } from '../../../lib/orderNumber'
+import { canDeleteOrder, deleteCompletedOrder } from '../../../services/posService'
+import { getReceiptSettings } from '../../../services/receiptSettingsService'
+import ReceiptView from '../../../components/pos/ReceiptView'
 import useToast from '../../../hooks/useToast'
 import Toast from '../../../components/Toast'
+import BackButton from '../../../components/BackButton'
 
 const STATUS_TABS = [
   { key: 'all', label: 'Semua' },
@@ -44,17 +48,33 @@ const STATUS_LABELS = {
 }
 
 export default function OrderHistory() {
-  const { business } = useAuth()
+  const { business, profile } = useAuth()
   const { toast, showToast } = useToast()
   const [orders, setOrders] = useState([])
+  const [receiptSettings, setReceiptSettings] = useState(null)
+  const [receiptModalOrder, setReceiptModalOrder] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('all')
   const [dateFilter, setDateFilter] = useState('today')
   const [detailOrder, setDetailOrder] = useState(null)
+  const [deletingOrder, setDeletingOrder] = useState(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   useEffect(() => {
-    if (business?.id) loadOrders()
+    if (business?.id) {
+      loadOrders()
+      loadReceiptSettings()
+    }
   }, [business?.id, dateFilter])
+
+  async function loadReceiptSettings() {
+    try {
+      const data = await getReceiptSettings(business.id, business)
+      setReceiptSettings(data)
+    } catch (err) {
+      console.warn('[OrderHistory] Failed to load receipt settings:', err)
+    }
+  }
 
   async function loadOrders() {
     setLoading(true)
@@ -85,6 +105,27 @@ export default function OrderHistory() {
     setLoading(false)
   }
 
+  async function handleConfirmDelete() {
+    if (!deletingOrder || !business?.id) return
+
+    setDeleteLoading(true)
+    try {
+      await deleteCompletedOrder(deletingOrder.id, business.id)
+      setOrders(prev => prev.filter(o => o.id !== deletingOrder.id))
+      showToast('Pesanan berhasil dihapus dari riwayat.', 'success')
+      if (detailOrder?.id === deletingOrder.id) {
+        setDetailOrder(null)
+      }
+      setDeletingOrder(null)
+      loadOrders()
+    } catch (err) {
+      console.error('[OrderHistory] Delete order error:', err)
+      showToast(err.message || 'Gagal menghapus pesanan.', 'error')
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
   const filtered = activeTab === 'all'
     ? orders
     : orders.filter(o => o.order_status === activeTab)
@@ -96,6 +137,7 @@ export default function OrderHistory() {
   return (
     <div>
       <Toast message={toast?.message} type={toast?.type} onDismiss={() => {}} />
+      <BackButton fallbackUrl="/dashboard/pos" />
       <div>
         <h1 className="text-2xl font-extrabold text-navy-700">Riwayat Pesanan</h1>
         <p className="mt-1 text-sm text-text-secondary">Lihat semua pesanan dari QR Menu dan POS.</p>
@@ -180,7 +222,7 @@ export default function OrderHistory() {
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-bold text-navy-700">#{o.order_number}</p>
+                  <p className="text-sm font-bold text-navy-700">#{o.order_number}{o.customer_name ? ` — ${o.customer_name}` : ''}</p>
                   <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${STATUS_COLORS[o.order_status] || ''}`}>
                     {STATUS_LABELS[o.order_status] || o.order_status}
                   </span>
@@ -190,13 +232,31 @@ export default function OrderHistory() {
                 </p>
                 <p className="text-[10px] text-text-muted">{formatDateTime(o.created_at)}</p>
               </div>
-              <div className="text-right">
+              <div className="text-right flex flex-col items-end">
                 <p className="text-sm font-bold text-warm-500">{formatCurrency(o.total)}</p>
                 <p className={`text-[10px] font-semibold ${
                   o.payment_status === 'paid' ? 'text-profit-600' : 'text-yellow-600'
                 }`}>
-                  {o.payment_status === 'paid' ? 'Lunas' : 'Belum Bayar'}
+                  {o.payment_status === 'paid'
+                    ? 'PAID / Lunas'
+                    : (o.payment_method || '').toLowerCase() === 'qris'
+                    ? 'Menunggu Konfirmasi'
+                    : 'Belum Bayar'}
                 </p>
+
+                {canDeleteOrder(o) && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setDeletingOrder(o)
+                    }}
+                    className="mt-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-2 py-0.5 text-[9px] font-bold transition-colors"
+                    title="Hapus dari riwayat POS"
+                  >
+                    Hapus
+                  </button>
+                )}
               </div>
             </motion.div>
           ))}
@@ -221,7 +281,7 @@ export default function OrderHistory() {
               className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-xl"
             >
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-navy-700">Order #{detailOrder.order_number}</h2>
+                <h2 className="text-lg font-bold text-navy-700">Order #{detailOrder.order_number}{detailOrder.customer_name ? ` — ${detailOrder.customer_name}` : ''}</h2>
                 <button onClick={() => setDetailOrder(null)} className="text-text-muted">
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -230,6 +290,12 @@ export default function OrderHistory() {
               </div>
 
               <div className="mt-4 space-y-2 text-sm">
+                {detailOrder.customer_name && (
+                  <div className="flex justify-between">
+                    <span className="text-text-muted">Nama Pembeli</span>
+                    <span className="font-semibold text-navy-700">{detailOrder.customer_name}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-text-muted">Meja</span>
                   <span className="font-semibold text-navy-700">{detailOrder.table?.name || '-'}</span>
@@ -245,9 +311,25 @@ export default function OrderHistory() {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-text-muted">Pembayaran</span>
-                  <span className={`font-bold ${detailOrder.payment_status === 'paid' ? 'text-profit-600' : 'text-yellow-600'}`}>
-                    {detailOrder.payment_status === 'paid' ? 'Lunas' : 'Belum Bayar'}
+                  <span className="text-text-muted">Metode Pembayaran</span>
+                  <span className="font-semibold text-navy-700 uppercase">
+                    {(detailOrder.payment_method || '').toLowerCase() === 'qris' ? 'QRIS' : detailOrder.payment_method || '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-muted">Status Pembayaran</span>
+                  <span className={`font-bold ${
+                    detailOrder.payment_status === 'paid'
+                      ? 'text-profit-600'
+                      : (detailOrder.payment_method || '').toLowerCase() === 'qris'
+                      ? 'text-yellow-600'
+                      : 'text-yellow-600'
+                  }`}>
+                    {detailOrder.payment_status === 'paid'
+                      ? 'PAID / Lunas'
+                      : (detailOrder.payment_method || '').toLowerCase() === 'qris'
+                      ? 'Menunggu Konfirmasi'
+                      : 'Belum Bayar'}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -280,8 +362,104 @@ export default function OrderHistory() {
                   <span>{formatCurrency(detailOrder.total)}</span>
                 </div>
               </div>
+
+
+              <div className="mt-6 border-t border-border pt-4 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const orderToPrint = detailOrder
+                      setDetailOrder(null)
+                      setReceiptModalOrder(orderToPrint)
+                    }}
+                    className="flex items-center gap-1 rounded-xl border border-border bg-surface px-3 py-2 text-xs font-semibold text-navy-700 hover:bg-cream transition-colors shadow-2xs"
+                  >
+                    <svg className="h-3.5 w-3.5 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    Lihat Struk
+                  </button>
+                  {canDeleteOrder(detailOrder) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = detailOrder
+                        setDetailOrder(null)
+                        setDeletingOrder(target)
+                      }}
+                      className="rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 px-3 py-2 text-xs font-bold text-red-600 transition-colors"
+                    >
+                      Hapus
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDetailOrder(null)}
+                  className="rounded-xl border border-border px-4 py-2 text-xs font-medium text-text-secondary hover:bg-cream"
+                >
+                  Tutup
+                </button>
+              </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {deletingOrder && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 backdrop-blur-xs p-5"
+            onClick={() => !deleteLoading && setDeletingOrder(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.97 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-xl"
+            >
+              <h2 className="text-lg font-bold text-navy-700">Hapus pesanan ini?</h2>
+              <p className="mt-2 text-sm text-text-secondary leading-relaxed">
+                Pesanan <span className="font-mono font-bold text-navy-700">#{deletingOrder.order_number}</span> akan dihapus dari riwayat POS. Tindakan ini tidak dapat dibatalkan.
+              </p>
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDeletingOrder(null)}
+                  disabled={deleteLoading}
+                  className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:bg-cream disabled:opacity-60"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  disabled={deleteLoading}
+                  className="flex-1 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-red-600 disabled:opacity-60 shadow-xs"
+                >
+                  {deleteLoading ? 'Menghapus...' : 'Hapus'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+
+      {/* Full Thermal Receipt & WhatsApp Modal */}
+      <AnimatePresence>
+        {receiptModalOrder && (
+          <ReceiptView
+            order={receiptModalOrder}
+            settings={receiptSettings || {}}
+            business={business}
+            cashierName={profile?.full_name || 'Kasir'}
+            isModal={true}
+            onClose={() => setReceiptModalOrder(null)}
+          />
         )}
       </AnimatePresence>
     </div>

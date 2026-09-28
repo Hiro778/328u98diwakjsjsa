@@ -15,6 +15,7 @@ import WhatsAppLeadList from '../../../sections/WhatsAppSalesTracker/WhatsAppLea
 import WhatsAppLeadForm from '../../../sections/WhatsAppSalesTracker/WhatsAppLeadForm'
 import WhatsAppLeadDetail from '../../../sections/WhatsAppSalesTracker/WhatsAppLeadDetail'
 import FollowUpForm from '../../../sections/WhatsAppSalesTracker/FollowUpForm'
+import BackButton from '../../../components/BackButton'
 
 export default function WhatsAppSalesTracker() {
   const { business } = useAuth()
@@ -220,6 +221,11 @@ export default function WhatsAppSalesTracker() {
       )}
 
       {/* Header */}
+      <BackButton
+        fallbackUrl="/dashboard/penjualan"
+        label={detailLead ? 'Kembali ke Daftar Leads' : 'Kembali'}
+        onClick={detailLead ? () => setDetailLead(null) : undefined}
+      />
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-[#10B981]">Penjualan & CRM</p>

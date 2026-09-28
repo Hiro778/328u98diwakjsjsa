@@ -13,7 +13,7 @@ export interface AuthContext {
  * Verify the JWT from the Authorization header and return auth context.
  * Throws on failure — callers should catch and return error response.
  */
-export async function verifyAuth(req: Request): Promise<AuthContext> {
+export async function verifyAuth(req: Request, explicitBusinessId?: string | null): Promise<AuthContext> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
     throw new Error("Missing Authorization header");
@@ -40,12 +40,46 @@ export async function verifyAuth(req: Request): Promise<AuthContext> {
     throw new Error("Invalid or expired token");
   }
 
-  // Look up business ownership
+  // 1. Authoritative account access enforcement
+  const { data: profile, error: profError } = await supabaseAdmin
+    .from("profiles")
+    .select("status")
+    .eq("id", user.id)
+    .single();
+
+  if (profError || !profile || profile.status !== "active") {
+    throw new Error("Account access denied: Account is not active or has been suspended/banned");
+  }
+
+  // 2. Look up business ownership
+  // Priority 1: Check explicit businessId or x-business-id header
+  const targetBusinessId = explicitBusinessId || req.headers.get("x-business-id");
+
+  if (targetBusinessId) {
+    const { data: targetBiz, error: targetBizErr } = await supabaseAdmin
+      .from("businesses")
+      .select("id")
+      .eq("id", targetBusinessId)
+      .eq("owner_id", user.id)
+      .maybeSingle();
+
+    if (!targetBizErr && targetBiz?.id) {
+      return {
+        userId: user.id,
+        businessId: targetBiz.id,
+      };
+    }
+  }
+
+  // Priority 2: Safely query user's business without fragile .single()
+  // Multi-business safe: never call .single() on queries that can legitimately return multiple businesses
   const { data: business, error: bizError } = await supabaseAdmin
     .from("businesses")
     .select("id")
     .eq("owner_id", user.id)
-    .single();
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (bizError || !business) {
     throw new Error("No business found for this user");

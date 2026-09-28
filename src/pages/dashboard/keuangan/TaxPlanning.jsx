@@ -6,6 +6,7 @@ import { formatCurrency } from '../../../lib/orderNumber'
 import { calculateTaxPlanning } from '../../../sections/TaxPlanning/calculateTaxPlanning'
 import TaxPlanningInput from '../../../sections/TaxPlanning/TaxPlanningInput'
 import TaxPlanningResults from '../../../sections/TaxPlanning/TaxPlanningResults'
+import BackButton from '../../../components/BackButton'
 
 const EMPTY_FORM = {
   businessName: '',
@@ -183,6 +184,7 @@ export default function TaxPlanning() {
 
   return (
     <div>
+      <BackButton fallbackUrl="/dashboard/keuangan" label="Kembali" />
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

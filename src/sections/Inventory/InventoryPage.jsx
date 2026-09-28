@@ -6,6 +6,7 @@ import InventoryDashboard from './InventoryDashboard'
 import ProductInventoryList from './ProductInventoryList'
 import ProductDetail from './ProductDetail'
 import ProductForm from './ProductForm'
+import BackButton from '../../components/BackButton'
 
 /**
  * Main Inventory Management page.
@@ -63,6 +64,17 @@ export default function InventoryPage() {
 
   return (
     <div>
+      <BackButton
+        fallbackUrl="/dashboard/operasional"
+        label={view === 'detail' ? 'Kembali ke Daftar Produk' : view !== 'dashboard' ? 'Kembali ke Dashboard Persediaan' : 'Kembali'}
+        onClick={
+          view === 'detail'
+            ? handleBack
+            : view !== 'dashboard'
+            ? () => { setView('dashboard'); setSelectedProduct(null) }
+            : undefined
+        }
+      />
       {/* Page Header */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
@@ -121,7 +133,7 @@ export default function InventoryPage() {
           <ProductDetail
             product={selectedProduct}
             onBack={handleBack}
-            onEdit={() => handleEditProduct(selectedProduct)}
+            onEdit={(current) => handleEditProduct(current || selectedProduct)}
           />
         )}
 

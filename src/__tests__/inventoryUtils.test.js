@@ -846,6 +846,10 @@ describe('getEffectiveLocation', () => {
     assert.equal(getEffectiveLocation({ inventory: { location: 'Gudang A' } }), 'Gudang A')
   })
 
+  it('reads from inventory array join', () => {
+    assert.equal(getEffectiveLocation({ inventory: [{ location: 'Gudang Array' }] }), 'Gudang Array')
+  })
+
   it('falls back to product location', () => {
     assert.equal(getEffectiveLocation({ location: 'Rak 3' }), 'Rak 3')
   })

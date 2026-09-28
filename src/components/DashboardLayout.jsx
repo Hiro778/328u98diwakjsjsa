@@ -2,45 +2,56 @@ import { useState } from 'react'
 import { Outlet, Link } from 'react-router'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { usePlatformSettings } from '../hooks/usePlatformSettings'
 import SidebarNav from './SidebarNav'
 import AccountDropdown from './AccountDropdown'
 import SubscriptionCard from './SubscriptionCard'
+import ThemePicker from './ThemePicker'
+import NotificationDropdown from './NotificationDropdown'
+import CustomerSupportWidget from './CustomerSupportWidget'
+import BannedAccountScreen from './BannedAccountScreen'
 
 export default function DashboardLayout() {
-  const { profile, business } = useAuth()
+  const { business, isAccessDenied, banReason, signOut } = useAuth()
+  const { platformName, isAnnouncementEnabled, announcementText } = usePlatformSettings()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
+  // Defense-in-depth: Immediately lockout dashboard if account access is denied
+  if (isAccessDenied) {
+    return <BannedAccountScreen banReason={banReason} onSignOut={signOut} />
+  }
+
+  const brandHeader = (
+    <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-5 bg-surface">
+      <Link to="/" className="flex items-center gap-2.5 group">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white shadow-xs group-hover:scale-102 transition-transform">
+          <span className="text-xs font-black tracking-tight">{platformName.slice(0, 2).toUpperCase()}</span>
+        </div>
+        <div>
+          <span className="block text-sm font-bold text-text-primary leading-none">{platformName}</span>
+          <span className="block text-[10px] font-medium text-text-muted mt-1 leading-none">OS UMKM Modern</span>
+        </div>
+      </Link>
+    </div>
+  )
+
   return (
-    <div className="min-h-screen bg-cream flex">
+    <div className="min-h-screen bg-background flex">
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-64 shrink-0 flex-col border-r border-border bg-surface">
-        <div className="flex h-14 items-center gap-2 border-b border-border px-5">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-navy-600">
-              <span className="text-xs font-extrabold text-white">BS</span>
-            </div>
-            <span className="text-sm font-bold text-navy-700">BisnisSehat</span>
-          </Link>
-        </div>
+        {brandHeader}
 
         <SidebarNav />
 
-        <SubscriptionCard />
-
-        <div className="border-t border-border px-3 py-3">
-          <Link
-            to="/dashboard"
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-text-muted transition-colors hover:bg-cream hover:text-navy-700"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            Pengaturan
-          </Link>
+        <div className="mt-auto">
+          <SubscriptionCard />
+          <div className="border-t border-border px-3 py-2.5 bg-surface">
+            <ThemePicker />
+          </div>
         </div>
       </aside>
 
-      {/* Mobile sidebar overlay */}
+      {/* Mobile sidebar drawer overlay */}
       <AnimatePresence>
         {sidebarOpen && (
           <>
@@ -49,50 +60,105 @@ export default function DashboardLayout() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSidebarOpen(false)}
-              className="fixed inset-0 z-40 bg-black/30 lg:hidden"
+              className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs lg:hidden"
             />
             <motion.aside
-              initial={{ x: -256 }}
+              initial={{ x: -264 }}
               animate={{ x: 0 }}
-              exit={{ x: -256 }}
+              exit={{ x: -264 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border bg-surface lg:hidden"
+              className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border bg-surface shadow-2xl lg:hidden"
             >
-              <div className="flex h-14 items-center gap-2 border-b border-border px-5">
-                <Link to="/" className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-navy-600">
-                    <span className="text-xs font-extrabold text-white">BS</span>
+              <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-5">
+                <Link to="/" className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white">
+                    <span className="text-xs font-black tracking-tight">BS</span>
                   </div>
-                  <span className="text-sm font-bold text-navy-700">BisnisSehat</span>
+                  <div>
+                    <span className="block text-sm font-bold text-text-primary leading-none">BisnisSehat</span>
+                    <span className="block text-[10px] font-medium text-text-muted mt-1 leading-none">OS UMKM Modern</span>
+                  </div>
                 </Link>
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="rounded-lg p-1.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"
+                  aria-label="Tutup sidebar"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
+
               <SidebarNav onNavigate={() => setSidebarOpen(false)} />
-              <SubscriptionCard />
+
+              <div className="mt-auto">
+                <SubscriptionCard />
+                <div className="border-t border-border px-3 py-2.5 bg-surface">
+                  <ThemePicker />
+                </div>
+              </div>
             </motion.aside>
           </>
         )}
       </AnimatePresence>
 
-      {/* Main content */}
+      {/* Main content column */}
       <div className="flex flex-1 flex-col min-w-0">
         {/* Topbar */}
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface px-4 lg:px-6">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-navy-50 lg:hidden"
-          >
-            <svg className="h-5 w-5 text-navy-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <div className="flex-1" />
-          <AccountDropdown />
+        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-border bg-surface/90 backdrop-blur-md px-4 lg:px-6 transition-colors">
+          <div className="flex items-center gap-3">
+            {/* Mobile hamburger */}
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-surface text-text-secondary hover:bg-surface-hover hover:text-text-primary lg:hidden transition-colors"
+              aria-label="Buka navigasi"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+
+            {/* Business / Workspace context */}
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline-block text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Workspace
+              </span>
+              <span className="hidden sm:inline-block text-text-muted/40">/</span>
+              <span className="text-sm font-semibold text-text-primary truncate max-w-[200px] sm:max-w-[320px]">
+                {business?.name || 'Bisnis Anda'}
+              </span>
+            </div>
+          </div>
+
+          {/* Right actions: Notifications + Account */}
+          <div className="flex items-center gap-2.5">
+            <NotificationDropdown />
+            <div className="h-5 w-px bg-border hidden sm:block" />
+            <AccountDropdown />
+          </div>
         </header>
 
+        {/* Global Announcement Banner (@ban.md) */}
+        {isAnnouncementEnabled && (
+          <div
+            data-testid="global-announcement-banner"
+            className="bg-primary/10 border-b border-primary/20 px-4 py-2 text-center text-xs font-medium text-primary flex items-center justify-center gap-2"
+          >
+            <svg className="h-4 w-4 shrink-0 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+            </svg>
+            <span>{announcementText}</span>
+          </div>
+        )}
+
         {/* Page content */}
-        <main className="flex-1 p-4 lg:p-6">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 w-full max-w-7xl mx-auto">
           <Outlet />
         </main>
+
+        {/* Floating Customer Support Widget (Atlas Cloud Style UX) */}
+        <CustomerSupportWidget />
       </div>
     </div>
   )

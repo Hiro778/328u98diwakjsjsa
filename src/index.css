@@ -1,10 +1,33 @@
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
 
-@theme {
-  /* Primary palette — color psychology per frontend.md */
-  --color-cream: #FBF8F1;
-  --color-cream-dark: #F3EDE0;
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* ============================================================
+   ROOT LIGHT PALETTE (Default)
+   ============================================================ */
+:root {
+  /* Semantic tokens (Modernize x BisnisSehat) */
+  --color-primary: #1E2A5E;
+  --color-primary-hover: #161F47;
+  --color-primary-soft: #EEF2FF;
+  --color-secondary: #F5A623;
+  --color-background: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-surface-elevated: #FFFFFF;
+  --color-surface-hover: #F1F5F9;
+  --color-border: #E2E8F0;
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94A3B8;
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+  --color-info: #3B82F6;
+
+  /* Backward-compatible palette */
+  --color-cream: #F8FAFC;
+  --color-cream-dark: #F1F5F9;
   --color-warm-50: #FFFBF0;
   --color-warm-100: #FFF3D6;
   --color-warm-200: #FFE4A8;
@@ -12,7 +35,6 @@
   --color-warm-400: #F5A623;
   --color-warm-500: #E8920C;
 
-  /* Navy/indigo — trust & financial intelligence */
   --color-navy-50: #F0F1F8;
   --color-navy-100: #D8DAE8;
   --color-navy-200: #A8AED0;
@@ -24,7 +46,6 @@
   --color-navy-800: #0A0E22;
   --color-navy-900: #060812;
 
-  /* Green — healthy business / profit / status */
   --color-profit-50: #ECFDF5;
   --color-profit-100: #D1FAE5;
   --color-profit-200: #A7F3D0;
@@ -33,17 +54,228 @@
   --color-profit-500: #10B981;
   --color-profit-600: #059669;
 
-  /* Electric blue/purple — interactive highlights */
   --color-electric-400: #818CF8;
   --color-electric-500: #6366F1;
   --color-electric-600: #4F46E5;
+}
 
-  /* Semantic */
-  --color-text-primary: #1A1D2E;
-  --color-text-secondary: #5A5F7A;
-  --color-text-muted: #8B90A8;
+/* ============================================================
+   EXPLICIT LIGHT MODE
+   ============================================================ */
+[data-theme="light"] {
+  --color-primary: #1E2A5E;
+  --color-primary-hover: #161F47;
+  --color-primary-soft: #EEF2FF;
+  --color-secondary: #F5A623;
+  --color-background: #F8FAFC;
   --color-surface: #FFFFFF;
-  --color-border: #E8E5DC;
+  --color-surface-elevated: #FFFFFF;
+  --color-surface-hover: #F1F5F9;
+  --color-border: #E2E8F0;
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94A3B8;
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+  --color-info: #3B82F6;
+
+  --color-cream: #F8FAFC;
+  --color-cream-dark: #F1F5F9;
+  --color-warm-50: #FFFBF0;
+  --color-warm-100: #FFF3D6;
+  --color-warm-200: #FFE4A8;
+  --color-warm-300: #FFD06A;
+  --color-warm-400: #F5A623;
+  --color-warm-500: #E8920C;
+
+  --color-navy-50: #F0F1F8;
+  --color-navy-100: #D8DAE8;
+  --color-navy-200: #A8AED0;
+  --color-navy-300: #6B74B0;
+  --color-navy-400: #3D4890;
+  --color-navy-500: #1E2A5E;
+  --color-navy-600: #161F47;
+  --color-navy-700: #101635;
+  --color-navy-800: #0A0E22;
+  --color-navy-900: #060812;
+
+  --color-profit-50: #ECFDF5;
+  --color-profit-100: #D1FAE5;
+  --color-profit-200: #A7F3D0;
+  --color-profit-300: #6EE7B7;
+  --color-profit-400: #34D399;
+  --color-profit-500: #10B981;
+  --color-profit-600: #059669;
+
+  --color-electric-400: #818CF8;
+  --color-electric-500: #6366F1;
+  --color-electric-600: #4F46E5;
+}
+
+/* ============================================================
+   EXPLICIT DARK MODE (Multi-Surface Hierarchy)
+   ============================================================ */
+[data-theme="dark"] {
+  --color-primary: #818CF8;
+  --color-primary-hover: #A5B4FC;
+  --color-primary-soft: rgba(99, 102, 241, 0.16);
+  --color-secondary: #F5A623;
+  --color-background: #0B0F19;
+  --color-surface: #151D2C;
+  --color-surface-elevated: #1E293B;
+  --color-surface-hover: #242E42;
+  --color-border: #222C3E;
+  --color-text-primary: #F8FAFC;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #64748B;
+  --color-success: #34D399;
+  --color-warning: #FBBF24;
+  --color-danger: #F87171;
+  --color-info: #60A5FA;
+
+  --color-cream: #0B0F19;
+  --color-cream-dark: #111827;
+  --color-warm-50: #241A0B;
+  --color-warm-100: #382810;
+  --color-warm-200: #5C3F14;
+  --color-warm-300: #8F5E18;
+  --color-warm-400: #E09419;
+  --color-warm-500: #F5A623;
+
+  --color-navy-50: #141C2B;
+  --color-navy-100: #1C273D;
+  --color-navy-200: #2D3D5E;
+  --color-navy-300: #4B5E87;
+  --color-navy-400: #7184AF;
+  --color-navy-500: #9EB0DA;
+  --color-navy-600: #CBD5E1;
+  --color-navy-700: #E2E8F0;
+  --color-navy-800: #F1F5F9;
+  --color-navy-900: #F8FAFC;
+
+  --color-profit-50: #07221A;
+  --color-profit-100: #0D3A2B;
+  --color-profit-200: #135A42;
+  --color-profit-300: #19805E;
+  --color-profit-400: #22A078;
+  --color-profit-500: #10B981;
+  --color-profit-600: #34D399;
+
+  --color-electric-400: #818CF8;
+  --color-electric-500: #6366F1;
+  --color-electric-600: #4F46E5;
+}
+
+/* ============================================================
+   SYSTEM DARK MODE (when user chooses 'Sistem' and OS is dark)
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    --color-primary: #818CF8;
+    --color-primary-hover: #A5B4FC;
+    --color-primary-soft: rgba(99, 102, 241, 0.16);
+    --color-secondary: #F5A623;
+    --color-background: #0B0F19;
+    --color-surface: #151D2C;
+    --color-surface-elevated: #1E293B;
+    --color-surface-hover: #242E42;
+    --color-border: #222C3E;
+    --color-text-primary: #F8FAFC;
+    --color-text-secondary: #94A3B8;
+    --color-text-muted: #64748B;
+    --color-success: #34D399;
+    --color-warning: #FBBF24;
+    --color-danger: #F87171;
+    --color-info: #60A5FA;
+
+    --color-cream: #0B0F19;
+    --color-cream-dark: #111827;
+    --color-warm-50: #241A0B;
+    --color-warm-100: #382810;
+    --color-warm-200: #5C3F14;
+    --color-warm-300: #8F5E18;
+    --color-warm-400: #E09419;
+    --color-warm-500: #F5A623;
+
+    --color-navy-50: #141C2B;
+    --color-navy-100: #1C273D;
+    --color-navy-200: #2D3D5E;
+    --color-navy-300: #4B5E87;
+    --color-navy-400: #7184AF;
+    --color-navy-500: #9EB0DA;
+    --color-navy-600: #CBD5E1;
+    --color-navy-700: #E2E8F0;
+    --color-navy-800: #F1F5F9;
+    --color-navy-900: #F8FAFC;
+
+    --color-profit-50: #07221A;
+    --color-profit-100: #0D3A2B;
+    --color-profit-200: #135A42;
+    --color-profit-300: #19805E;
+    --color-profit-400: #22A078;
+    --color-profit-500: #10B981;
+    --color-profit-600: #34D399;
+
+    --color-electric-400: #818CF8;
+    --color-electric-500: #6366F1;
+    --color-electric-600: #4F46E5;
+  }
+}
+
+/* ============================================================
+   TAILWIND CSS V4 DYNAMIC THEME BINDINGS
+   ============================================================ */
+@theme inline {
+  --color-primary: var(--color-primary);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-primary-soft: var(--color-primary-soft);
+  --color-secondary: var(--color-secondary);
+  --color-background: var(--color-background);
+  --color-surface: var(--color-surface);
+  --color-surface-elevated: var(--color-surface-elevated);
+  --color-surface-hover: var(--color-surface-hover);
+  --color-border: var(--color-border);
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-danger: var(--color-danger);
+  --color-info: var(--color-info);
+
+  /* Palette backward compatibility */
+  --color-cream: var(--color-cream);
+  --color-cream-dark: var(--color-cream-dark);
+  --color-warm-50: var(--color-warm-50);
+  --color-warm-100: var(--color-warm-100);
+  --color-warm-200: var(--color-warm-200);
+  --color-warm-300: var(--color-warm-300);
+  --color-warm-400: var(--color-warm-400);
+  --color-warm-500: var(--color-warm-500);
+
+  --color-navy-50: var(--color-navy-50);
+  --color-navy-100: var(--color-navy-100);
+  --color-navy-200: var(--color-navy-200);
+  --color-navy-300: var(--color-navy-300);
+  --color-navy-400: var(--color-navy-400);
+  --color-navy-500: var(--color-navy-500);
+  --color-navy-600: var(--color-navy-600);
+  --color-navy-700: var(--color-navy-700);
+  --color-navy-800: var(--color-navy-800);
+  --color-navy-900: var(--color-navy-900);
+
+  --color-profit-50: var(--color-profit-50);
+  --color-profit-100: var(--color-profit-100);
+  --color-profit-200: var(--color-profit-200);
+  --color-profit-300: var(--color-profit-300);
+  --color-profit-400: var(--color-profit-400);
+  --color-profit-500: var(--color-profit-500);
+  --color-profit-600: var(--color-profit-600);
+
+  --color-electric-400: #818CF8;
+  --color-electric-500: #6366F1;
+  --color-electric-600: #4F46E5;
 
   /* Typography */
   --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
@@ -60,10 +292,49 @@ html {
 
 body {
   font-family: var(--font-sans);
-  background-color: var(--color-cream);
+  background-color: var(--color-background);
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Dark mode inputs, selects, textareas, and card backgrounds */
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="color"]):not(.keep-white),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+[data-theme="dark"] .bg-white:not(.keep-white) {
+  background-color: var(--color-surface);
+}
+
+/* System dark mode overrides */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="color"]):not(.keep-white),
+  :root:not([data-theme="light"]):not([data-theme="dark"]) select,
+  :root:not([data-theme="light"]):not([data-theme="dark"]) textarea {
+    background-color: var(--color-surface);
+    color: var(--color-text-primary);
+    border-color: var(--color-border);
+  }
+
+  :root:not([data-theme="light"]):not([data-theme="dark"]) input::placeholder,
+  :root:not([data-theme="light"]):not([data-theme="dark"]) textarea::placeholder {
+    color: var(--color-text-muted);
+  }
+
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .bg-white:not(.keep-white) {
+    background-color: var(--color-surface);
+  }
 }
 
 /* Reduced motion */
@@ -78,14 +349,94 @@ body {
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-cream);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-navy-200);
-  border-radius: 3px;
+  background: var(--color-border);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-navy-300);
+  background: var(--color-text-muted);
 }
+
+/* ============================================================
+   THERMAL RECEIPT PRINT STYLING & CLASSES (struk.json)
+   ============================================================ */
+.receipt--58mm {
+  width: 58mm;
+  min-width: 58mm;
+  max-width: 58mm;
+}
+
+.receipt--80mm {
+  width: 80mm;
+  min-width: 80mm;
+  max-width: 80mm;
+}
+
+@media print {
+  @page {
+    size: 58mm auto;
+    margin: 0;
+  }
+
+  html, body {
+    width: 58mm !important;
+    min-width: 58mm !important;
+    max-width: 58mm !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+    color: #000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #pos-thermal-receipt,
+  #pos-thermal-receipt *,
+  .receipt,
+  .receipt * {
+    visibility: visible;
+  }
+
+  #pos-thermal-receipt,
+  .receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 58mm !important;
+    min-width: 58mm !important;
+    max-width: 58mm !important;
+    margin: 0 !important;
+    padding: 2.5mm 2mm !important;
+    border: none !important;
+    box-shadow: none !important;
+    page-break-after: avoid;
+    break-after: avoid;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    box-sizing: border-box !important;
+  }
+
+  .receipt--58mm {
+    width: 58mm !important;
+    min-width: 58mm !important;
+    max-width: 58mm !important;
+  }
+
+  .receipt--80mm {
+    width: 80mm !important;
+    min-width: 80mm !important;
+    max-width: 80mm !important;
+  }
+}
+
+

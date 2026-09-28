@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../context/AuthContext'
 import { formatCurrency } from '../../../lib/orderNumber'
 import { getLatestHPPByProduct } from '../../../lib/hppService'
@@ -8,6 +7,8 @@ import { getProductsByBusiness } from '../../../lib/productService'
 import { calculateBEP } from '../../../sections/BEPCalculator/calculateBEP'
 import BEPInputForm from '../../../sections/BEPCalculator/BEPInputForm'
 import BEPResults from '../../../sections/BEPCalculator/BEPResults'
+import BackButton from '../../../components/BackButton'
+import { saveBepCalculation, getBepCalculationsByBusiness, deleteBepCalculation } from '../../../lib/bepService'
 
 const EMPTY_FORM = {
   productId: '',
@@ -58,13 +59,9 @@ export default function BEPCalculator() {
   }
 
   async function loadHistory() {
-    const { data } = await supabase
-      .from('bep_calculations')
-      .select('*')
-      .eq('business_id', business.id)
-      .order('created_at', { ascending: false })
-      .limit(20)
-    setHistory(data || [])
+    setLoadingHistory(true)
+    const data = await getBepCalculationsByBusiness(business.id)
+    setHistory(data)
     setLoadingHistory(false)
   }
 
@@ -156,33 +153,14 @@ export default function BEPCalculator() {
       required_revenue_for_target_profit: num(result.requiredRevenueForTargetProfit),
     }
 
-    const { error } = await supabase.from('bep_calculations').insert(payload)
-
-    if (error) {
-      console.error('BEP save error:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-      })
-
-      // Provide specific error messages
-      if (error.code === '42P01' || error.message?.includes('does not exist')) {
-        setSupabaseError('Tabel bep_calculations belum tersedia di database. Jalankan migration 010_bep_calculator.sql di Supabase Dashboard → SQL Editor.')
-      } else if (error.code === '42501') {
-        setSupabaseError('Anda tidak memiliki akses untuk menyimpan data BEP ini.')
-      } else if (error.code === '23503') {
-        setSupabaseError('Data referensi tidak ditemukan. Periksa produk yang dipilih.')
-      } else {
-        setSupabaseError('Gagal menyimpan BEP. Silakan coba lagi.')
-      }
-
+    try {
+      await saveBepCalculation(payload)
       setSaving(false)
-      return
+      loadHistory()
+    } catch (err) {
+      setSupabaseError(err.message || 'Gagal menyimpan BEP. Silakan coba lagi.')
+      setSaving(false)
     }
-
-    setSaving(false)
-    loadHistory()
   }
 
   function reuseHistory(item) {
@@ -210,7 +188,7 @@ export default function BEPCalculator() {
 
   async function deleteHistory(id) {
     if (!confirm('Hapus perhitungan BEP ini?')) return
-    await supabase.from('bep_calculations').delete().eq('id', id).eq('business_id', business.id)
+    await deleteBepCalculation(id, business.id)
     loadHistory()
   }
 
@@ -223,6 +201,7 @@ export default function BEPCalculator() {
 
   return (
     <div>
+      <BackButton fallbackUrl="/dashboard/keuangan" label="Kembali" />
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

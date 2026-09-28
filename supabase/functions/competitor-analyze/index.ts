@@ -12,8 +12,10 @@
 // 5. Update analysis status to completed
 
 import { verifyAuth } from "../_shared/auth.ts";
+import { isProUser } from "../_shared/entitlement.ts";
 import { supabaseAdmin } from "../_shared/supabase-admin.ts";
 import { jsonResponse, errorResponse, corsResponse } from "../_shared/response.ts";
+import { enforceAiFeatureFlag } from "../_shared/platform-settings.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent";
@@ -37,6 +39,18 @@ Deno.serve(async (req) => {
 
   try {
     const auth = await verifyAuth(req);
+
+    // @ban.md item 6: enforce enable_ai_features platform flag BEFORE calling AI provider
+    const aiBlocked = await enforceAiFeatureFlag();
+    if (aiBlocked) {
+      return errorResponse(aiBlocked, 503);
+    }
+
+    // Enforce Pro entitlement server-side
+    const hasPro = await isProUser(auth.userId);
+    if (!hasPro) {
+      return errorResponse("Fitur ini membutuhkan BisnisSehat Pro.", 403);
+    }
 
     const { analysis_id } = await req.json();
 

@@ -10,6 +10,7 @@
 import { verifyAuth } from "../_shared/auth.ts";
 import { supabaseAdmin } from "../_shared/supabase-admin.ts";
 import { jsonResponse, errorResponse, corsResponse } from "../_shared/response.ts";
+import { enforceAiFeatureFlag } from "../_shared/platform-settings.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent";
@@ -18,9 +19,14 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return corsResponse();
 
   try {
-    const auth = await verifyAuth(req);
+    // @ban.md item 6: enforce enable_ai_features platform flag BEFORE calling AI provider
+    const aiBlocked = await enforceAiFeatureFlag();
+    if (aiBlocked) {
+      return errorResponse(aiBlocked, 503);
+    }
 
-    const { prd_id, revision_instructions } = await req.json();
+    const body = await req.json();
+    const { prd_id, revision_instructions, business_id } = body || {};
 
     if (!prd_id || !revision_instructions) {
       return errorResponse("prd_id and revision_instructions are required", 400);
@@ -54,7 +60,21 @@ Deno.serve(async (req) => {
       .eq("id", brief.campaign_id)
       .single();
 
-    if (!campaign || campaign.business_id !== auth.businessId) {
+    if (!campaign) {
+      return errorResponse("Campaign not found", 404);
+    }
+
+    const authoritativeBusinessId = campaign.business_id || business_id;
+    const auth = await verifyAuth(req, authoritativeBusinessId);
+
+    const { data: userBusiness } = await supabaseAdmin
+      .from("businesses")
+      .select("id")
+      .eq("id", campaign.business_id)
+      .eq("owner_id", auth.userId)
+      .maybeSingle();
+
+    if (!userBusiness) {
       return errorResponse("Access denied", 403);
     }
 

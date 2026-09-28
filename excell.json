@@ -1,0 +1,585 @@
+{
+  "task": "Redesign total konsep Excel Laporan Keuangan UMKM BisnisSehat menjadi workbook otomatis berbasis data realtime",
+  "objective": "Buat ulang sistem export Excel laporan keuangan UMKM agar bukan sekadar tabel laporan penjualan, tetapi menjadi workbook keuangan lengkap yang otomatis mengambil data realtime dari seluruh tools BisnisSehat yang relevan.",
+  "source_basis": {
+    "uploaded_financial_template": {
+      "description": "Gunakan file Format Laporan Keuangan UMKM - Pajakku.xlsx sebagai referensi struktur laporan.",
+      "pages": {
+        "page_1": [
+          "Laporan Laba Rugi",
+          "Penjualan",
+          "Retur",
+          "Potongan Penjualan",
+          "Penyesuaian Penjualan",
+          "Penjualan Bersih",
+          "Harga Pokok Penjualan (HPP)",
+          "Pembelian",
+          "Beban Pengangkutan",
+          "Beban Lainnya",
+          "Persediaan Awal",
+          "Persediaan Akhir",
+          "Jumlah HPP",
+          "Laba Kotor",
+          "Pendapatan Usaha Lainnya",
+          "Beban Usaha",
+          "Jumlah Beban Usaha",
+          "Laba/Rugi Usaha",
+          "Pendapatan Non Usaha",
+          "Beban Non Usaha",
+          "Laba/Rugi Non Usaha",
+          "Laba/Rugi Sebelum Pajak"
+        ],
+        "page_2": [
+          "Laporan Posisi Keuangan",
+          "Aset Lancar",
+          "Kas dan Setara Kas",
+          "Piutang Usaha",
+          "Persediaan",
+          "Beban Dibayar di Muka",
+          "Pajak Dibayar di Muka",
+          "Aset Lancar Lainnya",
+          "Aset Tidak Lancar",
+          "Piutang Jangka Panjang",
+          "Properti Investasi",
+          "Tanah dan Bangunan",
+          "Aset Tetap",
+          "Akumulasi Penyusutan",
+          "Aset Biologis",
+          "Aset Hak Guna",
+          "Aset Tak Berwujud",
+          "Jumlah Aset",
+          "Liabilitas Jangka Pendek",
+          "Utang Usaha",
+          "Utang Bunga",
+          "Liabilitas Kontrak",
+          "Utang Pajak",
+          "Beban yang Masih Harus Dibayar",
+          "Utang Bank Jangka Pendek",
+          "Liabilitas Jangka Panjang",
+          "Utang Bank Jangka Panjang",
+          "Utang Jangka Panjang",
+          "Liabilitas Sewa",
+          "Liabilitas Imbalan Kerja",
+          "Ekuitas",
+          "Modal",
+          "Tambahan Modal",
+          "Laba Ditahan",
+          "Ekuitas Lainnya",
+          "Jumlah Ekuitas",
+          "Jumlah Liabilitas dan Ekuitas"
+        ]
+      }
+    },
+    "additional_umkm_report_concepts": [
+      "Laporan Laba Rugi",
+      "Laporan Arus Kas",
+      "Laporan Posisi Keuangan/Neraca",
+      "Laporan Perubahan Modal",
+      "Anggaran/Budget",
+      "Dashboard grafik keuangan"
+    ],
+    "current_workbook": {
+      "problem": [
+        "Workbook saat ini terlalu berfokus pada laporan penjualan harian.",
+        "Area kanan kosong atau digunakan untuk helper table.",
+        "Chart sebelumnya salah karena helper table terlihat sebagai output utama.",
+        "Revenue tidak boleh otomatis disebut sebagai Untung.",
+        "Laporan keuangan harus membedakan Revenue, HPP, biaya, laba kotor, laba usaha, dan laba bersih."
+      ]
+    }
+  },
+  "core_principle": [
+    "Semua angka harus berasal dari data realtime yang tersedia di BisnisSehat.",
+    "Jangan hardcode angka contoh ke workbook produksi.",
+    "Jangan menganggap Revenue = Profit.",
+    "Jangan membuat angka keuangan yang tidak memiliki sumber.",
+    "Jika suatu data belum tersedia dari tools BisnisSehat, tampilkan 0, kosong, atau 'Data belum tersedia' sesuai konteks dan jangan mengarang.",
+    "Gunakan formula Excel untuk perhitungan turunan jika sumber datanya tersedia.",
+    "Gunakan source of truth dari database/service BisnisSehat, bukan data dummy.",
+    "Pertahankan periode laporan yang dipilih user."
+  ],
+  "workbook_structure": {
+    "sheet_order": [
+      "Dashboard",
+      "Laba Rugi",
+      "Arus Kas",
+      "Posisi Keuangan",
+      "Perubahan Modal",
+      "Anggaran",
+      "Penjualan",
+      "Pengeluaran",
+      "Persediaan & HPP",
+      "Data Pendukung"
+    ],
+    "sheet_details": {
+      "Dashboard": {
+        "purpose": "Ringkasan kondisi keuangan UMKM dalam satu halaman.",
+        "header": [
+          "Nama Usaha",
+          "Periode",
+          "Tanggal Export",
+          "Status Data"
+        ],
+        "kpi": [
+          "Pendapatan Bersih",
+          "HPP",
+          "Laba Kotor",
+          "Total Beban Operasional",
+          "Laba/Rugi Usaha",
+          "Laba Bersih",
+          "Kas dan Setara Kas",
+          "Piutang",
+          "Utang",
+          "Persediaan"
+        ],
+        "charts": [
+          {
+            "name": "Pendapatan vs Beban",
+            "type": "column",
+            "purpose": "Membandingkan pendapatan dan total beban per periode."
+          },
+          {
+            "name": "Komposisi Anggaran",
+            "type": "doughnut",
+            "purpose": "Menampilkan proporsi kategori anggaran/pengeluaran yang benar-benar tersedia."
+          },
+          {
+            "name": "Arus Kas",
+            "type": "line",
+            "purpose": "Menampilkan perubahan kas masuk dan kas keluar berdasarkan periode."
+          },
+          {
+            "name": "Laba Bersih",
+            "type": "column",
+            "purpose": "Menampilkan laba/rugi bersih per periode."
+          }
+        ]
+      },
+      "Laba Rugi": {
+        "purpose": "Laporan laba rugi otomatis berdasarkan struktur sumber laporan UMKM.",
+        "sections": [
+          {
+            "name": "Penjualan",
+            "accounts": [
+              "Penjualan Domestik",
+              "Penjualan Ekspor",
+              "Penjualan Bruto",
+              "Retur",
+              "Potongan Penjualan",
+              "Penyesuaian Penjualan",
+              "Penjualan Bersih"
+            ]
+          },
+          {
+            "name": "Harga Pokok Penjualan",
+            "accounts": [
+              "Pembelian",
+              "Beban Pengangkutan",
+              "Beban Lainnya",
+              "Persediaan Awal",
+              "Persediaan Akhir",
+              "Jumlah HPP"
+            ]
+          },
+          {
+            "name": "Profitability",
+            "accounts": [
+              "Laba Kotor",
+              "Pendapatan Usaha Lainnya",
+              "Beban Usaha",
+              "Jumlah Beban Usaha",
+              "Laba/Rugi Usaha"
+            ]
+          },
+          {
+            "name": "Non Operating",
+            "accounts": [
+              "Pendapatan Non Usaha",
+              "Beban Non Usaha",
+              "Laba/Rugi Non Usaha",
+              "Laba/Rugi Sebelum Pajak"
+            ]
+          }
+        ],
+        "formulas": [
+          "Penjualan Bersih = Penjualan Bruto - Retur - Potongan Penjualan - Penyesuaian Penjualan",
+          "Laba Kotor = Penjualan Bersih - HPP",
+          "Laba/Rugi Usaha = Laba Kotor + Pendapatan Usaha Lainnya - Beban Usaha",
+          "Laba/Rugi Non Usaha = Pendapatan Non Usaha - Beban Non Usaha",
+          "Laba/Rugi Sebelum Pajak = Laba/Rugi Usaha + Laba/Rugi Non Usaha"
+        ],
+        "important": "Gunakan formula hanya jika seluruh komponen sumber tersedia."
+      },
+      "Arus Kas": {
+        "purpose": "Menampilkan uang masuk dan keluar usaha.",
+        "sections": [
+          "Arus Kas Masuk",
+          "Arus Kas Keluar",
+          "Saldo Awal Kas",
+          "Total Kas Masuk",
+          "Total Kas Keluar",
+          "Saldo Akhir Kas"
+        ],
+        "categories": [
+          "Penjualan Tunai",
+          "Pembayaran/Pelunasan Piutang",
+          "Pendapatan Lainnya",
+          "Pembelian Bahan/Barang",
+          "Gaji",
+          "Sewa",
+          "Listrik dan Air",
+          "Marketing",
+          "Transportasi",
+          "Operasional Lainnya",
+          "Pembayaran Utang",
+          "Pajak",
+          "Prive/Owner Withdrawal"
+        ],
+        "formula": "Saldo Akhir Kas = Saldo Awal Kas + Total Kas Masuk - Total Kas Keluar"
+      },
+      "Posisi Keuangan": {
+        "purpose": "Neraca otomatis berdasarkan data aset, liabilitas, dan ekuitas yang tersedia.",
+        "sections": {
+          "Aset Lancar": [
+            "Kas dan Setara Kas",
+            "Piutang Usaha",
+            "Persediaan",
+            "Beban Dibayar di Muka",
+            "Pajak Dibayar di Muka",
+            "Aset Lancar Lainnya"
+          ],
+          "Aset Tidak Lancar": [
+            "Aset Tetap",
+            "Tanah dan Bangunan",
+            "Peralatan",
+            "Aset Tidak Lancar Lainnya"
+          ],
+          "Liabilitas": [
+            "Utang Usaha",
+            "Utang Pajak",
+            "Utang Bank",
+            "Beban Masih Harus Dibayar",
+            "Liabilitas Lainnya"
+          ],
+          "Ekuitas": [
+            "Modal Pemilik",
+            "Tambahan Modal",
+            "Laba Ditahan",
+            "Prive",
+            "Ekuitas Lainnya"
+          ]
+        },
+        "formulas": [
+          "Total Aset = Aset Lancar + Aset Tidak Lancar",
+          "Total Liabilitas = Liabilitas Jangka Pendek + Liabilitas Jangka Panjang",
+          "Total Ekuitas = Modal + Tambahan Modal + Laba Ditahan + Ekuitas Lainnya - Prive",
+          "Total Liabilitas dan Ekuitas = Total Liabilitas + Total Ekuitas"
+        ],
+        "validation": "Tampilkan indikator Balance Check. Jika Total Aset != Total Liabilitas + Ekuitas, tampilkan warning dan selisihnya. Jangan menyembunyikan ketidakseimbangan."
+      },
+      "Perubahan Modal": {
+        "purpose": "Menampilkan perubahan modal pemilik selama periode.",
+        "rows": [
+          "Modal Awal",
+          "Tambahan Modal",
+          "Laba Bersih",
+          "Prive",
+          "Modal Akhir"
+        ],
+        "formula": "Modal Akhir = Modal Awal + Tambahan Modal + Laba Bersih - Prive"
+      },
+      "Anggaran": {
+        "purpose": "Membandingkan budget dengan realisasi berdasarkan kategori keuangan yang benar-benar tersedia.",
+        "columns": [
+          "Kategori",
+          "Anggaran",
+          "Realisasi",
+          "Selisih",
+          "Persentase Terpakai",
+          "Status"
+        ],
+        "formula": [
+          "Selisih = Anggaran - Realisasi",
+          "Persentase Terpakai = Realisasi / Anggaran"
+        ],
+        "chart": {
+          "type": "doughnut",
+          "name": "Komposisi Anggaran",
+          "rule": "Gunakan data budget aktual dari modul Anggaran jika tersedia. Jangan menggunakan angka contoh sebagai data produksi."
+        }
+      },
+      "Penjualan": {
+        "purpose": "Detail transaksi penjualan realtime.",
+        "columns": [
+          "Tanggal",
+          "Nomor Transaksi",
+          "Produk",
+          "Kategori",
+          "Qty",
+          "Harga",
+          "Diskon",
+          "Pajak",
+          "Total",
+          "Metode Pembayaran"
+        ]
+      },
+      "Pengeluaran": {
+        "purpose": "Detail seluruh pengeluaran realtime yang tersedia.",
+        "columns": [
+          "Tanggal",
+          "Kategori",
+          "Deskripsi",
+          "Nominal",
+          "Metode Pembayaran",
+          "Referensi"
+        ]
+      },
+      "Persediaan & HPP": {
+        "purpose": "Menghubungkan stok, pembelian, BOM, dan HPP jika tools terkait menyediakan data.",
+        "metrics": [
+          "Persediaan Awal",
+          "Pembelian",
+          "Pemakaian",
+          "Persediaan Akhir",
+          "HPP"
+        ]
+      },
+      "Data Pendukung": {
+        "purpose": "Helper/source data untuk formula dan chart.",
+        "rule": "Boleh digunakan sebagai hidden/helper sheet. Jangan menampilkan helper table di area dashboard utama."
+      }
+    }
+  },
+  "realtime_data_mapping": {
+    "instruction": "Audit seluruh tools/service/database BisnisSehat yang sudah tersedia lalu mapping data ke laporan.",
+    "priority_sources": [
+      {
+        "data": "Penjualan",
+        "source_candidates": [
+          "POS",
+          "Orders",
+          "Sales",
+          "Transaction tools"
+        ]
+      },
+      {
+        "data": "Pengeluaran",
+        "source_candidates": [
+          "Keuangan",
+          "Expense tools",
+          "Cash flow tools"
+        ]
+      },
+      {
+        "data": "Persediaan",
+        "source_candidates": [
+          "Inventory",
+          "Operational tools",
+          "Production/BOM"
+        ]
+      },
+      {
+        "data": "HPP",
+        "source_candidates": [
+          "HPP Calculator",
+          "BOM",
+          "Production",
+          "Inventory"
+        ]
+      },
+      {
+        "data": "Piutang",
+        "source_candidates": [
+          "Sales & CRM",
+          "Finance"
+        ]
+      },
+      {
+        "data": "Utang",
+        "source_candidates": [
+          "Finance",
+          "Purchasing",
+          "Operational"
+        ]
+      },
+      {
+        "data": "Kas",
+        "source_candidates": [
+          "Cash flow",
+          "POS payment",
+          "Finance"
+        ]
+      },
+      {
+        "data": "Anggaran",
+        "source_candidates": [
+          "Budget/Anggaran tool jika tersedia"
+        ]
+      }
+    ],
+    "rules": [
+      "Audit actual schema/service/query terlebih dahulu.",
+      "Gunakan data realtime dari Supabase/database/service yang memang sudah digunakan aplikasi.",
+      "Jangan membuat endpoint dummy.",
+      "Jangan membuat mock data untuk workbook produksi.",
+      "Jika suatu modul tidak tersedia, jangan mengarang datanya.",
+      "Berikan label 'Belum tersedia' pada metric yang tidak mempunyai source of truth."
+    ]
+  },
+  "charts": {
+    "requirements": [
+      "Chart harus benar-benar native Excel chart, bukan tabel yang diberi formatting.",
+      "Jangan menjadikan helper table sebagai visual utama.",
+      "Helper data boleh ditempatkan di sheet Data Pendukung dan disembunyikan.",
+      "Semua chart harus menggunakan source range/formula yang dinamis.",
+      "Chart harus ikut berubah ketika data periode berubah."
+    ],
+    "required": [
+      {
+        "name": "Pendapatan vs Beban",
+        "type": "column",
+        "source": "Laba Rugi"
+      },
+      {
+        "name": "Komposisi Anggaran",
+        "type": "doughnut",
+        "source": "Anggaran"
+      },
+      {
+        "name": "Arus Kas",
+        "type": "line",
+        "source": "Arus Kas"
+      },
+      {
+        "name": "Laba Bersih",
+        "type": "column",
+        "source": "Laba Rugi"
+      }
+    ]
+  },
+  "dashboard_layout": {
+    "style": "Professional UMKM financial dashboard",
+    "requirements": [
+      "Jangan membuat sheet terlihat seperti raw database.",
+      "Gunakan hierarchy yang jelas.",
+      "KPI berada di bagian atas.",
+      "Laporan utama berada di bawah/di sheet terpisah.",
+      "Chart ditempatkan di area yang memang kosong dan cukup luas.",
+      "Jangan menampilkan helper table di samping laporan utama.",
+      "Gunakan formatting Rupiah konsisten.",
+      "Gunakan freeze panes pada tabel panjang.",
+      "Gunakan autofilter pada detail transaksi.",
+      "Gunakan print area yang masuk akal untuk setiap sheet."
+    ]
+  },
+  "financial_integrity": {
+    "rules": [
+      "Revenue bukan Profit.",
+      "Profit harus dihitung dari Revenue/Penjualan Bersih dikurangi HPP dan beban yang relevan.",
+      "Kerugian tidak boleh dianggap sama dengan seluruh biaya.",
+      "HPP tidak boleh otomatis disamakan dengan seluruh pengeluaran.",
+      "Cash flow tidak sama dengan profit.",
+      "Neraca harus memenuhi Aset = Liabilitas + Ekuitas.",
+      "Jika source data tidak cukup untuk menghitung suatu laporan, jangan mengarang angka.",
+      "Pertahankan auditability dengan formula/source reference."
+    ]
+  },
+  "implementation": {
+    "first_step": [
+      "Audit existing Excel generation service.",
+      "Audit seluruh finance/POS/inventory/production/sales services yang sudah ada.",
+      "Audit database schema dan query yang digunakan.",
+      "Buat data mapping sebelum mengubah workbook generator."
+    ],
+    "second_step": [
+      "Redesign workbook structure.",
+      "Implement realtime data aggregation.",
+      "Implement formulas.",
+      "Implement hidden helper sheet.",
+      "Implement native Excel charts.",
+      "Implement formatting."
+    ],
+    "third_step": [
+      "Generate workbook menggunakan data database aktual.",
+      "Verifikasi angka dengan source data.",
+      "Verifikasi formula.",
+      "Verifikasi chart.",
+      "Verifikasi balance sheet.",
+      "Verifikasi print layout."
+    ]
+  },
+  "testing": {
+    "must_test": [
+      "Workbook generation dengan data realtime.",
+      "Periode harian.",
+      "Periode bulanan.",
+      "Periode custom.",
+      "Tidak ada transaksi.",
+      "Ada transaksi.",
+      "Ada diskon.",
+      "Ada retur.",
+      "Ada HPP.",
+      "Ada pengeluaran.",
+      "Ada persediaan.",
+      "Ada cash flow.",
+      "Ada budget.",
+      "Data budget kosong.",
+      "Data finance sebagian belum tersedia.",
+      "Balance sheet balanced.",
+      "Balance sheet tidak balanced.",
+      "Chart source range.",
+      "Chart placement.",
+      "Formula integrity.",
+      "Rupiah formatting."
+    ],
+    "validation": [
+      "Bandingkan total Penjualan Excel dengan total POS.",
+      "Bandingkan total Pengeluaran Excel dengan finance source.",
+      "Bandingkan HPP Excel dengan HPP source.",
+      "Bandingkan Persediaan Excel dengan inventory source.",
+      "Bandingkan Kas Excel dengan cash source.",
+      "Pastikan tidak ada angka hardcoded yang seharusnya realtime."
+    ]
+  },
+  "important_constraints": [
+    "Jangan menghapus laporan penjualan yang sudah ada. Integrasikan sebagai salah satu sheet/detail source.",
+    "Jangan merusak generator Excel yang sudah bekerja.",
+    "Jangan mengubah schema database hanya demi export Excel jika tidak diperlukan.",
+    "Jangan membuat data fiktif.",
+    "Jangan menyebut Revenue sebagai Untung.",
+    "Jangan membuat chart dari helper table yang terlihat di dashboard.",
+    "Jangan menggunakan angka contoh dari sumber sebagai data produksi.",
+    "Gunakan contoh laporan dari sumber hanya sebagai struktur/konsep.",
+    "Semua data produksi harus berasal dari data realtime BisnisSehat."
+  ],
+  "acceptance_criteria": [
+    "Export Excel menghasilkan workbook keuangan UMKM lengkap.",
+    "Dashboard menjadi ringkasan kondisi keuangan aktual.",
+    "Laba Rugi mengikuti struktur laporan sumber.",
+    "Arus Kas tersedia jika source data tersedia.",
+    "Posisi Keuangan/Neraca tersedia jika source data tersedia.",
+    "Perubahan Modal tersedia jika source data tersedia.",
+    "Anggaran tersedia jika tool budget tersedia.",
+    "Penjualan tetap tersedia sebagai detail.",
+    "Persediaan dan HPP terhubung ke source yang benar.",
+    "Chart benar-benar berupa native Excel chart.",
+    "Doughnut chart anggaran menggunakan data budget aktual jika tersedia.",
+    "Tidak ada helper table yang mengganggu dashboard.",
+    "Tidak ada angka fiktif.",
+    "Tidak ada Revenue yang salah dilabeli sebagai Profit.",
+    "Workbook dapat dibuka normal di Microsoft Excel.",
+    "Seluruh existing tests tetap pass.",
+    "Tambahkan regression tests untuk workbook baru.",
+    "Build production harus berhasil."
+  ],
+  "final_output_from_agent": [
+    "Daftar file yang diubah.",
+    "Daftar service/source data yang digunakan.",
+    "Mapping setiap laporan ke source realtime.",
+    "Screenshot atau preview struktur workbook jika tooling memungkinkan.",
+    "Jumlah test yang pass.",
+    "Hasil build.",
+    "Daftar data yang belum tersedia dari tools BisnisSehat.",
+    "Konfirmasi bahwa tidak ada data dummy/hardcoded pada workbook produksi."
+  ]
+}

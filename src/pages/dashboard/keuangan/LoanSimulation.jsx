@@ -1,11 +1,16 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../../../lib/supabase'
+import {
+  saveLoanSimulation,
+  getLoanSimulationsByBusiness,
+  deleteLoanSimulation,
+} from '../../../lib/loanSimulationService'
 import { useAuth } from '../../../context/AuthContext'
 import { formatCurrency } from '../../../lib/orderNumber'
 import { calculateLoanSimulation, compareLoanMethods } from '../../../sections/LoanSimulation/calculateLoanSimulation'
 import LoanSimulationInput from '../../../sections/LoanSimulation/LoanSimulationInput'
 import LoanSimulationResults from '../../../sections/LoanSimulation/LoanSimulationResults'
+import BackButton from '../../../components/BackButton'
 
 const EMPTY_FORM = {
   principal: '',
@@ -30,21 +35,17 @@ export default function LoanSimulation() {
   const [showHistory, setShowHistory] = useState(true)
 
   // ── Load history ──
-  useEffect(() => {
+  const loadHistory = useCallback(async () => {
     if (!business?.id) return
-    loadHistory()
-  }, [business?.id])
-
-  async function loadHistory() {
-    const { data } = await supabase
-      .from('loan_simulations')
-      .select('*')
-      .eq('business_id', business.id)
-      .order('created_at', { ascending: false })
-      .limit(20)
+    setLoadingHistory(true)
+    const data = await getLoanSimulationsByBusiness(business.id, 20)
     setHistory(data || [])
     setLoadingHistory(false)
-  }
+  }, [business?.id])
+
+  useEffect(() => {
+    loadHistory()
+  }, [loadHistory])
 
   // ── Form setter ──
   function setField(field, value) {
@@ -99,49 +100,31 @@ export default function LoanSimulation() {
     setSaving(true)
     setSupabaseError('')
 
-    const num = (v) => (Number.isFinite(v) ? v : 0)
-
-    const payload = {
-      business_id: business.id,
-      principal: num(result.principal),
-      annual_interest_rate: num(result.annualInterestRate),
-      tenor_months: result.tenorMonths,
-      method: result.method,
-      admin_fee: num(Number(form.adminFee) || 0),
-      provision_rate: num(Number(form.provisionRate) || 0),
-      other_fee: num(Number(form.otherFee) || 0),
-      monthly_payment: num(result.monthlyPayment),
-      total_interest: num(result.totalInterest),
-      total_fees: num(result.totalFees),
-      total_payment: num(result.totalPayment),
-      effective_total_cost: num(result.effectiveTotalCost),
-      schedule: result.amortizationSchedule,
-    }
-
-    const { error } = await supabase.from('loan_simulations').insert(payload)
-
-    if (error) {
-      console.error('Loan simulation save error:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-      })
-
-      if (error.code === '42P01' || error.message?.includes('does not exist')) {
-        setSupabaseError('Tabel loan_simulations belum tersedia di database. Jalankan migration 015_loan_simulation.sql di Supabase Dashboard → SQL Editor.')
-      } else if (error.code === '42501') {
-        setSupabaseError('Anda tidak memiliki akses untuk menyimpan data ini.')
-      } else {
-        setSupabaseError('Gagal menyimpan simulasi. Silakan coba lagi.')
+    try {
+      const payload = {
+        business_id: business.id,
+        principal: result.principal,
+        annual_interest_rate: result.annualInterestRate,
+        tenor_months: result.tenorMonths,
+        method: result.method,
+        admin_fee: Number(form.adminFee) || 0,
+        provision_rate: Number(form.provisionRate) || 0,
+        other_fee: Number(form.otherFee) || 0,
+        monthly_payment: result.monthlyPayment,
+        total_interest: result.totalInterest,
+        total_fees: result.totalFees,
+        total_payment: result.totalPayment,
+        effective_total_cost: result.effectiveTotalCost,
+        schedule: result.amortizationSchedule,
       }
 
+      await saveLoanSimulation(payload)
+      await loadHistory()
+    } catch (err) {
+      setSupabaseError(err.message || 'Gagal menyimpan simulasi. Silakan coba lagi.')
+    } finally {
       setSaving(false)
-      return
     }
-
-    setSaving(false)
-    loadHistory()
   }
 
   // ── Reuse history item ──
@@ -164,8 +147,12 @@ export default function LoanSimulation() {
   // ── Delete history item ──
   async function deleteHistory(id) {
     if (!confirm('Hapus simulasi pinjaman ini?')) return
-    await supabase.from('loan_simulations').delete().eq('id', id).eq('business_id', business.id)
-    loadHistory()
+    const ok = await deleteLoanSimulation(id, business.id)
+    if (ok) {
+      await loadHistory()
+    } else {
+      setSupabaseError('Gagal menghapus simulasi pinjaman.')
+    }
   }
 
   // ── Reset form ──
@@ -177,6 +164,7 @@ export default function LoanSimulation() {
 
   return (
     <div>
+      <BackButton fallbackUrl="/dashboard/keuangan" label="Kembali" />
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

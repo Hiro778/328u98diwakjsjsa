@@ -51,6 +51,21 @@ CREATE POLICY "loan_simulations_insert" ON public.loan_simulations
     )
   );
 
+CREATE POLICY "loan_simulations_update" ON public.loan_simulations
+  FOR UPDATE TO authenticated
+  USING (
+    business_id IN (
+      SELECT id FROM public.businesses
+      WHERE owner_id = (SELECT auth.uid())
+    )
+  )
+  WITH CHECK (
+    business_id IN (
+      SELECT id FROM public.businesses
+      WHERE owner_id = (SELECT auth.uid())
+    )
+  );
+
 CREATE POLICY "loan_simulations_delete" ON public.loan_simulations
   FOR DELETE TO authenticated
   USING (

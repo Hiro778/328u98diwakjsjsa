@@ -7,6 +7,7 @@
 // DELETE: Remove reply from a review
 
 import { verifyAuth } from "../../_shared/auth.ts";
+import { isProUser } from "../../_shared/entitlement.ts";
 import { supabaseAdmin } from "../../_shared/supabase-admin.ts";
 import { decrypt } from "../../_shared/crypto.ts";
 import {
@@ -23,11 +24,12 @@ async function getAccessToken(
 ): Promise<string | null> {
   try {
     // Check if token is still valid (with 5min buffer)
-    if (
-      connection.token_expires_at &&
-      new Date(connection.token_expires_at) > new Date(Date.now() + 5 * 60 * 1000)
-    ) {
-      // Token still valid, but we don't store access tokens — always refresh
+    if (connection.token_expires_at) {
+      const expiresAt = new Date(connection.token_expires_at).getTime();
+      const now = Date.now();
+      if (expiresAt - now > 5 * 60 * 1000) {
+        return await decrypt(connection.refresh_token_encrypted);
+      }
     }
 
     const refreshToken = await decrypt(connection.refresh_token_encrypted);
@@ -60,6 +62,12 @@ Deno.serve(async (req) => {
 
   try {
     const auth = await verifyAuth(req);
+
+    // Enforce Pro entitlement server-side
+    const hasPro = await isProUser(auth.userId);
+    if (!hasPro) {
+      return errorResponse("Fitur ini membutuhkan BisnisSehat Pro.", 403);
+    }
 
     // Get connection
     const { data: connection } = await supabaseAdmin

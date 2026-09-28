@@ -2,10 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../../context/AuthContext'
 import { supabase } from '../../../lib/supabase'
+import { createNotification } from '../../../services/notificationService'
 import SupplierDashboard from '../../../sections/Supplier/SupplierDashboard'
 import SupplierList from '../../../sections/Supplier/SupplierList'
 import SupplierForm from '../../../sections/Supplier/SupplierForm'
 import SupplierDetail from '../../../sections/Supplier/SupplierDetail'
+import BackButton from '../../../components/BackButton'
 
 export default function SupplierDatabasePage() {
   const { business } = useAuth()
@@ -148,6 +150,21 @@ export default function SupplierDatabasePage() {
         throw new Error(insertError.message || 'Gagal menambahkan supplier')
       }
       showToast('Supplier berhasil ditambahkan')
+
+      // Create persistent notification
+      try {
+        await createNotification({
+          business_id: business.id,
+          title: 'Supplier Ditambahkan',
+          message: `Supplier "${formData.name}" berhasil ditambahkan.`,
+          category: 'supplier',
+          priority: 'normal',
+          action_url: '/dashboard/operasional/suppliers',
+          dedup_key: `supplier_created_${Date.now()}`,
+        })
+      } catch (notifErr) {
+        console.warn('[Supplier] Notification creation failed:', notifErr)
+      }
     }
 
     setShowForm(false)
@@ -217,6 +234,11 @@ export default function SupplierDatabasePage() {
       )}
 
       {/* Page Header */}
+      <BackButton
+        fallbackUrl="/dashboard/operasional"
+        label={detailSupplier ? 'Kembali ke Daftar Supplier' : 'Kembali'}
+        onClick={detailSupplier ? () => setDetailSupplier(null) : undefined}
+      />
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}

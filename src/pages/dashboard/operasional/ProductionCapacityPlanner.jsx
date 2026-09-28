@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../../context/AuthContext'
+import BackButton from '../../../components/BackButton'
 import {
   fetchProducts,
   fetchInventory,
@@ -154,16 +155,16 @@ export default function ProductionCapacityPlanner() {
     const bSize = Number(batchSize) > 0 ? Number(batchSize) : 1
     const maxOutput = maxBatches * bSize
 
-    const targetQty = Number(targetQuantity) > 0 ? Number(targetQuantity) : 0
-    const requiredBatches = Math.ceil(targetQty / bSize)
-    const requirements = calculateRequirements(requiredBatches, bomItems)
+    const targetBatches = Number(targetQuantity) > 0 ? Number(targetQuantity) : 0
+    const requirements = calculateRequirements(targetBatches, bomItems)
     const shortages = calculateShortages(inventoryMap, requirements, bomItems)
 
-    const targetFulfilled = maxBatches >= requiredBatches
+    const targetFulfilled = maxBatches >= targetBatches
+    const targetProductOutput = targetBatches * bSize
 
     // Production time calculation
     const timePerBatch = Number(settings.production_time_minutes) || 0
-    const totalTimeMinutes = requiredBatches * timePerBatch
+    const totalTimeMinutes = targetBatches * timePerBatch
     const hours = Math.floor(totalTimeMinutes / 60)
     const minutes = totalTimeMinutes % 60
 
@@ -173,7 +174,8 @@ export default function ProductionCapacityPlanner() {
       bottleneck,
       breakdown,
       shortages,
-      requiredBatches,
+      targetBatches,
+      targetProductOutput,
       targetFulfilled,
       totalTimeMinutes,
       timeFormatted: timePerBatch > 0 ? `${hours > 0 ? `${hours} jam ` : ''}${minutes} menit` : 'Data waktu belum diatur',
@@ -294,6 +296,7 @@ export default function ProductionCapacityPlanner() {
 
   return (
     <div className="space-y-8 pb-12">
+      <BackButton fallbackUrl="/dashboard/operasional" label="Kembali" />
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <p className="mb-1 text-sm font-semibold tracking-wide text-profit-600 uppercase">Operasional & Produksi</p>
@@ -457,12 +460,13 @@ export default function ProductionCapacityPlanner() {
                                 ))}
                               </select>
                             </div>
-                            <div className="w-28">
-                              <label className="block text-[10px] font-bold text-text-muted mb-1">Kebutuhan</label>
+                            <div className="w-32">
+                              <label className="block text-[10px] font-bold text-navy-700 mb-1">Kebutuhan per Batch</label>
                               <input
                                 type="number"
                                 step="any"
                                 min="0.0001"
+                                placeholder="Jml / batch"
                                 value={item.quantity_required}
                                 onChange={(e) => handleUpdateBomItem(index, 'quantity_required', e.target.value)}
                                 className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-navy-700"
@@ -553,18 +557,27 @@ export default function ProductionCapacityPlanner() {
             {/* Target Simulation Input */}
             <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <h2 className="text-lg font-bold text-navy-700 mb-1">Simulasi Target Produksi</h2>
-              <p className="text-xs text-text-secondary mb-4">Masukkan target jumlah produk yang ingin dibuat.</p>
+              <p className="text-xs text-text-secondary mb-4">Masukkan target jumlah batch yang ingin diproduksi.</p>
 
               <div>
-                <label className="block text-xs font-bold text-navy-600 mb-1">Target Jumlah ({currentProduct?.unit || 'pcs'})</label>
-                <input
-                  type="number"
-                  step="any"
-                  min="1"
-                  value={targetQuantity}
-                  onChange={(e) => setTargetQuantity(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-base font-bold text-navy-700 focus:border-profit-500 focus:outline-none"
-                />
+                <label className="block text-xs font-bold text-navy-700 mb-1">Target Produksi (Batch)</label>
+                <div className="relative flex items-stretch rounded-xl border border-border bg-surface focus-within:border-profit-500 focus-within:ring-2 focus-within:ring-profit-500/20 overflow-hidden">
+                  <input
+                    type="number"
+                    step="any"
+                    min="1"
+                    value={targetQuantity}
+                    onChange={(e) => setTargetQuantity(e.target.value)}
+                    placeholder="Contoh: 100"
+                    className="w-full bg-transparent px-3.5 py-2.5 text-base font-bold text-navy-700 focus:outline-none"
+                  />
+                  <div className="flex items-center px-4 bg-surface-secondary border-l border-border text-xs font-bold text-text-secondary">
+                    Batch
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-text-muted">
+                  Setara dengan <span className="font-semibold text-navy-700">{calculation.targetProductOutput} {currentProduct?.unit || 'pcs'}</span> produk jadi (1 batch = {batchSize} {batchUnit}).
+                </p>
               </div>
             </div>
 
@@ -585,7 +598,7 @@ export default function ProductionCapacityPlanner() {
                       <p className="text-[10px] text-text-muted mt-0.5">Setara {calculation.maxBatches} batch</p>
                     </div>
                     <div className="rounded-xl border border-border bg-surface/50 p-4">
-                      <p className="text-xs text-text-secondary">Status Target ({targetQuantity})</p>
+                      <p className="text-xs text-text-secondary">Status Target ({calculation.targetBatches} Batch)</p>
                       <p className={`text-sm font-extrabold mt-1 px-2.5 py-1 rounded-lg inline-block ${calculation.targetFulfilled ? 'bg-profit-50 text-profit-600 border border-profit-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
                         {calculation.targetFulfilled ? 'TERPENUHI' : 'TIDAK TERPENUHI'}
                       </p>
@@ -610,6 +623,7 @@ export default function ProductionCapacityPlanner() {
                       {calculation.breakdown.map((item, idx) => {
                         const stock = inventoryMap[item.materialId] ?? 0
                         const reqPerBatch = item.requiredPerBatch
+                        const totalReq = calculation.targetBatches * reqPerBatch
                         const possible = reqPerBatch > 0 ? Math.floor(stock / reqPerBatch) : 0
                         const isBottleneck = calculation.bottleneck?.material_product_id === item.materialId
 
@@ -619,11 +633,17 @@ export default function ProductionCapacityPlanner() {
                               <span className="font-bold text-navy-700">{item.materialName}</span>
                               {isBottleneck && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-bold text-red-700">Bottleneck</span>}
                             </div>
-                            <div className="grid grid-cols-3 gap-2 text-[11px] text-text-secondary">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-text-secondary pt-1">
                               <div>Stok: <span className="font-bold text-navy-700">{stock} {item.unit}</span></div>
                               <div>Per Batch: <span className="font-bold text-navy-700">{reqPerBatch} {item.unit}</span></div>
+                              <div>Dibutuhkan: <span className="font-bold text-navy-700">{totalReq} {item.unit}</span></div>
                               <div>Max Batch: <span className="font-bold text-navy-700">{possible} batch</span></div>
                             </div>
+                            {calculation.targetBatches > 0 && (
+                              <p className="mt-1.5 text-[10px] text-text-muted">
+                                Rumus: {calculation.targetBatches} batch × {reqPerBatch} {item.unit} = {totalReq} {item.unit}
+                              </p>
+                            )}
                           </div>
                         )
                       })}
@@ -639,11 +659,15 @@ export default function ProductionCapacityPlanner() {
                           // Find supplier for this material if available
                           const matInv = inventory.find((i) => i.product_id === s.materialId)
                           const supplier = suppliers.find((su) => su.id === matInv?.supplier_id)
+                          const bomItem = bomItems.find((b) => b.material_product_id === s.materialId)
+                          const reqPerBatch = Number(bomItem?.quantity_required || 0)
 
                           return (
                             <div key={idx} className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800 space-y-1">
                               <p className="font-bold">{s.materialName}: Kekurangan <span className="underline">{s.shortage} {s.unit}</span></p>
-                              <p className="text-[11px]">Dibutuhkan: {s.required} {s.unit} | Stok Tersedia: {s.stock} {s.unit}</p>
+                              <p className="text-[11px]">
+                                Total Dibutuhkan: <span className="font-semibold text-navy-700">{s.required} {s.unit}</span> ({calculation.targetBatches} batch × {reqPerBatch} {s.unit}/batch) | Stok Tersedia: {s.stock} {s.unit}
+                              </p>
                               {supplier && (
                                 <p className="text-[11px] font-semibold text-navy-700 pt-1">
                                   Rekomendasi Supplier: {supplier.name} {supplier.phone ? `(${supplier.phone})` : ''}

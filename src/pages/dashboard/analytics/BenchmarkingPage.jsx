@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Link } from 'react-router'
 import { useAuth } from '../../../context/AuthContext'
+import BackButton from '../../../components/BackButton'
 import { fetchBenchmarkingData } from '../../../lib/analyticsService'
 
 const fmt = (n) =>
@@ -101,6 +101,7 @@ export default function BenchmarkingPage() {
   return (
     <div>
       {/* Header */}
+      <BackButton fallbackUrl="/dashboard/analytics" label="Kembali" />
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -108,15 +109,6 @@ export default function BenchmarkingPage() {
         className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
         <div>
-          <Link
-            to="/dashboard/analytics"
-            className="mb-1 inline-flex items-center gap-1 text-xs text-text-muted transition-colors hover:text-navy-600"
-          >
-            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-            Analytics
-          </Link>
           <h1 className="text-2xl font-extrabold text-navy-700">Benchmarking</h1>
           <p className="mt-1 text-sm text-text-secondary">
             Perbandingan performa bisnis dari waktu ke waktu

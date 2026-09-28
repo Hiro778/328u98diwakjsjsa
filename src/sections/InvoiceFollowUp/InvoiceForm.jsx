@@ -7,6 +7,7 @@ import {
   safeNumber,
   getToday,
 } from './invoiceFollowUpUtils'
+import DateInput from '../../components/DateInput'
 
 const EMPTY_FORM = {
   invoice_number: '',
@@ -165,8 +166,7 @@ export default function InvoiceForm({ show, onClose, onSave, editingInvoice, cus
                   <label className="text-xs font-medium text-text-muted">
                     Tanggal Invoice <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={form.issue_date}
                     onChange={(e) => set('issue_date', e.target.value)}
                     className={`mt-1 w-full rounded-lg border bg-surface px-3 py-2.5 text-sm text-navy-700 focus:outline-none focus:ring-1 focus:ring-warm-400/50 ${
@@ -179,8 +179,7 @@ export default function InvoiceForm({ show, onClose, onSave, editingInvoice, cus
                   <label className="text-xs font-medium text-text-muted">
                     Jatuh Tempo <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={form.due_date}
                     onChange={(e) => set('due_date', e.target.value)}
                     className={`mt-1 w-full rounded-lg border bg-surface px-3 py-2.5 text-sm text-navy-700 focus:outline-none focus:ring-1 focus:ring-warm-400/50 ${

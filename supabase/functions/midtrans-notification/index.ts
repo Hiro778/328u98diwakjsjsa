@@ -2,32 +2,16 @@
 // Handle Midtrans payment notification webhook.
 //
 // POST body: Midtrans notification payload
-// No Authorization header required (Midtrans sends directly).
-// Verifies signature using MIDTRANS_SERVER_KEY.
-// Updates order payment status and creates payment record.
+// Verifies signature using MIDTRANS_SERVER_KEY via SHA-512.
 // Idempotent — safe for duplicate notifications.
-//
 // Handles both QR Menu order payments and BisnisSehat Pro subscription payments.
 // Subscription payments are identified by midtrans_order_id starting with "SUB-".
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { crypto } from "https://deno.land/std@0.177.0/crypto/mod.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
-// ── Helpers ──
-
-function jsonResponse(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-    },
-  });
-}
 
 function corsResponse() {
   return new Response(null, {
@@ -40,34 +24,29 @@ function corsResponse() {
   });
 }
 
-// ── Midtrans Signature Verification ──
-
-function verifySignature(
+// ── Midtrans Signature Verification (Async SHA-512) ──
+async function verifySignature(
   orderId: string,
   statusCode: string,
   grossAmount: string,
   serverKey: string,
-  signatureKey: string,
-): boolean {
+  signatureKey: string
+): Promise<boolean> {
   const raw = orderId + statusCode + grossAmount + serverKey;
-  // SHA-512 hash
   const encoder = new TextEncoder();
   const data = encoder.encode(raw);
-  return crypto.subtle
-    .digest("SHA-512", data)
-    .then((hash) => {
-      const hashArray = Array.from(new Uint8Array(hash));
-      const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-      return hashHex === signatureKey;
-    });
+  const hashBuffer = await crypto.subtle.digest("SHA-512", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  return hashHex === signatureKey;
 }
 
-// ── Map Midtrans status to internal status ──
-
-function mapPaymentStatus(transactionStatus: string): string {
+// ── Status Mapping ──
+function mapPaymentStatus(transactionStatus: string, fraudStatus?: string): string {
   switch (transactionStatus) {
-    case "settlement":
     case "capture":
+      return fraudStatus === "challenge" ? "challenge" : "paid";
+    case "settlement":
       return "paid";
     case "pending":
       return "pending";
@@ -80,10 +59,11 @@ function mapPaymentStatus(transactionStatus: string): string {
   }
 }
 
-function mapOrderStatus(transactionStatus: string): string {
+function mapOrderStatus(transactionStatus: string, fraudStatus?: string): string {
   switch (transactionStatus) {
-    case "settlement":
     case "capture":
+      return fraudStatus === "challenge" ? "pending" : "selesai";
+    case "settlement":
       return "selesai";
     case "pending":
       return "pending";
@@ -96,7 +76,38 @@ function mapOrderStatus(transactionStatus: string): string {
   }
 }
 
-// ── Main Handler ──
+// ── 1 Calendar Month Calculator ──
+function calculateCalendarMonthPeriod(
+  existingExpiresAt: string | null,
+  settlementTime: Date
+): { period_start: Date; period_end: Date } {
+  let periodStart: Date;
+
+  if (existingExpiresAt) {
+    const existingExpires = new Date(existingExpiresAt);
+    if (!isNaN(existingExpires.getTime()) && existingExpires > settlementTime) {
+      // User renewed before expiry: retain remaining time, start new month from current expiry
+      periodStart = existingExpires;
+    } else {
+      // New or expired: starts from settlement time
+      periodStart = settlementTime;
+    }
+  } else {
+    periodStart = settlementTime;
+  }
+
+  // Add 1 calendar month using UTC methods to prevent server timezone jitter
+  const periodEnd = new Date(periodStart.getTime());
+  const originalDay = periodEnd.getUTCDate();
+  periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
+
+  // Boundary check in UTC: e.g. Jan 31 + 1 month -> Feb 28/29
+  if (periodEnd.getUTCDate() !== originalDay) {
+    periodEnd.setUTCDate(0);
+  }
+
+  return { period_start: periodStart, period_end: periodEnd };
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return corsResponse();
@@ -105,24 +116,9 @@ Deno.serve(async (req) => {
   }
 
   const startTime = Date.now();
-  console.log("[midtrans-notification] Received");
 
   try {
     const notification = await req.json();
-    console.log("[midtrans-notification] Body:", JSON.stringify({
-      order_id: notification.order_id,
-      transaction_status: notification.transaction_status,
-      status_code: notification.status_code,
-      gross_amount: notification.gross_amount,
-    }));
-
-    const serverKey = Deno.env.get("MIDTRANS_SERVER_KEY") || "";
-    if (!serverKey) {
-      console.error("[midtrans-notification] MIDTRANS_SERVER_KEY not set");
-      return new Response("OK", { status: 200 }); // Return OK to avoid retries
-    }
-
-    // 1. Verify signature
     const {
       order_id,
       transaction_id,
@@ -131,38 +127,43 @@ Deno.serve(async (req) => {
       gross_amount,
       signature_key,
       payment_type,
+      fraud_status,
       settlement_time,
     } = notification;
 
+    console.log(`[midtrans-notification] Received for order: ${order_id}, status: ${transaction_status}`);
+
+    const serverKey = (Deno.env.get("MIDTRANS_SERVER_KEY") || "").trim();
+    if (!serverKey) {
+      console.error("[midtrans-notification] MIDTRANS_SERVER_KEY not set");
+      return new Response("OK", { status: 200 }); // Return OK so Midtrans doesn't bombard retries
+    }
+
     if (!order_id || !signature_key) {
-      console.warn("[midtrans-notification] Missing required fields");
+      console.warn("[midtrans-notification] Missing order_id or signature_key");
       return new Response("OK", { status: 200 });
     }
 
+    // 1. Verify Midtrans Signature
     const signatureValid = await verifySignature(
       order_id,
       status_code?.toString() || "",
       gross_amount?.toString() || "",
       serverKey,
-      signature_key,
+      signature_key
     );
 
     if (!signatureValid) {
-      console.error("[midtrans-notification] Invalid signature for order:", order_id);
+      console.error(`[midtrans-notification] Invalid signature for order: ${order_id}`);
       return new Response("Invalid signature", { status: 403 });
     }
 
-    // 2. Find order by payment_ref (midtrans order_id)
-    const { data: orders, error: findError } = await supabaseAdmin
-      .from("orders")
-      .select("id, business_id, total, payment_status, order_status, payment_ref")
-      .eq("payment_ref", order_id)
-      .limit(1);
+    const newPaymentStatus = mapPaymentStatus(transaction_status, fraud_status);
 
-    if (findError || !orders || orders.length === 0) {
-      // Order not found — try subscription payment lookup
-      console.log("[midtrans-notification] Order not found, checking subscription payments:", order_id);
-
+    // =========================================================================
+    // DOMAIN A: BISNISSEHAT PRO SUBSCRIPTION PAYMENT (Prefix: "SUB-")
+    // =========================================================================
+    if (order_id.startsWith("SUB-")) {
       const { data: subPayments, error: subFindError } = await supabaseAdmin
         .from("subscription_payments")
         .select("id, subscription_id, profile_id, midtrans_order_id, gross_amount, payment_status, period_start, period_end")
@@ -170,67 +171,203 @@ Deno.serve(async (req) => {
         .limit(1);
 
       if (subFindError || !subPayments || subPayments.length === 0) {
-        console.warn("[midtrans-notification] Neither order nor subscription payment found for:", order_id);
-        return new Response("OK", { status: 200 }); // Return OK to avoid retries
+        console.warn(`[midtrans-notification] Subscription payment not found for order: ${order_id}`);
+        return new Response("OK", { status: 200 });
       }
 
       const subPayment = subPayments[0];
 
-      // Idempotent: skip if already paid
-      const newSubPaymentStatus = mapPaymentStatus(transaction_status);
-      if (subPayment.payment_status === "paid" && newSubPaymentStatus === "paid") {
-        console.log("[midtrans-notification] Subscription payment already processed:", order_id);
+      // IDEMPOTENCY CHECK:
+      // If already marked paid and incoming is paid, do not extend again!
+      if (subPayment.payment_status === "paid" && newPaymentStatus === "paid") {
+        console.log(`[midtrans-notification] Subscription payment already processed: ${order_id}. Skipping.`);
         return new Response("OK", { status: 200 });
       }
 
-      // Update subscription_payments record
-      await supabaseAdmin
-        .from("subscription_payments")
-        .update({
-          transaction_status: transaction_status,
-          payment_status: newSubPaymentStatus,
-          payment_method: payment_type || "online",
-          paid_at: newSubPaymentStatus === "paid" ? (settlement_time || new Date().toISOString()) : null,
-          raw_response: notification,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", subPayment.id);
+      const settlementDate = settlement_time ? new Date(settlement_time) : new Date();
 
-      // If payment successful, activate subscription
-      if (newSubPaymentStatus === "paid") {
-        console.log("[midtrans-notification] Activating subscription:", subPayment.subscription_id);
+      if (newPaymentStatus === "paid") {
+        // Amount verification
+        if (Number(gross_amount) < Number(subPayment.gross_amount)) {
+          console.error(`[midtrans-notification] Paid gross_amount ${gross_amount} less than expected ${subPayment.gross_amount}`);
+          return new Response("Invalid gross_amount", { status: 400 });
+        }
+
+        // Fetch current subscription status to check existing expires_at
+        const { data: currentSub } = await supabaseAdmin
+          .from("subscriptions")
+          .select("id, expires_at, status")
+          .eq("id", subPayment.subscription_id)
+          .single();
+
+        const { period_start, period_end } = calculateCalendarMonthPeriod(
+          currentSub?.expires_at || null,
+          settlementDate
+        );
+
+        // 1. Update subscription_payments record
+        await supabaseAdmin
+          .from("subscription_payments")
+          .update({
+            transaction_status: transaction_status,
+            payment_status: "paid",
+            payment_method: payment_type || "online",
+            paid_at: settlementDate.toISOString(),
+            period_start: period_start.toISOString(),
+            period_end: period_end.toISOString(),
+            raw_response: notification,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", subPayment.id);
+
+        // 2. Activate subscription
         await supabaseAdmin
           .from("subscriptions")
           .update({
             status: "active",
             plan: "pro",
-            started_at: subPayment.period_start,
-            expires_at: subPayment.period_end,
+            started_at: period_start.toISOString(),
+            expires_at: period_end.toISOString(),
             payment_provider: "midtrans",
             provider_transaction_id: order_id,
             updated_at: new Date().toISOString(),
           })
           .eq("id", subPayment.subscription_id);
+
+        console.log(`[midtrans-notification] Pro activated for sub: ${subPayment.subscription_id}, period: ${period_start.toISOString()} -> ${period_end.toISOString()}`);
+
+        // 3. Atomically grant Pro 200 monthly token allowance for this period (ai.md specification)
+        const { data: businessRec } = await supabaseAdmin
+          .from("businesses")
+          .select("id")
+          .eq("owner_id", subPayment.profile_id)
+          .maybeSingle();
+
+        if (businessRec?.id) {
+          const { data: grantResult, error: grantErr } = await supabaseAdmin.rpc("grant_pro_monthly_allowance_atomic", {
+            p_business_id: businessRec.id,
+            p_subscription_id: subPayment.subscription_id,
+            p_period_start: period_start.toISOString(),
+          });
+
+          if (grantErr) {
+            console.error(`[midtrans-notification] Error granting monthly Pro allowance: ${grantErr.message}`);
+          } else {
+            console.log(`[midtrans-notification] Monthly Pro allowance result:`, grantResult);
+          }
+        }
+      } else {
+        // Update to pending or failed without modifying subscription entitlement
+        await supabaseAdmin
+          .from("subscription_payments")
+          .update({
+            transaction_status: transaction_status,
+            payment_status: newPaymentStatus,
+            payment_method: payment_type || "online",
+            raw_response: notification,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", subPayment.id);
       }
 
       const elapsed = Date.now() - startTime;
-      console.log(`[midtrans-notification] Subscription payment done in ${elapsed}ms — sub_payment=${subPayment.id} status=${newSubPaymentStatus}`);
+      console.log(`[midtrans-notification] Subscription payment processed in ${elapsed}ms`);
+      return new Response("OK", { status: 200 });
+    }
+
+    // =========================================================================
+    // DOMAIN C: CREATIVE CREDITS TOP UP PAYMENT (Prefix: "CREDIT-")
+    // =========================================================================
+    if (order_id.startsWith("CREDIT-")) {
+      const { data: purchases, error: purchaseErr } = await supabaseAdmin
+        .from("credit_purchases")
+        .select("id, business_id, profile_id, order_id, credits, amount_idr, status")
+        .eq("order_id", order_id)
+        .limit(1);
+
+      if (purchaseErr || !purchases || purchases.length === 0) {
+        console.warn(`[midtrans-notification] Credit purchase not found for order: ${order_id}`);
+        return new Response("OK", { status: 200 });
+      }
+
+      const purchase = purchases[0];
+
+      // IDEMPOTENCY CHECK:
+      // If already marked paid and incoming is paid, skip duplicate credit grant!
+      if (purchase.status === "paid" && newPaymentStatus === "paid") {
+        console.log(`[midtrans-notification] Credit purchase already processed: ${order_id}. Skipping duplicate.`);
+        return new Response("OK", { status: 200 });
+      }
+
+      if (newPaymentStatus === "paid") {
+        // Atomic status transition: only grant credits if status is updated from pending -> paid
+        const { data: updatedPurchase, error: updateErr } = await supabaseAdmin
+          .from("credit_purchases")
+          .update({
+            status: "paid",
+            midtrans_transaction_id: transaction_id || "",
+            raw_response: notification,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", purchase.id)
+          .eq("status", "pending")
+          .select("id, business_id, credits")
+          .maybeSingle();
+
+        if (updatedPurchase) {
+          // Atomically grant credits to business and record to credit_ledger
+          await supabaseAdmin.rpc("grant_creative_credits_atomic", {
+            p_business_id: updatedPurchase.business_id,
+            p_credits: updatedPurchase.credits,
+            p_order_id: order_id,
+          });
+
+          console.log(`[midtrans-notification] Granted ${updatedPurchase.credits} credits to business ${updatedPurchase.business_id} for order ${order_id}`);
+        } else {
+          console.log(`[midtrans-notification] Status was not pending for order ${order_id}, skipping credit grant.`);
+        }
+      } else {
+        await supabaseAdmin
+          .from("credit_purchases")
+          .update({
+            status: newPaymentStatus === "failed" ? "failed" : "pending",
+            midtrans_transaction_id: transaction_id || "",
+            raw_response: notification,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", purchase.id);
+      }
+
+      const elapsed = Date.now() - startTime;
+      console.log(`[midtrans-notification] Credit purchase processed in ${elapsed}ms`);
+      return new Response("OK", { status: 200 });
+    }
+
+    // =========================================================================
+    // DOMAIN B: QR MENU / POS ORDER PAYMENT (Non-Subscription)
+    // =========================================================================
+    const { data: orders, error: findError } = await supabaseAdmin
+      .from("orders")
+      .select("id, business_id, total, payment_status, order_status, payment_ref")
+      .eq("payment_ref", order_id)
+      .limit(1);
+
+    if (findError || !orders || orders.length === 0) {
+      console.warn(`[midtrans-notification] Order not found for order_id: ${order_id}`);
       return new Response("OK", { status: 200 });
     }
 
     const order = orders[0];
+    const newOrderStatus = mapOrderStatus(transaction_status, fraud_status);
 
-    // 3. Idempotent: check if already processed
-    const newPaymentStatus = mapPaymentStatus(transaction_status);
-    const newOrderStatus = mapOrderStatus(transaction_status);
-
+    // Idempotent: check if order already paid
     if (order.payment_status === "paid" && newPaymentStatus === "paid") {
-      console.log("[midtrans-notification] Already processed, skipping");
+      console.log(`[midtrans-notification] Order ${order.id} already paid, skipping.`);
       return new Response("OK", { status: 200 });
     }
 
-    // 4. Update order status
-    const { error: updateError } = await supabaseAdmin
+    // Update order status
+    await supabaseAdmin
       .from("orders")
       .update({
         payment_status: newPaymentStatus,
@@ -239,12 +376,7 @@ Deno.serve(async (req) => {
       })
       .eq("id", order.id);
 
-    if (updateError) {
-      console.error("[midtrans-notification] Order update error:", updateError);
-      return new Response("OK", { status: 200 });
-    }
-
-    // 5. Create or update payment record (idempotent by transaction_id)
+    // Upsert payments record
     const { data: existingPayment } = await supabaseAdmin
       .from("payments")
       .select("id")
@@ -252,7 +384,6 @@ Deno.serve(async (req) => {
       .limit(1);
 
     if (existingPayment && existingPayment.length > 0) {
-      // Update existing payment record
       await supabaseAdmin
         .from("payments")
         .update({
@@ -264,7 +395,6 @@ Deno.serve(async (req) => {
         })
         .eq("id", existingPayment[0].id);
     } else {
-      // Create new payment record
       await supabaseAdmin.from("payments").insert({
         order_id: order.id,
         business_id: order.business_id,
@@ -280,11 +410,11 @@ Deno.serve(async (req) => {
     }
 
     const elapsed = Date.now() - startTime;
-    console.log(`[midtrans-notification] Done in ${elapsed}ms — order=${order.id} status=${newPaymentStatus}`);
-
+    console.log(`[midtrans-notification] Order payment done in ${elapsed}ms — order=${order.id}`);
     return new Response("OK", { status: 200 });
-  } catch (err) {
-    console.error("[midtrans-notification] Error:", err);
-    return new Response("OK", { status: 200 }); // Always return OK to avoid Midtrans retries
+
+  } catch (err: any) {
+    console.error("[midtrans-notification] Uncaught error:", err.message);
+    return new Response("OK", { status: 200 }); // Always return 200 to prevent retries on unhandled errors
   }
 });

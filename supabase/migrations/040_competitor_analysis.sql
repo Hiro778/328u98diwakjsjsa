@@ -171,6 +171,22 @@ do $$ begin
 exception when duplicate_object then null;
 end $$;
 
+do $$ begin
+  create policy "cah_insert" on public.competitor_analysis_history
+    for insert to authenticated
+    with check (
+      analysis_id in (
+        select id from public.competitor_analyses
+        where business_id in (
+          select id from public.businesses
+          where owner_id = (select auth.uid())
+        )
+      )
+    );
+exception when duplicate_object then null;
+end $$;
+
+
 -- ============================================================
 -- 4. RESEARCH TASKS
 -- ============================================================

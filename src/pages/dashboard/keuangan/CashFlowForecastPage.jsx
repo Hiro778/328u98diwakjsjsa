@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../context/AuthContext'
 import { formatCurrency } from '../../../lib/orderNumber'
 import { calculateCashFlowForecast } from '../../../sections/CashFlowForecast/calculateCashFlowForecast'
 import CashFlowInputForm from '../../../sections/CashFlowForecast/CashFlowInputForm'
 import CashFlowResults from '../../../sections/CashFlowForecast/CashFlowResults'
+import BackButton from '../../../components/BackButton'
+import { saveCashFlowForecast, getCashFlowForecastsByBusiness, deleteCashFlowForecast } from '../../../lib/cashFlowService'
 
 const EMPTY_FORM = {
   openingCash: '',
@@ -35,13 +36,9 @@ export default function CashFlowForecastPage() {
   }, [business?.id])
 
   async function loadHistory() {
-    const { data } = await supabase
-      .from('cash_flow_forecasts')
-      .select('*')
-      .eq('business_id', business.id)
-      .order('created_at', { ascending: false })
-      .limit(20)
-    setHistory(data || [])
+    setLoadingHistory(true)
+    const data = await getCashFlowForecastsByBusiness(business.id)
+    setHistory(data)
     setLoadingHistory(false)
   }
 
@@ -147,30 +144,14 @@ export default function CashFlowForecastPage() {
       periods: result.periods,
     }
 
-    const { error } = await supabase.from('cash_flow_forecasts').insert(payload)
-
-    if (error) {
-      console.error('Cash flow save error:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-      })
-
-      if (error.code === '42P01' || error.message?.includes('does not exist')) {
-        setSupabaseError('Tabel cash_flow_forecasts belum tersedia di database. Jalankan migration 011_cash_flow_forecast.sql di Supabase Dashboard → SQL Editor.')
-      } else if (error.code === '42501') {
-        setSupabaseError('Anda tidak memiliki akses untuk menyimpan data ini.')
-      } else {
-        setSupabaseError('Gagal menyimpan forecast. Silakan coba lagi.')
-      }
-
+    try {
+      await saveCashFlowForecast(payload)
       setSaving(false)
-      return
+      loadHistory()
+    } catch (err) {
+      setSupabaseError(err.message || 'Gagal menyimpan forecast. Silakan coba lagi.')
+      setSaving(false)
     }
-
-    setSaving(false)
-    loadHistory()
   }
 
   // ── Reuse history item ──
@@ -202,7 +183,7 @@ export default function CashFlowForecastPage() {
   // ── Delete history item ──
   async function deleteHistory(id) {
     if (!confirm('Hapus forecast arus kas ini?')) return
-    await supabase.from('cash_flow_forecasts').delete().eq('id', id).eq('business_id', business.id)
+    await deleteCashFlowForecast(id, business.id)
     loadHistory()
   }
 
@@ -219,6 +200,7 @@ export default function CashFlowForecastPage() {
 
   return (
     <div>
+      <BackButton fallbackUrl="/dashboard/keuangan" label="Kembali" />
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

@@ -6,7 +6,14 @@ import MarketplaceDashboard from './MarketplaceDashboard'
 import ProductMapping from './ProductMapping'
 import OrderSync from './OrderSync'
 import SyncLogs from './SyncLogs'
+import BackButton from '../../components/BackButton'
 import { getMarketplaceStatus } from '../../lib/marketplaceService'
+import {
+  getAllMarketplaceProviders,
+  getAvailableMarketplacesCount,
+  getConnectedMarketplacesCount,
+  resolveConnectionForProvider,
+} from '../../lib/marketplaceProviders'
 
 const TABS = [
   { key: 'dashboard', label: 'Dashboard' },
@@ -50,8 +57,9 @@ export default function MarketplacePage() {
 
   const connections = status?.connections || []
   const stats = status?.stats || {}
-  const connectedCount = stats.connected_count || 0
-  const totalMarketplaces = stats.total_marketplaces || 3
+  const providers = getAllMarketplaceProviders()
+  const availableCount = getAvailableMarketplacesCount() // Strictly READY providers per apps.md
+  const connectedCount = getConnectedMarketplacesCount(connections)
 
   // Build connection map for cards
   const connectionMap = {}
@@ -61,6 +69,7 @@ export default function MarketplacePage() {
 
   return (
     <div>
+      <BackButton fallbackUrl="/dashboard/operasional" label="Kembali" />
       {/* Page Header */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
@@ -72,7 +81,7 @@ export default function MarketplacePage() {
         </p>
         <h1 className="text-2xl font-extrabold text-navy-700">Marketplace Integration</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Hubungkan dan kelola toko online Anda dari satu tempat.
+          Hubungkan dan kelola toko online Anda dari satu tempat melalui API resmi marketplace.
         </p>
       </motion.div>
 
@@ -88,34 +97,34 @@ export default function MarketplacePage() {
             <h2 className="text-lg font-bold text-navy-700">Status Koneksi</h2>
             <p className="text-sm text-text-secondary">
               {connectedCount === 0
-                ? 'Belum ada marketplace yang terhubung'
-                : `${connectedCount} dari ${totalMarketplaces} marketplace terhubung`}
+                ? `Belum ada marketplace terhubung (${availableCount} konektor siap pakai)`
+                : `${connectedCount} dari ${availableCount} marketplace siap pakai terhubung`}
             </p>
           </div>
           <div className="text-right">
             <span className="text-3xl font-extrabold text-navy-700">{connectedCount}</span>
-            <span className="text-sm text-text-muted">/{totalMarketplaces}</span>
+            <span className="text-sm text-text-muted">/{availableCount} Siap</span>
           </div>
         </div>
 
         {/* Progress Bar */}
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-cream">
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-800">
           <motion.div
             initial={{ width: 0 }}
-            animate={{ width: `${totalMarketplaces > 0 ? (connectedCount / totalMarketplaces) * 100 : 0}%` }}
+            animate={{ width: `${availableCount > 0 ? (connectedCount / availableCount) * 100 : 0}%` }}
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-            className="h-full rounded-full bg-profit-500"
+            className="h-full rounded-full bg-emerald-500"
           />
         </div>
       </motion.div>
 
-      {/* Marketplace Cards */}
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {['shopee', 'tokopedia', 'tiktokshop'].map((key) => (
+      {/* Marketplace Cards Grid */}
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
+        {providers.map((provider) => (
           <ConnectionCard
-            key={key}
-            marketplaceKey={key}
-            connection={connectionMap[key]}
+            key={provider.id}
+            marketplaceKey={provider.id}
+            connection={resolveConnectionForProvider(provider.id, connectionMap)}
             onConnect={handleConnect}
           />
         ))}

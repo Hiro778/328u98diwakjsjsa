@@ -4,10 +4,9 @@ import { useAuth } from '../context/AuthContext'
 /**
  * Shared CTA logic for "Mulai sekarang" / pricing buttons.
  *
- * Flow:
- * - Not authenticated  → /auth?returnTo=/dashboard (login then redirect to dashboard)
- * - Authenticated       → /dashboard (direct, no checkout)
- * - Active subscription  → /dashboard (no duplicate subscription)
+ * Flow per PRD:
+ * - Not authenticated  → /auth?returnTo=/pricing (login then redirect back to pricing)
+ * - Authenticated      → /pricing (direct to pricing to subscribe)
  */
 export default function usePricingCta() {
   const navigate = useNavigate()
@@ -17,9 +16,9 @@ export default function usePricingCta() {
     if (loading) return
 
     if (!isAuthenticated) {
-      navigate('/auth?returnTo=/dashboard')
+      navigate('/auth?returnTo=/pricing')
     } else {
-      navigate('/dashboard')
+      navigate('/pricing')
     }
   }
 

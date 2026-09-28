@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
+import { createNotification } from '../../../services/notificationService'
 import { useAuth } from '../../../context/AuthContext'
 import { calculateSummaryFromSupabase, formatCurrency } from '../../../sections/CustomerCRM/customerUtils'
 import CustomerForm from '../../../sections/CustomerCRM/CustomerForm'
 import CustomerList from '../../../sections/CustomerCRM/CustomerList'
 import CustomerDetail from '../../../sections/CustomerCRM/CustomerDetail'
+import BackButton from '../../../components/BackButton'
 
 export default function CustomerCRM() {
   const { business } = useAuth()
@@ -158,6 +160,21 @@ export default function CustomerCRM() {
 
       if (insertError) throw insertError
       showToast('Customer berhasil ditambahkan')
+
+      // Create persistent notification
+      try {
+        await createNotification({
+          business_id: business.id,
+          title: 'Customer Baru Terdaftar',
+          message: `Customer "${formData.name}" berhasil ditambahkan.`,
+          category: 'customer',
+          priority: 'normal',
+          action_url: '/dashboard/penjualan/crm',
+          dedup_key: `customer_created_${Date.now()}`,
+        })
+      } catch (notifErr) {
+        console.warn('[Customer] Notification creation failed:', notifErr)
+      }
     }
 
     setShowForm(false)
@@ -217,6 +234,11 @@ export default function CustomerCRM() {
       )}
 
       {/* Header */}
+      <BackButton
+        fallbackUrl="/dashboard/penjualan"
+        label={detailCustomer ? 'Kembali ke Daftar Customer' : 'Kembali'}
+        onClick={detailCustomer ? () => setDetailCustomer(null) : undefined}
+      />
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-[#10B981]">

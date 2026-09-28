@@ -7,7 +7,11 @@ if [ -z "$WHATSAPP_ENCRYPTION_KEY" ]; then
 fi
 
 export SUPABASE_URL="${SUPABASE_URL:-https://ttdevvrzmdquvaewxzhh.supabase.co}"
-export SUPABASE_SERVICE_KEY="${SUPABASE_SERVICE_KEY:-sb_secret_oxpPUSjDkmY_qHIzqGg7sw_yvMgR_-O}"
+export SUPABASE_SERVICE_KEY="${SUPABASE_SERVICE_ROLE_KEY:-${SUPABASE_SERVICE_KEY:-}}"
+if [ -z "$SUPABASE_SERVICE_KEY" ]; then
+  echo "ERROR: SUPABASE_SERVICE_KEY or SUPABASE_SERVICE_ROLE_KEY environment variable is required"
+  exit 1
+fi
 
 echo "[start.sh] Starting WhatsApp Baileys Connector..."
 echo "[start.sh] SUPABASE_URL=$SUPABASE_URL"

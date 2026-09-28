@@ -48,7 +48,8 @@ DO $$ BEGIN
     ON subscription_payments FOR INSERT TO authenticated
     WITH CHECK ((select auth.uid()) = profile_id);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-`;
+
+create table if not exists public.competitor_analyses (
   id uuid primary key default uuid_generate_v4(),
   business_id uuid not null references public.businesses(id) on delete cascade,
   title text not null default '',

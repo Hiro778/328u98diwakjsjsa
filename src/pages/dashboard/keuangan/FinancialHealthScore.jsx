@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../context/AuthContext'
+import BackButton from '../../../components/BackButton'
 import { getPeriodRange } from '../../../sections/FinancialReports/calculateFinancialReports'
 import { aggregateDailyTotals } from '../../../sections/AnomalyDetection/calculateTimeSeriesAnomalies'
 import {
@@ -252,6 +253,7 @@ export default function FinancialHealthScore() {
 
   return (
     <div>
+      <BackButton fallbackUrl="/dashboard/keuangan" label="Kembali" />
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

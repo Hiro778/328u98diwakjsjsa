@@ -8,6 +8,7 @@ import {
   PRIORITY_LABELS,
   getToday,
 } from './whatsappSalesUtils'
+import DateInput from '../../components/DateInput'
 
 const EMPTY_FORM = {
   name: '',
@@ -247,8 +248,7 @@ export default function WhatsAppLeadForm({ show, onClose, onSave, editingLead, e
               {/* Lead Date */}
               <div>
                 <label className="text-xs font-medium text-text-muted">Tanggal Lead</label>
-                <input
-                  type="date"
+                <DateInput
                   value={form.lead_date}
                   onChange={(e) => set('lead_date', e.target.value)}
                   className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-navy-700 focus:border-warm-400 focus:outline-none"

@@ -13,6 +13,7 @@
 // 6. Store in cache with TTL
 
 import { verifyAuth } from "../_shared/auth.ts";
+import { isProUser } from "../_shared/entitlement.ts";
 import { supabaseAdmin } from "../_shared/supabase-admin.ts";
 import { jsonResponse, errorResponse, corsResponse } from "../_shared/response.ts";
 
@@ -34,6 +35,12 @@ Deno.serve(async (req) => {
 
   try {
     const auth = await verifyAuth(req);
+
+    // Enforce Pro entitlement server-side
+    const hasPro = await isProUser(auth.userId);
+    if (!hasPro) {
+      return errorResponse("Fitur ini membutuhkan BisnisSehat Pro.", 403);
+    }
 
     const { analysis_id, competitor_id, competitor_name, website, location, industry } =
       await req.json();
@@ -294,6 +301,9 @@ Deno.serve(async (req) => {
 
   } catch (error: any) {
     console.error("[competitor-research] Error:", error);
+    if (error.message?.includes("Authorization") || error.message?.includes("token")) {
+      return errorResponse("Unauthorized", 401);
+    }
     return errorResponse(error.message || "Internal server error", 500);
   }
 });
@@ -351,13 +361,12 @@ function extractCompetitorInfo(
       }
     }
 
-    // Extract pricing clues
-    if (content.includes("price") || content.includes(" Rp ") || content.includes("$")) {
+    // Pricing extraction - only use exact pricing if explicit, never fabricate or multiply ranges
+    if (content.includes(" Rp ") || content.includes("Rp.") || content.includes("IDR")) {
       pricing.clues_found = true;
-      const priceMatches = content.match(/\d{5,}/g);
-      if (priceMatches) {
-        pricing.price_range = `$${priceMatches[0]} - $${(parseInt(priceMatches[0]) * 3).toLocaleString()}`;
-      }
+      pricing.price_range = "Informasi harga spesifik memerlukan penelusuran katalog langsung.";
+    } else {
+      pricing.price_range = "Tidak tersedia dari sumber yang terhubung.";
     }
 
     // Extract positioning keywords

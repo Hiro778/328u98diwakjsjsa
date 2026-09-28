@@ -32,6 +32,7 @@ export default function ProductForm({ product, suppliers, onSave, onCancel }) {
 
   useEffect(() => {
     if (product) {
+      const inv = Array.isArray(product.inventory) ? product.inventory[0] : product.inventory
       setForm({
         name: product.name || '',
         sku: product.sku || '',
@@ -40,11 +41,11 @@ export default function ProductForm({ product, suppliers, onSave, onCancel }) {
         unit: product.unit || 'pcs',
         unit_price: product.unit_price != null ? String(product.unit_price) : '',
         cost_price: product.cost_price != null ? String(product.cost_price) : '',
-        current_stock: product.inventory?.quantity != null ? String(product.inventory.quantity) : '0',
-        minimum_stock: product.inventory?.min_stock != null ? String(product.inventory.min_stock) : '0',
-        maximum_stock: product.inventory?.maximum_stock != null ? String(product.inventory.maximum_stock) : '0',
-        supplier_id: product.inventory?.supplier_id || '',
-        location: product.inventory?.location || '',
+        current_stock: inv?.quantity != null ? String(inv.quantity) : (product.current_stock != null ? String(product.current_stock) : '0'),
+        minimum_stock: inv?.min_stock != null ? String(inv.min_stock) : (product.minimum_stock != null ? String(product.minimum_stock) : '0'),
+        maximum_stock: inv?.maximum_stock != null ? String(inv.maximum_stock) : (product.maximum_stock != null ? String(product.maximum_stock) : '0'),
+        supplier_id: inv?.supplier_id || product.supplier_id || '',
+        location: inv?.location || product.location || '',
         notes: product.notes || '',
         is_active: product.is_active !== false,
       })
@@ -151,11 +152,12 @@ export default function ProductForm({ product, suppliers, onSave, onCancel }) {
     }
 
     // Upsert inventory
-    // Base columns guaranteed to exist in all schema versions
     const inventoryPayload = {
       product_id: productId,
       quantity: sanitized.current_stock,
       min_stock: sanitized.minimum_stock,
+      maximum_stock: sanitized.maximum_stock,
+      supplier_id: sanitized.supplier_id || null,
       location: sanitized.location || '',
       updated_at: new Date().toISOString(),
     }
@@ -180,33 +182,54 @@ export default function ProductForm({ product, suppliers, onSave, onCancel }) {
     let inventoryError = null
 
     if (existingInv) {
-      // Update existing inventory row
-      const { error } = await supabase
+      // Update existing inventory row - maintain maximum_stock and supplier_id
+      const { error: updateError } = await supabase
         .from('inventory')
         .update(inventoryPayload)
         .eq('id', existingInv.id)
 
-      inventoryError = error
-    } else {
-      // Insert new inventory row — try with extended columns first
-      const fullPayload = {
-        ...inventoryPayload,
-        maximum_stock: sanitized.maximum_stock,
-        supplier_id: sanitized.supplier_id || null,
+      if (updateError) {
+        // If column doesn't exist, retry with base columns only
+        const msg = (updateError.message || '').toLowerCase()
+        if (msg.includes('column') && msg.includes('does not exist')) {
+          console.warn('[Inventory] Extended columns missing, retrying update with base schema:', updateError.message)
+          const basePayload = {
+            product_id: productId,
+            quantity: sanitized.current_stock,
+            min_stock: sanitized.minimum_stock,
+            location: sanitized.location || '',
+            updated_at: new Date().toISOString(),
+          }
+          const { error: retryError } = await supabase
+            .from('inventory')
+            .update(basePayload)
+            .eq('id', existingInv.id)
+          inventoryError = retryError
+        } else {
+          inventoryError = updateError
+        }
       }
-
+    } else {
+      // Insert new inventory row — try with full payload first
       const { error: insertError } = await supabase
         .from('inventory')
-        .insert(fullPayload)
+        .insert(inventoryPayload)
 
       if (insertError) {
         // If column doesn't exist, retry with base columns only
         const msg = (insertError.message || '').toLowerCase()
         if (msg.includes('column') && msg.includes('does not exist')) {
           console.warn('[Inventory] Extended columns missing, retrying with base schema:', insertError.message)
+          const basePayload = {
+            product_id: productId,
+            quantity: sanitized.current_stock,
+            min_stock: sanitized.minimum_stock,
+            location: sanitized.location || '',
+            updated_at: new Date().toISOString(),
+          }
           const { error: retryError } = await supabase
             .from('inventory')
-            .insert(inventoryPayload)
+            .insert(basePayload)
           inventoryError = retryError
         } else {
           inventoryError = insertError

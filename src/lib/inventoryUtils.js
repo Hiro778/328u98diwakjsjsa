@@ -527,6 +527,9 @@ export function getMovementLabel(type) {
  */
 export function getEffectiveLocation(product) {
   if (!product) return ''
+  if (Array.isArray(product.inventory)) {
+    return (product.inventory[0]?.location || '').trim()
+  }
   if (product.inventory !== undefined && product.inventory !== null) {
     return (product.inventory.location || '').trim()
   }

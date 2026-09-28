@@ -3,6 +3,8 @@ import { motion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../context/AuthContext'
 import { formatCurrency } from '../../../lib/orderNumber'
+import BackButton from '../../../components/BackButton'
+import DateInput from '../../../components/DateInput'
 import {
   getPeriodRange,
   formatDateID,
@@ -259,6 +261,7 @@ export default function FinancialReports() {
 
   return (
     <div>
+      <BackButton fallbackUrl="/dashboard/keuangan" label="Kembali" />
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -298,8 +301,7 @@ export default function FinancialReports() {
           <>
             <div>
               <label className="text-xs font-medium text-text-muted">Dari</label>
-              <input
-                type="date"
+              <DateInput
                 value={customStart}
                 onChange={(e) => setCustomStart(e.target.value)}
                 className={`mt-1 ${dateCls}`}
@@ -307,8 +309,7 @@ export default function FinancialReports() {
             </div>
             <div>
               <label className="text-xs font-medium text-text-muted">Sampai</label>
-              <input
-                type="date"
+              <DateInput
                 value={customEnd}
                 onChange={(e) => setCustomEnd(e.target.value)}
                 className={`mt-1 ${dateCls}`}

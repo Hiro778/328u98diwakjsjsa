@@ -5,6 +5,8 @@ import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../context/AuthContext'
 import useToast from '../../../hooks/useToast'
 import Toast from '../../../components/Toast'
+import BackButton from '../../../components/BackButton'
+import BusinessQrisSettings from '../../../components/pos/BusinessQrisSettings'
 
 export default function QRMenuPage() {
   const { business, refreshBusiness } = useAuth()
@@ -21,22 +23,20 @@ export default function QRMenuPage() {
   }, [business?.id])
 
   async function loadData() {
-    const { data: prods } = await supabase
-      .from('products')
-      .select('category')
-      .eq('business_id', business.id)
+    const [{ data: prods }, { data: cats }, { data: tbls }] = await Promise.all([
+      supabase.from('products').select('category').eq('business_id', business.id),
+      supabase.from('menu_categories').select('name').eq('business_id', business.id),
+      supabase.from('tables').select('*').eq('business_id', business.id).eq('is_active', true).order('sort_order')
+    ])
 
-    const { data: tbls } = await supabase
-      .from('tables')
-      .select('*')
-      .eq('business_id', business.id)
-      .eq('is_active', true)
-      .order('sort_order')
+    const allCatNames = new Set([
+      ...(cats || []).map(c => c.name?.trim()).filter(Boolean),
+      ...(prods || []).map(p => p.category?.trim()).filter(Boolean)
+    ])
 
-    const catCount = [...new Set((prods || []).map(p => p.category).filter(Boolean))].length
     setStats({
       products: (prods || []).length,
-      categories: catCount,
+      categories: allCatNames.size,
       tables: (tbls || []).length,
     })
     setLoading(false)
@@ -137,12 +137,22 @@ export default function QRMenuPage() {
   return (
     <div>
       <Toast message={toast?.message} type={toast?.type} onDismiss={() => {}} />
+      <BackButton fallbackUrl="/dashboard/pos" />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-extrabold text-navy-700">QR Menu & Pesanan</h1>
           <p className="mt-1 text-sm text-text-secondary">Buat menu digital, terima pesanan dari meja, dan kelola semuanya dari kasir.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/dashboard/pos/qr-menu/designer"
+            className="rounded-xl border border-warm-400 bg-warm-50/70 px-4 py-2.5 text-sm font-bold text-warm-600 transition-colors hover:bg-warm-100 flex items-center gap-1.5"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
+            </svg>
+            Desain Menu
+          </Link>
           {business?.is_menu_published && menuUrl && (
             <a
               href={menuUrl}
@@ -285,7 +295,7 @@ export default function QRMenuPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+      <div className="mt-8 grid gap-4 sm:grid-cols-3">
         <Link
           to="/dashboard/pos"
           className="group flex items-center gap-4 rounded-2xl border border-border bg-surface p-5 transition-all hover:border-warm-200 hover:shadow-sm"
@@ -297,7 +307,7 @@ export default function QRMenuPage() {
           </div>
           <div>
             <p className="text-sm font-bold text-navy-700">POS / Kasir</p>
-            <p className="text-xs text-text-muted">Buka mesin kasir untuk menerima pesanan</p>
+            <p className="text-xs text-text-muted">Buka mesin kasir untuk pesanan</p>
           </div>
           <svg className="ml-auto h-5 w-5 text-text-muted transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
@@ -321,6 +331,50 @@ export default function QRMenuPage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
           </svg>
         </Link>
+
+        <Link
+          to="/dashboard/pos/receipt-settings"
+          className="group flex items-center gap-4 rounded-2xl border border-border bg-surface p-5 transition-all hover:border-warm-200 hover:shadow-sm"
+        >
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-electric-500">
+            <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-1.066 2.573c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-bold text-navy-700">Pengaturan Struk</p>
+            <p className="text-xs text-text-muted">Profil toko &amp; format struk thermal/WA</p>
+          </div>
+          <svg className="ml-auto h-5 w-5 text-text-muted transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+        </Link>
+
+        <a
+          href="#qris-settings-section"
+          className="group flex items-center gap-4 rounded-2xl border border-border bg-surface p-5 transition-all hover:border-warm-200 hover:shadow-sm"
+        >
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
+            <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-bold text-navy-700">QRIS Toko</p>
+            <p className="text-xs text-text-muted">Upload &amp; kelola QRIS merchant</p>
+          </div>
+          <svg className="ml-auto h-5 w-5 text-text-muted transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+        </a>
+      </div>
+
+      {/* Dedicated QRIS Merchant Settings Section */}
+      <div id="qris-settings-section" className="mt-8">
+        <BusinessQrisSettings
+          businessId={business?.id}
+          onToast={showToast}
+        />
       </div>
     </div>
   )

@@ -41,3 +41,6 @@ whatsapp-connector/node_modules/
 
 # Separate Expo project
 /umkm/
+
+# Local debug scripts
+debug_image_audit.mjs

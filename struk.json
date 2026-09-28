@@ -1,0 +1,265 @@
+{
+  "task": "Rework receipt QR/POS agar benar-benar siap print thermal 58mm dan 80mm",
+  "instructions": {
+    "goal": "Perbaiki layout, sizing, typography, alignment, preview, dan print output receipt tanpa mengubah logic transaksi.",
+    "reference_template": [
+      "NAMA TOKO / BISNIS",
+      "Slogan atau Tagline Toko Anda",
+      "Jl. Alamat Lengkap No. XX, Kota, Kode Pos",
+      "Telp/WA: 0812-XXXX-XXXX | IG: @nama_toko",
+      "No. Nota : #INV-20260925-001",
+      "Tanggal  : 25-09-2026 15:30",
+      "Kasir    : Budi Santoso",
+      "Pelanggan: Umum / Member (Nama Pelanggan)",
+      "[ KATEGORI PRODUK ]",
+      "Nama Produk",
+      "  2 Pcs x Rp 15.000              Rp 30.000",
+      "  *Diskon Produk (10%)          -Rp 12.000",
+      "Total Item",
+      "Subtotal",
+      "Diskon Nota",
+      "Pajak",
+      "Biaya Layanan",
+      "TOTAL AKHIR",
+      "Metode Pembayaran",
+      "Bayar",
+      "Kembali",
+      "[ RINCIAN PAJAK & TRANSAKSI ]",
+      "DPP",
+      "PPN",
+      "TERIMA KASIH & SELAMAT BELANJA",
+      "Kebijakan retur",
+      "Kontak CS",
+      "Download Aplikasi"
+    ],
+    "audit_first": [
+      "Audit seluruh kode yang menangani QR/POS receipt, print receipt, thermal printer, receipt preview, window.print(), ESC/POS, dan paper size.",
+      "Cari root cause kenapa receipt saat ini terlihat terlalu kecil atau tidak memenuhi lebar kertas.",
+      "Jangan langsung rewrite seluruh sistem.",
+      "Pertahankan logic transaksi yang sudah benar."
+    ],
+    "paper_sizes": {
+      "58mm": {
+        "paper_width": "58mm",
+        "target": "Gunakan hampir seluruh printable width printer tanpa overflow.",
+        "character_width": "Sekitar 32-42 karakter tergantung font/printer."
+      },
+      "80mm": {
+        "paper_width": "80mm",
+        "target": "Gunakan hampir seluruh printable width printer tanpa overflow.",
+        "printable_width": "Sekitar 72-76mm tergantung konfigurasi printer.",
+        "character_width": "Sekitar 42-56 karakter."
+      },
+      "important": [
+        "Jangan membuat receipt 80mm lalu mengecilkannya ke 58mm.",
+        "Jangan menggunakan transform: scale() untuk mengecilkan seluruh receipt.",
+        "Layout harus benar-benar responsive berdasarkan paper width."
+      ]
+    },
+    "receipt_dimensions": {
+      "height": "auto",
+      "min_height": "0",
+      "forbidden": [
+        "height: 100vh",
+        "fixed large height",
+        "desktop max-width yang membuat receipt menyempit",
+        "margin kiri/kanan besar",
+        "padding berlebihan",
+        "global transform scaling"
+      ]
+    },
+    "print_css": {
+      "required": [
+        "@media print",
+        "@page { margin: 0; }"
+      ],
+      "classes": {
+        "58mm": ".receipt--58mm { width: 58mm; }",
+        "80mm": ".receipt--80mm { width: 80mm; }"
+      },
+      "rules": [
+        "Content width tidak boleh melebihi printable area.",
+        "Tidak boleh ada horizontal overflow.",
+        "Receipt height harus mengikuti jumlah konten."
+      ]
+    },
+    "typography": {
+      "font": [
+        "\"Courier New\"",
+        "Courier",
+        "monospace"
+      ],
+      "recommended_sizes": {
+        "body": "10-12px",
+        "store_name": "14-16px bold",
+        "total": "13-15px bold"
+      },
+      "important": [
+        "Jangan mengecilkan seluruh receipt hanya agar semua konten muat.",
+        "Untuk nama produk panjang, gunakan wrapping/truncation yang masuk akal.",
+        "58mm tetap harus readable."
+      ]
+    },
+    "receipt_structure": [
+      {
+        "section": "header",
+        "items": [
+          "Logo jika tersedia",
+          "Nama toko",
+          "Slogan/tagline",
+          "Alamat",
+          "Telepon/WhatsApp",
+          "Instagram jika tersedia"
+        ]
+      },
+      {
+        "section": "transaction_info",
+        "items": [
+          "Nomor nota",
+          "Tanggal/waktu",
+          "Kasir",
+          "Pelanggan"
+        ]
+      },
+      {
+        "section": "items",
+        "items": [
+          "Nama produk",
+          "Variant jika ada",
+          "Qty",
+          "Unit",
+          "Harga satuan",
+          "Subtotal",
+          "Diskon item jika ada"
+        ],
+        "category_rule": "Tampilkan kategori hanya jika data kategori memang tersedia. Jangan membuat kategori palsu."
+      },
+      {
+        "section": "summary",
+        "items": [
+          "Total item",
+          "Subtotal",
+          "Diskon nota",
+          "Pajak",
+          "Biaya layanan",
+          "TOTAL AKHIR"
+        ]
+      },
+      {
+        "section": "payment",
+        "items": [
+          "Metode pembayaran",
+          "Provider/bank jika tersedia",
+          "Bayar",
+          "Kembalian"
+        ]
+      },
+      {
+        "section": "tax",
+        "items": [
+          "DPP jika tersedia",
+          "Tarif pajak jika tersedia",
+          "Nominal pajak jika tersedia"
+        ],
+        "important": "Jangan hardcode PPN 11%. Gunakan konfigurasi/data transaksi jika sistem sudah mendukung pajak."
+      },
+      {
+        "section": "footer",
+        "items": [
+          "Ucapan terima kasih",
+          "Kebijakan retur jika tersedia",
+          "Kontak CS jika tersedia",
+          "Informasi aplikasi jika dikonfigurasi"
+        ]
+      }
+    ],
+    "alignment": {
+      "requirement": "Nominal harus right-aligned dan tidak boleh bergantung pada spasi HTML biasa.",
+      "recommended_structure": "Gunakan CSS grid/flex atau monospace layout yang stabil.",
+      "example": {
+        "name": "Nama Produk",
+        "line": "2 x Rp 15.000              Rp 30.000"
+      },
+      "avoid": "Nama Produk 2 x Rp 15.000 Rp 30.000"
+    },
+    "qr_code": [
+      "Jika receipt memiliki QR code pembayaran, pertahankan payload/data transaksi.",
+      "QR harus tetap 1:1.",
+      "Jangan sampai QR ikut mengecil secara tidak terbaca.",
+      "Berikan quiet zone yang cukup.",
+      "Center align.",
+      "Ukuran boleh berbeda untuk 58mm dan 80mm."
+    ],
+    "preview_and_print": [
+      "Preview receipt dan hasil print harus menggunakan source of truth/layout yang sama.",
+      "Jangan membuat preview terlihat bagus tetapi print output terlalu kecil.",
+      "Jika arsitektur memungkinkan, gunakan satu receipt renderer yang menerima paperWidth sebagai parameter."
+    ],
+    "paper_selector": {
+      "label": "Ukuran Struk",
+      "options": [
+        "58 mm",
+        "80 mm"
+      ],
+      "requirements": [
+        "Jika selector belum tersedia, tambahkan.",
+        "Simpan preference menggunakan mekanisme settings yang sudah ada.",
+        "Jangan membuat database schema baru jika tidak diperlukan."
+      ]
+    },
+    "do_not_change": [
+      "Order calculation",
+      "Subtotal",
+      "Discount calculation",
+      "Tax calculation",
+      "Service fee",
+      "Payment amount",
+      "Change calculation",
+      "Order ID",
+      "QR payload",
+      "Database schema"
+    ],
+    "testing": {
+      "regression_cases": [
+        "58mm receipt",
+        "80mm receipt",
+        "Long product name",
+        "Product variant",
+        "Item discount",
+        "Invoice discount",
+        "Tax",
+        "Service fee",
+        "QRIS payment",
+        "Cash payment + change",
+        "Multiple items",
+        "Optional customer",
+        "Optional footer",
+        "QR code jika tersedia"
+      ],
+      "verify": [
+        "Tidak ada horizontal overflow.",
+        "Receipt tidak terpotong.",
+        "Nominal tetap terbaca.",
+        "58mm menggunakan width yang benar.",
+        "80mm menggunakan width yang benar.",
+        "Height mengikuti konten.",
+        "Tidak ada scaling yang membuat teks terlalu kecil.",
+        "Preview dan print menggunakan layout yang konsisten."
+      ],
+      "after_changes": [
+        "Run receipt tests.",
+        "Run full test suite.",
+        "Run production build."
+      ]
+    },
+    "final_report": [
+      "Laporkan file yang diubah.",
+      "Laporkan hasil receipt tests.",
+      "Laporkan hasil full test suite.",
+      "Laporkan hasil build.",
+      "Jelaskan bagaimana 58mm dan 80mm dibedakan.",
+      "Jelaskan bahwa receipt menggunakan printable width thermal secara optimal."
+    ],
+    "critical_requirement": "Jangan sekadar membuat receipt terlihat kecil seperti preview. Target akhirnya adalah receipt yang memenuhi printable width thermal printer 58mm/80mm, tetap terbaca, tidak overflow, dan panjang kertas mengikuti isi transaksi."
+  }
+}

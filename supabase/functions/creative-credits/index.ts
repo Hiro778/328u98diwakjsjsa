@@ -27,11 +27,12 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return corsResponse();
 
   try {
-    // Authenticate and get business context
-    const auth = await verifyAuth(req);
-
     // Parse request body
-    const { action, action_type, idempotency_key } = await req.json();
+    const body = await req.json();
+    const { action, action_type, idempotency_key, business_id } = body || {};
+
+    // Authenticate and get business context
+    const auth = await verifyAuth(req, business_id);
 
     // Validate required fields
     if (!action || !["reserve", "consume", "refund", "unreserve", "grant"].includes(action)) {

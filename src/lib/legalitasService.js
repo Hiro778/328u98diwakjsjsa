@@ -5,7 +5,13 @@
  * Credentials and API keys are NEVER exposed to the frontend.
  */
 
-import { supabase } from './supabase'
+import { supabase } from './supabase.js'
+
+/**
+ * Feature flag for Logo Analyzer.
+ * Explicitly false: Google Cloud Vision is disabled and will not be called.
+ */
+export const LOGO_ANALYZER_ENABLED = false
 
 /**
  * Check business legality across 5 government sources.
@@ -144,6 +150,17 @@ async function ensureValidSession() {
  * @returns {{ checkId: string, overallStatus: string, results: Array, error?: string } | { error: string }}
  */
 export async function checkLogoSimilarity(input) {
+  if (!LOGO_ANALYZER_ENABLED) {
+    console.warn('[legalitasService] checkLogoSimilarity blocked — LOGO_ANALYZER_ENABLED is false')
+    return {
+      error: 'Fitur pemeriksaan logo saat ini belum aktif (Segera Hadir).',
+      status: 'DISABLED',
+      overallStatus: 'COMING_SOON',
+      results: [],
+      totalResults: 0,
+    }
+  }
+
   const FN = 'legalitas-logo-check'
   const payload = { imageUrl: input.imageUrl ? '(present)' : '(missing)', businessName: input.businessName || '' }
 
@@ -269,6 +286,11 @@ export async function confirmCheckResult(resultId, confirmedNumber) {
  * @returns {{ url: string, filename: string } | { error: string }}
  */
 export async function uploadLogoImage(file, businessId) {
+  if (!LOGO_ANALYZER_ENABLED) {
+    console.warn('[legalitasService] uploadLogoImage blocked — LOGO_ANALYZER_ENABLED is false')
+    return { error: 'Upload logo dinonaktifkan sementara (Segera Hadir).' }
+  }
+
   if (!file) return { error: 'Tidak ada file' }
 
   const ALLOWED_TYPES = ['image/jpeg', 'image/png']

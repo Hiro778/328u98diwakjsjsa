@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { validateReward, normalizeReward, isRewardAvailable, formatPoints, formatDate } from './loyaltyUtils'
+import DateInput from '../../components/DateInput'
 
 export default function RewardCatalog({ rewards, loading, onAdd, onEdit, onDelete }) {
   if (loading) {
@@ -179,8 +180,11 @@ export function RewardForm({ show, onClose, onSave, editingReward }) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-text-muted">Tanggal Kedaluwarsa</label>
-                  <input type="date" value={form.expiry_date} onChange={(e) => set('expiry_date', e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-navy-700 focus:border-warm-400 focus:outline-none focus:ring-1 focus:ring-warm-400/50" />
+                  <DateInput
+                    value={form.expiry_date}
+                    onChange={(e) => set('expiry_date', e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-navy-700 focus:border-warm-400 focus:outline-none focus:ring-1 focus:ring-warm-400/50"
+                  />
                 </div>
                 <div className="flex items-end pb-1">
                   <button onClick={() => set('is_active', !form.is_active)}

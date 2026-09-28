@@ -2,22 +2,39 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { CATEGORIES, TOTAL_TOOLS } from '../../data/categories'
 import ToolCard from '../../components/ToolCard'
+import BackButton from '../../components/BackButton'
 
 const container = {
   hidden: {},
-  visible: { transition: { staggerChildren: 0.03 } },
+  visible: { transition: { staggerChildren: 0.025 } },
 }
 
 const item = {
-  hidden: { opacity: 0, y: 10 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] } },
+  hidden: { opacity: 0, y: 8 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: [0.16, 1, 0.3, 1] } },
 }
+
+const CATEGORY_TABS = [
+  { id: 'all', label: 'Semua' },
+  { id: 'finance', label: 'Keuangan' },
+  { id: 'operations', label: 'Operasional' },
+  { id: 'sales', label: 'Penjualan & CRM' },
+  { id: 'marketing', label: 'Marketing' },
+  { id: 'legal', label: 'Legal & Compliance' },
+  { id: 'export', label: 'Kurs & Ekspor' },
+  { id: 'analytics', label: 'Analytics' },
+]
 
 export default function AllToolsPage() {
   const [search, setSearch] = useState('')
-  const q = search.toLowerCase()
+  const [activeCategory, setActiveCategory] = useState('all')
+  const q = search.toLowerCase().trim()
 
-  const filtered = Object.values(CATEGORIES)
+  const categoriesToDisplay = activeCategory === 'all'
+    ? Object.values(CATEGORIES)
+    : Object.values(CATEGORIES).filter((cat) => cat.id === activeCategory)
+
+  const filtered = categoriesToDisplay
     .map((cat) => ({
       ...cat,
       tools: cat.tools.filter((t) => t.name.toLowerCase().includes(q)),
@@ -25,55 +42,115 @@ export default function AllToolsPage() {
     .filter((cat) => cat.tools.length > 0)
 
   return (
-    <div>
+    <div className="space-y-6">
+      <BackButton fallbackUrl="/dashboard" label="Kembali" />
+
+      {/* Workspace Application Header */}
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        className="space-y-4 border-b border-[#222C3E] pb-6"
       >
-        <h1 className="text-2xl font-extrabold text-navy-700">Semua Tools</h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          {TOTAL_TOOLS}+ tools untuk setiap aspek bisnis lo.
-        </p>
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+            Direktori Tools
+          </h1>
+          <p className="mt-1 text-xs sm:text-sm text-slate-400">
+            Katalog instrumen operasional, keuangan, kasir POS, dan otomasi BisnisSehat.
+          </p>
+        </div>
+
+        {/* Search and Category Filter Controls */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+          {/* Search Bar */}
+          <div className="relative w-full sm:max-w-xs">
+            <svg
+              className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+              />
+            </svg>
+            <input
+              type="text"
+              placeholder={`Cari dari ${TOTAL_TOOLS} tools...`}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-lg border border-[#222C3E] bg-[#151D2C] py-2 pl-9 pr-8 text-xs sm:text-sm text-[#F8FAFC] placeholder:text-slate-500 focus:border-[#818CF8] focus:outline-none focus:ring-1 focus:ring-[#818CF8]/40 transition-all"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute top-1/2 right-2.5 -translate-y-1/2 text-xs font-mono text-slate-400 hover:text-white"
+              >
+                &times;
+              </button>
+            )}
+          </div>
+
+          {/* Category Filter Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none text-xs">
+            {CATEGORY_TABS.map((tab) => {
+              const isActive = activeCategory === tab.id
+              const count = tab.id === 'all'
+                ? TOTAL_TOOLS
+                : CATEGORIES[tab.id]?.tools.length || 0
+
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveCategory(tab.id)}
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer ${
+                    isActive
+                      ? 'bg-[#1E293B] text-white border border-[#222C3E] shadow-xs'
+                      : 'text-slate-400 hover:text-white hover:bg-[#151D2C]'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className={`text-[10px] font-mono ${isActive ? 'text-[#818CF8]' : 'text-slate-500'}`}>
+                    {count}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </motion.div>
 
-      {/* Search */}
-      <div className="relative mt-6 max-w-md">
-        <svg
-          className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-text-muted"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-        </svg>
-        <input
-          type="text"
-          placeholder={`Cari dari ${TOTAL_TOOLS} tools...`}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-xl border border-border bg-surface py-3 pl-10 pr-4 text-sm text-text-primary placeholder:text-text-muted focus:border-warm-300 focus:outline-none focus:ring-2 focus:ring-warm-200/50"
-        />
-      </div>
-
-      {/* Categories */}
+      {/* Categories Grid Display */}
       {filtered.length > 0 ? (
-        <div className="mt-8 space-y-10">
+        <div className="space-y-8">
           {filtered.map((cat) => (
             <motion.section
               key={cat.id}
               variants={container}
               initial="hidden"
               animate="visible"
+              className="space-y-3"
             >
-              <h2
-                className="text-sm font-semibold uppercase tracking-wide"
-                style={{ color: cat.color }}
-              >
-                {cat.title}
-              </h2>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {/* Category Header */}
+              <div className="flex items-center gap-2">
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: cat.color }}
+                />
+                <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-300">
+                  {cat.title}
+                </h2>
+                <span className="text-[11px] font-mono text-slate-500">
+                  ({cat.tools.length})
+                </span>
+              </div>
+
+              {/* Tools Grid */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {cat.tools.map((tool) => (
                   <motion.div key={tool.name} variants={item}>
                     <ToolCard tool={tool} />
@@ -84,10 +161,20 @@ export default function AllToolsPage() {
           ))}
         </div>
       ) : (
-        <div className="mt-12 text-center">
-          <p className="text-sm text-text-muted">
-            Tidak ada tool yang cocok dengan pencarian "<span className="font-medium text-navy-600">{search}</span>".
+        <div className="rounded-xl border border-dashed border-[#222C3E] bg-[#151D2C]/40 p-10 text-center">
+          <p className="text-sm font-semibold text-white">Tidak Ada Tool Ditemukan</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Tidak ada tool yang cocok dengan filter atau kata kunci &ldquo;<span className="font-semibold text-slate-200">{search}</span>&rdquo;.
           </p>
+          <button
+            onClick={() => {
+              setSearch('')
+              setActiveCategory('all')
+            }}
+            className="mt-4 inline-flex items-center rounded-lg border border-[#222C3E] bg-[#1E293B] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#222C3E] transition-colors"
+          >
+            Reset Filter
+          </button>
         </div>
       )}
     </div>

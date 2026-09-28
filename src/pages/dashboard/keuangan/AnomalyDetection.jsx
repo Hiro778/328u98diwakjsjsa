@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../context/AuthContext'
 import { formatCurrency } from '../../../lib/orderNumber'
+import BackButton from '../../../components/BackButton'
 import { getPeriodRange } from '../../../sections/FinancialReports/calculateFinancialReports'
 import {
   aggregateDailyTotals,
@@ -342,6 +343,7 @@ export default function AnomalyDetection() {
 
   return (
     <div>
+      <BackButton fallbackUrl="/dashboard/keuangan" label="Kembali" />
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

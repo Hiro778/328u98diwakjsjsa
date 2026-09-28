@@ -1,116 +1,54 @@
-import { useState } from 'react'
-import { useAuth } from '../../context/AuthContext'
-import { supabase } from '../../lib/supabase'
-import { checkLogoSimilarity, uploadLogoImage } from '../../lib/legalitasService'
-import LogoCheckUpload from './LogoCheckUpload'
-import LogoCheckResults from './LogoCheckResults'
+import { motion } from 'framer-motion'
 import LegalDisclaimer from './LegalDisclaimer'
 
+// Dormant service functions preserved for future activation per ui.md:
+// import { checkLogoSimilarity, uploadLogoImage } from '../../lib/legalitasService'
+// import LogoCheckUpload from './LogoCheckUpload'
+// import LogoCheckResults from './LogoCheckResults'
+
 export default function LogoCheckTab() {
-  const { business } = useAuth()
-  const [loading, setLoading] = useState(false)
-  const [results, setResults] = useState(null)
-
-  async function handleAnalyze(file) {
-    // Pre-flight: check business
-    if (!business?.id) {
-      setLoading(false)
-      setResults({
-        overallStatus: 'ERROR',
-        error: 'Data bisnis tidak ditemukan. Pastikan akun terdaftar memiliki bisnis.',
-        results: [],
-        totalResults: 0,
-      })
-      return
-    }
-
-    // Pre-flight: check session is valid
-    try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      if (sessionError || !session) {
-        setLoading(false)
-        setResults({
-          overallStatus: 'ERROR',
-          error: 'Sesi Anda tidak ditemukan. Silakan masuk kembali.',
-          results: [],
-          totalResults: 0,
-        })
-        return
-      }
-    } catch {
-      setLoading(false)
-      setResults({
-        overallStatus: 'ERROR',
-        error: 'Gagal memverifikasi sesi. Silakan masuk kembali.',
-        results: [],
-        totalResults: 0,
-      })
-      return
-    }
-
-    setLoading(true)
-    setResults(null)
-
-    try {
-      // 1. Upload image to Supabase Storage
-      const uploadResult = await uploadLogoImage(file, business.id)
-      if (uploadResult.error) {
-        setResults({
-          overallStatus: 'ERROR',
-          error: uploadResult.error,
-          results: [],
-          totalResults: 0,
-        })
-        setLoading(false)
-        return
-      }
-
-      // 2. Call logo check Edge Function
-      const checkResult = await checkLogoSimilarity({
-        imageUrl: uploadResult.url,
-        businessName: business.name || '',
-        imageFilename: uploadResult.filename,
-      })
-
-      if (checkResult.error) {
-        setResults({
-          overallStatus: 'ERROR',
-          error: checkResult.error,
-          results: [],
-          totalResults: 0,
-        })
-      } else {
-        setResults({
-          overallStatus: checkResult.overallStatus || 'ERROR',
-          error: checkResult.errorMessage || null,
-          results: checkResult.results || [],
-          totalResults: checkResult.totalResults || 0,
-        })
-      }
-    } catch (err) {
-      setResults({
-        overallStatus: 'ERROR',
-        error: err.message || 'Terjadi kesalahan',
-        results: [],
-        totalResults: 0,
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
   return (
     <div className="space-y-6">
-      <LogoCheckUpload onAnalyze={handleAnalyze} loading={loading} />
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="rounded-2xl border border-border bg-surface p-8 sm:p-12 text-center"
+      >
+        {/* [Logo icon] */}
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-cream text-text-muted">
+          <svg
+            className="h-7 w-7 text-text-secondary"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={1.5}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z"
+            />
+          </svg>
+        </div>
 
-      {results && (
-        <LogoCheckResults
-          overallStatus={results.overallStatus}
-          results={results.results}
-          totalResults={results.totalResults}
-          errorMessage={results.error}
-        />
-      )}
+        {/* Title & Description */}
+        <h2 className="text-xl font-bold text-navy-700">Cek Logo & Kemiripan</h2>
+        <p className="mt-2 text-sm text-text-secondary max-w-md mx-auto">
+          Analisis kemiripan logo dengan gambar yang tersedia di web.
+        </p>
+
+        {/* Status Treatment: [ Segera Hadir ] */}
+        <div className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-border bg-cream px-3.5 py-1 text-xs font-semibold text-text-secondary">
+          <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+          Segera Hadir
+        </div>
+
+        {/* Informational subtext */}
+        <p className="mt-3 text-xs text-text-muted">
+          Fitur ini sedang dalam tahap pengembangan.
+        </p>
+      </motion.div>
 
       <LegalDisclaimer type="logoCheck" />
     </div>

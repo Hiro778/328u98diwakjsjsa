@@ -6,6 +6,7 @@
 // GET:  search keyword impressions
 
 import { verifyAuth } from "../../_shared/auth.ts";
+import { isProUser } from "../../_shared/entitlement.ts";
 import { supabaseAdmin } from "../../_shared/supabase-admin.ts";
 import { decrypt } from "../../_shared/crypto.ts";
 import {
@@ -51,6 +52,12 @@ Deno.serve(async (req) => {
 
   try {
     const auth = await verifyAuth(req);
+
+    // Enforce Pro entitlement server-side
+    const hasPro = await isProUser(auth.userId);
+    if (!hasPro) {
+      return errorResponse("Fitur ini membutuhkan BisnisSehat Pro.", 403);
+    }
 
     const { data: connection } = await supabaseAdmin
       .from("google_business_connections")

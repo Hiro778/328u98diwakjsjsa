@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { createNotification } from '../../../services/notificationService'
 import { useAuth } from '../../../context/AuthContext'
 import {
   calculateSummary,
@@ -11,6 +12,7 @@ import InvoiceFollowUpDetail from '../../../sections/InvoiceFollowUp/InvoiceFoll
 import InvoiceForm from '../../../sections/InvoiceFollowUp/InvoiceForm'
 import PaymentForm from '../../../sections/InvoiceFollowUp/PaymentForm'
 import FollowUpForm from '../../../sections/InvoiceFollowUp/FollowUpForm'
+import BackButton from '../../../components/BackButton'
 
 export default function InvoiceFollowUp() {
   const { business } = useAuth()
@@ -158,8 +160,7 @@ export default function InvoiceFollowUp() {
 
       if (updateError) throw updateError
       showToast('Invoice berhasil diupdate')
-    } else {
-      const { error: insertError } = await supabase
+      const { data: newInvoice, error: insertError } = await supabase
         .from('invoices')
         .insert({
           business_id: business.id,
@@ -173,9 +174,27 @@ export default function InvoiceFollowUp() {
           amount: formData.amount,
           notes: formData.notes,
         })
+        .select()
+        .single()
 
       if (insertError) throw insertError
       showToast('Invoice berhasil ditambahkan')
+
+      // Create persistent notification
+      try {
+        const customerName = customers.find((c) => c.id === formData.customer_id)?.name || 'Pelanggan'
+        await createNotification({
+          business_id: business.id,
+          title: 'Invoice dibuat',
+          message: `Invoice ${formData.invoice_number} untuk ${customerName} berhasil dibuat.`,
+          category: 'sales',
+          priority: 'normal',
+          action_url: '/dashboard/penjualan/invoice-follow-up',
+          dedup_key: `inv_created_${newInvoice?.id || formData.invoice_number}`,
+        })
+      } catch (notifErr) {
+        console.warn('[Invoice] Notification creation failed:', notifErr)
+      }
     }
 
     setShowInvoiceForm(false)
@@ -259,6 +278,23 @@ export default function InvoiceFollowUp() {
       .eq('business_id', business.id)
 
     showToast('Pembayaran berhasil dicatat')
+
+    // Create persistent notification for payment
+    try {
+      const amountFmt = Number(formData.amount).toLocaleString('id-ID')
+      await createNotification({
+        business_id: business.id,
+        title: 'Pembayaran Invoice Diterima',
+        message: `Pembayaran senilai Rp ${amountFmt} untuk invoice ${paymentInvoice.invoice_number} telah dicatat.`,
+        category: 'invoice',
+        priority: 'normal',
+        action_url: '/dashboard/penjualan/invoice-follow-up',
+        dedup_key: `inv_payment_${paymentInvoice.id}_${Date.now()}`,
+      })
+    } catch (notifErr) {
+      console.warn('[Invoice] Payment notification failed:', notifErr)
+    }
+
     setShowPaymentForm(false)
     setPaymentInvoice(null)
     await loadData()
@@ -325,6 +361,11 @@ export default function InvoiceFollowUp() {
       )}
 
       {/* Header */}
+      <BackButton
+        fallbackUrl="/dashboard/penjualan"
+        label={detailInvoice ? 'Kembali ke Daftar Invoice' : 'Kembali'}
+        onClick={detailInvoice ? () => setDetailInvoice(null) : undefined}
+      />
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-[#10B981]">

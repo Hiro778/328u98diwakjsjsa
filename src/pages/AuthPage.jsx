@@ -1,7 +1,9 @@
 import { motion } from 'framer-motion'
 import { Navigate, useSearchParams } from 'react-router'
 import { useAuth } from '../context/AuthContext'
+import { usePlatformSettings } from '../hooks/usePlatformSettings'
 import LoadingScreen from '../components/LoadingScreen'
+import BannedAccountScreen from '../components/BannedAccountScreen'
 
 function isSafeReturnTo(path) {
   return typeof path === 'string' && path.startsWith('/') && !path.startsWith('//')
@@ -9,11 +11,13 @@ function isSafeReturnTo(path) {
 
 export default function AuthPage() {
   const [searchParams] = useSearchParams()
-  const { signInWithGoogle, isAuthenticated, loading } = useAuth()
+  const { signInWithGoogle, isAuthenticated, isAccessDenied, isBanned, isSuspended, banReason, signOut, loading } = useAuth()
+  const { platformName, isRegistrationEnabled } = usePlatformSettings()
   const returnTo = searchParams.get('returnTo')
   const safeReturnTo = isSafeReturnTo(returnTo) ? returnTo : null
 
   if (loading) return <LoadingScreen />
+  if (isAccessDenied || isBanned || isSuspended) return <BannedAccountScreen banReason={banReason} onSignOut={signOut} />
   if (isAuthenticated) return <Navigate to={safeReturnTo || '/dashboard'} replace />
 
   function handleLogin() {
@@ -34,15 +38,25 @@ export default function AuthPage() {
         {/* Brand */}
         <div className="mb-8 text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-navy-600">
-            <span className="text-lg font-extrabold text-white">BS</span>
+            <span className="text-lg font-extrabold text-white">{platformName.slice(0, 2).toUpperCase()}</span>
           </div>
           <h1 className="mt-4 text-2xl font-extrabold text-navy-700">
-            Masuk ke BisnisSehat
+            Masuk ke {platformName}
           </h1>
           <p className="mt-2 text-sm text-text-secondary">
             Kelola bisnis lo dengan lebih pintar.
           </p>
         </div>
+
+        {!isRegistrationEnabled && (
+          <div
+            data-testid="registration-disabled-notice"
+            className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-center text-xs text-amber-800"
+          >
+            <p className="font-bold">Pendaftaran Ditutup Sementara</p>
+            <p className="mt-0.5">Pendaftaran pengguna baru sedang dinonaktifkan. Pengguna yang sudah terdaftar tetap dapat masuk.</p>
+          </div>
+        )}
 
         {/* Google button */}
         <motion.button

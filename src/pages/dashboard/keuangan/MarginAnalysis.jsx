@@ -9,6 +9,7 @@ import MarginAnalysisInput from '../../../sections/MarginAnalysis/MarginAnalysis
 import MarginAnalysisResults from '../../../sections/MarginAnalysis/MarginAnalysisResults'
 import MarginAnalysisHistory from '../../../sections/MarginAnalysis/MarginAnalysisHistory'
 import MarginAnalysisDetail from '../../../sections/MarginAnalysis/MarginAnalysisDetail'
+import BackButton from '../../../components/BackButton'
 
 const EMPTY_FORM = {
   productId: '',
@@ -271,6 +272,11 @@ export default function MarginAnalysis() {
 
   return (
     <div>
+      <BackButton
+        fallbackUrl="/dashboard/keuangan"
+        label={view === 'detail' ? 'Kembali ke Riwayat Margin' : 'Kembali'}
+        onClick={view === 'detail' ? handleBackToHistory : undefined}
+      />
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

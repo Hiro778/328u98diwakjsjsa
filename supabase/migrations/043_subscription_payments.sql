@@ -1,12 +1,11 @@
 -- 043_subscription_payments.sql
 -- Subscription payment tracking for Midtrans integration
--- Applied via focused SQL (not supabase db push)
 
--- Add business_id to subscriptions for easier queries
+-- 1. Add business_id to subscriptions for easier queries
 ALTER TABLE public.subscriptions
   ADD COLUMN IF NOT EXISTS business_id uuid REFERENCES public.businesses(id) ON DELETE SET NULL;
 
--- Subscription payment records (separate from POS payments table)
+-- 2. Create subscription_payments table
 CREATE TABLE IF NOT EXISTS public.subscription_payments (
   id                    uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   subscription_id       uuid NOT NULL REFERENCES public.subscriptions(id) ON DELETE CASCADE,
@@ -20,21 +19,27 @@ CREATE TABLE IF NOT EXISTS public.subscription_payments (
   period_start          timestamptz NOT NULL,
   period_end            timestamptz NOT NULL,
   raw_response          jsonb DEFAULT '{}',
-  created_at            timestamptz default now(),
-  updated_at            timestamptz default now()
+  created_at            timestamptz DEFAULT now(),
+  updated_at            timestamptz DEFAULT now()
 );
 
+-- 3. Enable RLS
 ALTER TABLE public.subscription_payments ENABLE ROW LEVEL SECURITY;
 
+-- 4. Indexes
 CREATE INDEX IF NOT EXISTS idx_sub_payments_sub_id ON public.subscription_payments(subscription_id);
 CREATE INDEX IF NOT EXISTS idx_sub_payments_profile_id ON public.subscription_payments(profile_id);
 CREATE INDEX IF NOT EXISTS idx_sub_payments_midtrans_id ON public.subscription_payments(midtrans_order_id);
 
--- RLS: users can only see their own subscription payments
-CREATE POLICY "Users can view own subscription payments"
-  ON subscription_payments FOR SELECT TO authenticated
-  USING ((select auth.uid()) = profile_id);
+-- 5. RLS Policies on subscription_payments
+DO $$ BEGIN
+  CREATE POLICY "Users can view own subscription payments"
+    ON public.subscription_payments FOR SELECT TO authenticated
+    USING ((select auth.uid()) = profile_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "Users can insert own subscription payments"
-  ON subscription_payments FOR INSERT TO authenticated
-  WITH CHECK ((select auth.uid()) = profile_id);
+-- 6. Security lockdown on public.subscriptions:
+-- Users can view their own subscription, but only Service Role can update/insert subscription entitlements.
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Users can update own subscription" ON public.subscriptions;
+EXCEPTION WHEN undefined_object THEN NULL; END $$;

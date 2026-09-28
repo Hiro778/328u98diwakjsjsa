@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
+import { useSearchParams } from 'react-router'
 import { useAuth } from '../../context/AuthContext'
 import { checkBusinessLegalitas, confirmCheckResult } from '../../lib/legalitasService'
 import { LEGAL_LINKS } from '../../lib/officialLegalLinks'
@@ -7,15 +8,26 @@ import LegalCheckSearch from './LegalCheckSearch'
 import LegalCheckResults from './LegalCheckResults'
 import LogoCheckTab from './LogoCheckTab'
 import LegalDisclaimer from './LegalDisclaimer'
+import BackButton from '../../components/BackButton'
 
 const TABS = [
   { id: 'sources', label: 'Cek Legalitas Usaha', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-  { id: 'logo', label: 'Cek Logo & Kemiripan', icon: 'M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z' },
+  { id: 'logo', label: 'Cek Logo & Kemiripan', badge: 'Segera Hadir', icon: 'M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z' },
 ]
 
 export default function LegalitasDashboard() {
   const { business } = useAuth()
-  const [activeTab, setActiveTab] = useState('sources')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const activeTab = tabParam === 'logo' ? 'logo' : 'sources'
+
+  function handleTabChange(tabId) {
+    if (tabId === 'logo') {
+      setSearchParams({ tab: 'logo' })
+    } else {
+      setSearchParams({})
+    }
+  }
 
   // Source check state
   const [searchValues, setSearchValues] = useState({})
@@ -75,6 +87,7 @@ export default function LegalitasDashboard() {
 
   return (
     <div>
+      <BackButton fallbackUrl="/dashboard" label="Kembali" />
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
@@ -86,7 +99,7 @@ export default function LegalitasDashboard() {
         </p>
         <h1 className="text-2xl font-extrabold text-navy-700">Legal & Brand Checker</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Periksa legalitas usaha dari berbagai sumber resmi, dan analisis kemiripan logo Anda.
+          Periksa legalitas usaha dari berbagai sumber resmi dan panduan kepatuhan bisnis Anda.
         </p>
       </motion.div>
 
@@ -96,7 +109,7 @@ export default function LegalitasDashboard() {
           <button
             key={tab.id}
             type="button"
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => handleTabChange(tab.id)}
             className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
               activeTab === tab.id
                 ? 'bg-warm-400 text-white shadow-sm'
@@ -104,7 +117,7 @@ export default function LegalitasDashboard() {
             }`}
           >
             <svg
-              className="h-4 w-4"
+              className="h-4 w-4 shrink-0"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -112,7 +125,18 @@ export default function LegalitasDashboard() {
             >
               <path strokeLinecap="round" strokeLinejoin="round" d={tab.icon} />
             </svg>
-            {tab.label}
+            <span>{tab.label}</span>
+            {tab.badge && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                  activeTab === tab.id
+                    ? 'bg-white/20 text-white'
+                    : 'border border-border bg-surface text-text-muted'
+                }`}
+              >
+                {tab.badge}
+              </span>
+            )}
           </button>
         ))}
       </div>

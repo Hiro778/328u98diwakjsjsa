@@ -24,6 +24,13 @@ const MARKETPLACE_INFO = {
     docsUrl: 'https://partner.tiktokshop.com/',
     docsLabel: 'TikTok Shop Partner Center',
   },
+  tokopedia_shop: {
+    name: 'Tokopedia & Shop',
+    color: '#111827',
+    description: 'Integrasi terpadu Tokopedia & TikTok Shop via Partner API resmi.',
+    docsUrl: 'https://partner.tiktokshop.com/',
+    docsLabel: 'TikTok Shop Partner Center (Tokopedia & Shop)',
+  },
 }
 
 export default function ConnectionModal({ show, marketplaceKey, onClose, onSuccess }) {
@@ -41,7 +48,9 @@ export default function ConnectionModal({ show, marketplaceKey, onClose, onSucce
     setError(null)
 
     try {
-      const result = await initiateOAuth(marketplaceKey)
+      // Map unified tokopedia_shop to tiktokshop provider for OAuth partner flow
+      const targetKey = marketplaceKey === 'tokopedia_shop' ? 'tiktokshop' : marketplaceKey
+      const result = await initiateOAuth(targetKey)
 
       if (result.status === 'needs_setup') {
         setMode('needs_setup')

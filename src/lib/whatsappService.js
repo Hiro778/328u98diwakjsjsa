@@ -8,17 +8,31 @@
  * Frontend never sees auth state or session files.
  */
 
-import { supabase } from './supabase'
-
-const CONNECTOR_URL = import.meta.env.VITE_WHATSAPP_CONNECTOR_URL || 'http://localhost:3001'
+const CONNECTOR_URL = (typeof import.meta !== 'undefined' && import.meta?.env?.VITE_WHATSAPP_CONNECTOR_URL) || 'http://localhost:3001'
 
 // ══════════════════════════════════════════════════════════
 // Connection Status
 // ══════════════════════════════════════════════════════════
 
 /**
+ * Check if the connector service is reachable.
+ * @returns {Promise<boolean>}
+ */
+export async function checkConnectorHealth() {
+  try {
+    const res = await fetch(`${CONNECTOR_URL}/health`, {
+      signal: AbortSignal.timeout(3000)
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+/**
  * Get WhatsApp connection status for a business.
- * Queries the connector service, falls back to Supabase DB.
+ * Queries the connector service. A database row is only last-known state and
+ * must not be presented as an active Baileys connection.
  *
  * @param {string} businessId
  * @returns {{ status, connected, phoneNumber, connectorAvailable, ... } | null}
@@ -33,11 +47,18 @@ export async function getConnectionStatus(businessId) {
     })
     if (res.ok) {
       const data = await res.json()
+      let rawStatus = data.status || 'disconnected'
+      const isSyncing = Boolean(data.syncing || rawStatus === 'syncing')
+      if (rawStatus === 'syncing') {
+        rawStatus = 'connected'
+      }
       return {
-        status: data.status || 'disconnected',
-        connected: data.connected || false,
+        status: rawStatus,
+        connected: rawStatus === 'connected' || data.connected || false,
+        syncing: isSyncing,
         phoneNumber: data.phoneNumber || '',
         businessId,
+        qrcode: data.qrcode || null,
         lastError: data.lastError || null,
         connectorAvailable: true
       }
@@ -46,25 +67,7 @@ export async function getConnectionStatus(businessId) {
     // Connector not available
   }
 
-  // Fallback: query Supabase directly
-  try {
-    const { data: conn } = await supabase
-      .from('whatsapp_business_connections')
-      .select('status, display_phone_number, last_error, connected_at')
-      .eq('business_id', businessId)
-      .maybeSingle()
-
-    return {
-      status: conn?.status || 'disconnected',
-      connected: conn?.status === 'connected',
-      phoneNumber: conn?.display_phone_number || '',
-      businessId,
-      lastError: conn?.last_error || null,
-      connectorAvailable: false
-    }
-  } catch {
-    return { status: 'disconnected', connected: false, phoneNumber: '', businessId, connectorAvailable: false }
-  }
+  return { status: 'disconnected', connected: false, phoneNumber: '', businessId, connectorAvailable: false }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -102,7 +105,7 @@ export async function initiateConnection(businessId) {
     }
 
     console.log('[WA] POST success connectionId=' + data.connectionId)
-    return { success: true, connectionId: data.connectionId, qrRequired: data.qrRequired }
+    return { success: true, connectionId: data.connectionId, status: data.status, qrRequired: data.qrRequired }
   } catch (err) {
     console.error('[WA] POST error:', err.name, err.message)
     if (err.name === 'TimeoutError') {
@@ -112,26 +115,40 @@ export async function initiateConnection(businessId) {
   }
 }
 
-// ══════════════════════════════════════════════════════════
-// WebSocket Listener
-// ══════════════════════════════════════════════════════════
+// Active WebSocket tracker per business: businessId -> WebSocket
+const activeWebSockets = new Map()
 
 /**
  * Listen for real-time updates (QR, status, pairing code) via WebSocket.
+ * Guarantees strictly 1 active WebSocket connection per businessId.
  *
  * @param {string} businessId
- * @param {object} callbacks - { onQr, onStatus, onError, onPairingCode, onPairingCodeError }
+ * @param {object} callbacks - { onQr, onStatus, onError, onPairingCode, onPairingCodeError, onQrExpired, onWsStateChange }
  * @returns {WebSocket} Caller should close on unmount
  */
-export function listenForUpdates(businessId, { onQr, onStatus, onError, onPairingCode, onPairingCodeError }) {
+export function listenForUpdates(businessId, { onQr, onStatus, onError, onPairingCode, onPairingCodeError, onQrExpired, onWsStateChange }) {
+  if (!businessId) return null
+
+  // If a WebSocket is already active or connecting for this businessId, close the old one first
+  const existingWs = activeWebSockets.get(businessId)
+  if (existingWs && (existingWs.readyState === WebSocket.CONNECTING || existingWs.readyState === WebSocket.OPEN)) {
+    console.log(`[WS] Closing previous duplicate socket for ${businessId}`)
+    try {
+      existingWs.close(1000, 'Replaced by new listener')
+    } catch { /* ignore */ }
+    activeWebSockets.delete(businessId)
+  }
+
   const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
   const connectorHost = CONNECTOR_URL.replace(/^https?:\/\//, '')
   const wsUrl = `${wsProtocol}://${connectorHost}/?businessId=${businessId}`
 
   const ws = new WebSocket(wsUrl)
+  activeWebSockets.set(businessId, ws)
 
   ws.onopen = () => {
     console.log(`[WS] CONNECTED businessId=${businessId}`)
+    onWsStateChange?.('connected')
   }
 
   ws.onmessage = (event) => {
@@ -140,19 +157,43 @@ export function listenForUpdates(businessId, { onQr, onStatus, onError, onPairin
       console.log(`[WS] message type=${data.type}`)
       switch (data.type) {
         case 'qrcode':
-          onQr?.(data.data.qrcode)
+        case 'qr': {
+          const qrVal =
+            data?.data?.qrcode ??
+            data?.data?.qr ??
+            data?.qrcode ??
+            data?.qr ??
+            (typeof data?.data === 'string' ? data.data : null)
+          if (qrVal) {
+            onQr?.(qrVal)
+          }
           break
-        case 'status':
-          onStatus?.(data.data.status, data.data.phoneNumber)
+        }
+        case 'qr_expired':
+          onQrExpired?.()
           break
+        case 'status': {
+          let s = data?.data?.status ?? data?.status
+          const p = data?.data?.phoneNumber ?? data?.phoneNumber
+          const isSyncing = Boolean(data?.data?.syncing ?? data?.syncing ?? (s === 'syncing'))
+          if (s === 'syncing') {
+            s = 'connected'
+          }
+          onStatus?.(s, p, { syncing: isSyncing })
+          const nestedQr = data?.data?.qrcode ?? data?.data?.qr ?? data?.qrcode
+          if ((s === 'qr' || s === 'connecting') && nestedQr) {
+            onQr?.(nestedQr)
+          }
+          break
+        }
         case 'error':
-          onError?.(data.data.message)
+          onError?.(data?.data?.message ?? data?.message)
           break
         case 'pairing_code':
-          onPairingCode?.(data.data.code)
+          onPairingCode?.(data?.data?.code ?? data?.code)
           break
         case 'pairing_code_error':
-          onPairingCodeError?.(data.data.message)
+          onPairingCodeError?.(data?.data?.message ?? data?.message)
           break
       }
     } catch {
@@ -161,15 +202,17 @@ export function listenForUpdates(businessId, { onQr, onStatus, onError, onPairin
   }
 
   ws.onclose = (event) => {
-    console.log(`[WS] CLOSED code=${event.code} reason=${event.reason || 'none'}`)
-    // 1000 = normal closure, 1001 = going away, 1005 = no status received (browser internal)
-    if (event.code !== 1000 && event.code !== 1001 && event.code !== 1005) {
-      onError?.(`Koneksi WebSocket terputus (code: ${event.code})`)
+    if (activeWebSockets.get(businessId) === ws) {
+      activeWebSockets.delete(businessId)
     }
+    console.log(`[WS] CLOSED code=${event.code} reason=${event.reason || 'none'}`)
+    onWsStateChange?.('disconnected', event.code)
+    // Transport closure must NOT mutate WhatsApp session state or broadcast false error.
   }
 
   ws.onerror = () => {
     // WebSocket connection failed - connector may not be running
+    onWsStateChange?.('error')
   }
 
   return ws

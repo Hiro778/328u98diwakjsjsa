@@ -24,21 +24,26 @@ export function getPlanDisplay(plan) {
   return PLAN_CONFIG[plan] || PLAN_CONFIG[PLANS.FREE]
 }
 
+export const TOOL_AVAILABILITY = {
+  LIVE: 'LIVE',
+  COMING_SOON: 'COMING_SOON',
+}
+
 export const CATEGORIES = {
   finance: {
     id: 'finance',
     title: 'Keuangan',
     color: '#F5A623',
     tools: [
-      { name: 'HPP Calculator', path: '/dashboard/keuangan/hpp-calculator' },
-      { name: 'Margin Analysis', path: '/dashboard/keuangan/margin-analysis' },
-      { name: 'BEP Calculator', path: '/dashboard/keuangan/bep-calculator' },
-      { name: 'Cash Flow Forecast', path: '/dashboard/keuangan/cash-flow-forecast' },
-      { name: 'Tax Planning', path: '/dashboard/keuangan/tax-planning' },
-      { name: 'Financial Reports', path: '/dashboard/keuangan/financial-reports' },
-      { name: 'Anomaly Detection', path: '/dashboard/keuangan/anomaly-detection' },
-      { name: 'Financial Health Score', path: '/dashboard/keuangan/financial-health-score' },
-      { name: 'Loan Simulation', path: '/dashboard/keuangan/loan-simulation' },
+      { name: 'HPP Calculator', path: '/dashboard/keuangan/hpp-calculator', requiresPro: false, isFree: true, availability: 'LIVE' },
+      { name: 'Margin Analysis', path: '/dashboard/keuangan/margin-analysis', requiresPro: true, availability: 'LIVE' },
+      { name: 'BEP Calculator', path: '/dashboard/keuangan/bep-calculator', requiresPro: false, isFree: true, availability: 'LIVE' },
+      { name: 'Cash Flow Forecast', path: '/dashboard/keuangan/cash-flow-forecast', requiresPro: true, availability: 'LIVE' },
+      { name: 'Tax Planning', path: '/dashboard/keuangan/tax-planning', requiresPro: true, availability: 'LIVE' },
+      { name: 'Financial Reports', path: '/dashboard/keuangan/financial-reports', requiresPro: true, availability: 'LIVE' },
+      { name: 'Anomaly Detection', path: '/dashboard/keuangan/anomaly-detection', requiresPro: true, availability: 'LIVE' },
+      { name: 'Financial Health Score', path: '/dashboard/keuangan/financial-health-score', requiresPro: true, availability: 'LIVE' },
+      { name: 'Loan Simulation', path: '/dashboard/keuangan/loan-simulation', requiresPro: true, availability: 'LIVE' },
     ],
   },
   operations: {
@@ -48,11 +53,10 @@ export const CATEGORIES = {
     tools: [
       { name: 'QR Menu & Pesanan', path: '/dashboard/pos/qr-menu' },
       { name: 'POS / Kasir', path: '/dashboard/pos' },
-      { name: 'Marketplace Integration', path: '/dashboard/operasional/marketplace', status: 'needs_connection' },
       { name: 'Inventory Management', path: '/dashboard/operasional/inventory' },
       { name: 'Supplier Database', path: '/dashboard/operasional/suppliers' },
       { name: 'Production Capacity Planner', path: '/dashboard/operasional/production-capacity' },
-      { name: 'WhatsApp Operasional', path: '/dashboard/operasional/whatsapp' },
+      { name: 'Excel Penjualan Otomatis', path: '/dashboard/operasional/excel-penjualan' },
     ],
   },
   sales: {
@@ -72,11 +76,12 @@ export const CATEGORIES = {
     color: '#818CF8',
     tools: [
       { name: 'AI Creative Studio', path: '/dashboard/marketing/content-generator' },
+      { name: 'AI Video Generator', availability: 'COMING_SOON', status: 'coming_soon' },
       { name: 'Competitor Analysis', path: '/dashboard/marketing/competitor-analysis' },
-      { name: 'Google Business Profile', path: '/dashboard/marketing/google-business-profile' },
-      { name: 'SEO Optimizer' },
-      { name: 'Content Calendar' },
-      { name: 'A/B Testing' },
+      { name: 'Ads', path: '/dashboard/marketing/ads' },
+      { name: 'SEO Optimizer', path: '/dashboard/marketing/seo-optimizer' },
+      { name: 'Content Calendar', path: '/dashboard/marketing/content-calendar' },
+      { name: 'A/B Testing', path: '/dashboard/marketing/ab-testing' },
     ],
   },
   legal: {
@@ -84,7 +89,8 @@ export const CATEGORIES = {
     title: 'Legal & Compliance',
     color: '#10B981',
     tools: [
-      { name: 'Legalitas Checker', path: '/dashboard/legalitas' },
+      { name: 'Legalitas Checker', path: '/dashboard/legalitas', availability: 'LIVE' },
+      { name: 'Logo Analyzer', path: '/dashboard/legalitas?tab=logo', availability: 'COMING_SOON', status: 'coming_soon' },
     ],
   },
   export: {
@@ -92,15 +98,15 @@ export const CATEGORIES = {
     title: 'Kurs & Valuta Asing',
     color: '#6366F1',
     tools: [
-      { name: 'Currency Risk Calculator' },
-      { name: 'HS Code Lookup' },
-      { name: 'Import Duty Estimator' },
-      { name: 'Buyer Matching' },
-      { name: 'Incoterms Guide' },
-      { name: 'Export Documents' },
-      { name: 'Certification Guide' },
-      { name: 'Freight Estimator' },
-      { name: 'Localization Tool' },
+      { name: 'Currency Risk Calculator', availability: 'COMING_SOON', status: 'coming_soon' },
+      { name: 'HS Code Lookup', availability: 'COMING_SOON', status: 'coming_soon' },
+      { name: 'Import Duty Estimator', availability: 'COMING_SOON', status: 'coming_soon' },
+      { name: 'Buyer Matching', availability: 'COMING_SOON', status: 'coming_soon' },
+      { name: 'Incoterms Guide', availability: 'COMING_SOON', status: 'coming_soon' },
+      { name: 'Export Documents', availability: 'COMING_SOON', status: 'coming_soon' },
+      { name: 'Certification Guide', availability: 'COMING_SOON', status: 'coming_soon' },
+      { name: 'Freight Estimator', availability: 'COMING_SOON', status: 'coming_soon' },
+      { name: 'Localization Tool', availability: 'COMING_SOON', status: 'coming_soon' },
     ],
   },
   analytics: {
@@ -128,3 +134,12 @@ export const SIDEBAR_NAV = [
 ]
 
 export const TOTAL_TOOLS = Object.values(CATEGORIES).reduce((sum, c) => sum + c.tools.length, 0)
+
+export function isToolAvailable(tool) {
+  return tool.availability !== TOOL_AVAILABILITY.COMING_SOON && tool.status !== 'coming_soon'
+}
+
+export const TOTAL_AVAILABLE_TOOLS = Object.values(CATEGORIES).reduce(
+  (sum, c) => sum + c.tools.filter(isToolAvailable).length,
+  0
+)

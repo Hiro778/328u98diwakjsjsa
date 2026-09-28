@@ -7,6 +7,7 @@ import {
   calculateOutstanding,
   getToday,
 } from './invoiceFollowUpUtils'
+import DateInput from '../../components/DateInput'
 
 export default function PaymentForm({ show, onClose, onSave, invoice }) {
   const [form, setForm] = useState({
@@ -135,8 +136,7 @@ export default function PaymentForm({ show, onClose, onSave, invoice }) {
                 <label className="text-xs font-medium text-text-muted">
                   Tanggal Pembayaran <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="date"
+                <DateInput
                   value={form.payment_date}
                   onChange={(e) => set('payment_date', e.target.value)}
                   className={`mt-1 w-full rounded-lg border bg-surface px-3 py-2.5 text-sm text-navy-700 focus:outline-none focus:ring-1 focus:ring-warm-400/50 ${

@@ -6,6 +6,7 @@ import { formatCurrency } from '../../../lib/orderNumber'
 import { calculateHPP } from '../../../sections/HPPCalculator/calculateHPP'
 import HPPInputForm from '../../../sections/HPPCalculator/HPPInputForm'
 import HPPResults from '../../../sections/HPPCalculator/HPPResults'
+import BackButton from '../../../components/BackButton'
 
 const EMPTY_FORM = {
   productId: '',
@@ -427,6 +428,7 @@ export default function HPPCalculator() {
 
   return (
     <div>
+      <BackButton fallbackUrl="/dashboard/keuangan" label="Kembali" />
       {/* Header */}
       <div>
         <h1 className="text-2xl font-extrabold text-navy-700">HPP Calculator</h1>
@@ -603,6 +605,11 @@ export default function HPPCalculator() {
                   animate={{ opacity: 1, y: 0 }}
                   className="mt-4 rounded-2xl border border-warm-200 bg-warm-50 p-5"
                 >
+                  <BackButton
+                    fallbackUrl="/dashboard/keuangan/hpp-calculator"
+                    label="Kembali ke Kalkulator HPP"
+                    onClick={() => setDetailItem(null)}
+                  />
                   <div className="flex items-start justify-between">
                     <div>
                       <h3 className="text-sm font-bold text-navy-700">{detailItem.product_name}</h3>

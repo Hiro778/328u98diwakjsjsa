@@ -1,0 +1,233 @@
+g sudah PASS.
+
+JANGAN ubah UI Product Detail lagi.
+
+Sekarang fokus hanya pada checkout flow yang sebelumnya mengalami error:
+
+"new row violates row-level security policy for table orders"
+
+==================================================
+FLOW WAJIB
+==================================================
+
+Browser:
+
+/menu/:businessId
+→ klik product
+→ Product Detail
+→ pilih variant jika diperlukan
+→ quantity
+→ + Keranjang
+→ Lihat Pesanan
+→ Checkout
+→ Bayar di Kasir / flow existing
+
+==================================================
+1. ORDER CREATION
+==================================================
+
+Pastikan checkout benar-benar berhasil membuat:
+
+orders
+order_items
+
+bukan hanya mengubah localStorage/UI.
+
+Expected:
+- order berhasil dibuat
+- order_items berhasil dibuat
+- total benar
+- business_id benar
+- product_id benar
+- variant_details benar jika ada
+- quantity benar
+- harga berasal dari server/database.
+
+==================================================
+2. RLS ERROR
+==================================================
+
+Jika masih muncul:
+
+"new row violates row-level security policy for table orders"
+
+AUDIT root cause.
+
+JANGAN:
+- disable RLS
+- WITH CHECK (true)
+- USING (true)
+- service_role di browser
+- bypass authorization
+
+Gunakan desain public/anonymous checkout yang aman.
+
+Pastikan anonymous customer hanya dapat membuat order yang valid untuk business/menu yang sedang dibuka.
+
+==================================================
+3. PRICE INTEGRITY
+==================================================
+
+Client tidak boleh menentukan harga final sendiri.
+
+Test manipulasi request:
+
+Client mengirim:
+price = 1
+
+padahal database:
+Rp200.000
+
+Expected:
+server tetap menggunakan harga database.
+
+==================================================
+4. STOCK INTEGRITY
+==================================================
+
+Jika stock = 2:
+
+Qty 3
+→ reject.
+
+Jika variant stock = 0:
+→ reject.
+
+Jangan hanya mengandalkan frontend disabled state.
+
+==================================================
+5. TENANT ISOLATION
+==================================================
+
+Business A:
+public menu A
+
+Jangan sampai request checkout bisa dibuat dengan:
+
+business_id = Business B
+
+atau product_id Business B.
+
+Expected:
+DENIED.
+
+==================================================
+6. VARIANT SNAPSHOT
+==================================================
+
+Jika user membeli:
+
+Produk:
+Nasi Goreng
+
+Rasa:
+Balado
+
+Qty:
+2
+
+order_items harus menyimpan snapshot variant yang dipilih.
+
+Setelah order dibuat, perubahan variant product tidak boleh mengubah histori order lama.
+
+==================================================
+7. DISCOUNT
+==================================================
+
+Jika product:
+
+Normal:
+Rp50.000
+
+Discount:
+20%
+
+Checkout harus menggunakan:
+Rp40.000
+
+Jangan hanya menampilkan Rp40.000 di UI sementara order menyimpan Rp50.000.
+
+==================================================
+8. BROWSER TEST
+==================================================
+
+WAJIB lakukan actual browser test.
+
+Jangan hanya menjalankan:
+unit tests
+E2E script
+build
+
+Acceptance:
+
+[PASS]
+Public Menu
+→ Product Detail
+
+[PASS]
+Product Detail
+→ Add Cart
+
+[PASS]
+Cart
+→ Checkout
+
+[PASS]
+Checkout
+→ Order berhasil dibuat
+
+[PASS]
+order_items berhasil dibuat
+
+[PASS]
+Total benar
+
+[PASS]
+Variant snapshot benar
+
+[PASS]
+Discount benar
+
+[PASS]
+Stock validation
+
+[PASS]
+Tenant isolation
+
+==================================================
+9. DATABASE VERIFICATION
+==================================================
+
+Setelah checkout berhasil, verify record aktual:
+
+orders
+order_items
+
+Pastikan order yang baru dibuat memang ada di database.
+
+Jangan menghapus test order sebelum verification selesai.
+
+==================================================
+10. FINAL REPORT
+==================================================
+
+Report:
+
+ORDER CREATION: PASS/FAIL
+ORDER ITEMS: PASS/FAIL
+RLS: PASS/FAIL
+PRICE INTEGRITY: PASS/FAIL
+STOCK: PASS/FAIL
+VARIANT SNAPSHOT: PASS/FAIL
+DISCOUNT: PASS/FAIL
+TENANT ISOLATION: PASS/FAIL
+
+FILES CHANGED
+
+TEST RESULTS
+
+BROWSER E2E
+
+DATABASE VERIFICATION
+
+Jika checkout masih gagal, jangan claim commerce flow selesai.

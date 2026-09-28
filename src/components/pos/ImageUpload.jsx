@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png']
@@ -33,6 +33,11 @@ export default function ImageUpload({
   const [error, setError] = useState('')
   const [fileInfo, setFileInfo] = useState(null)
   const inputRef = useRef(null)
+
+  useEffect(() => {
+    setPreview(currentImage || '')
+    if (!currentImage) setFileInfo(null)
+  }, [currentImage])
 
   function validateFile(file) {
     if (!file) return 'Tidak ada file yang dipilih.'
