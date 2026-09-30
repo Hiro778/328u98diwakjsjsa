@@ -171,7 +171,7 @@ export default function TableManager() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 p-5"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 p-3 sm:p-5"
             onClick={() => setQrTable(null)}
           >
             <motion.div
@@ -179,7 +179,7 @@ export default function TableManager() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.97 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-xl"
+              className="w-full max-w-sm rounded-2xl border border-border bg-surface p-4 sm:p-6 shadow-xl"
             >
               <h2 className="text-lg font-bold text-navy-700">QR — {qrTable.name}</h2>
               <p className="mt-1 text-xs text-text-muted">

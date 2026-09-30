@@ -827,19 +827,19 @@ function ProductGridCard({
 
         {/* Harga & [ + ] CTA */}
         <div className="mt-3 flex items-center justify-between gap-1.5 pt-1 border-t border-black/5">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <span
               style={{ color: primaryColor }}
-              className="text-xs sm:text-sm font-extrabold tabular-nums"
+              className="text-xs sm:text-sm font-extrabold tabular-nums truncate block"
             >
               {formatCurrency(product.unit_price)}
             </span>
             {needsVariant && (
-              <p className="text-[10px] opacity-55 mt-0.5">Pilih varian</p>
+              <p className="text-[10px] opacity-55 mt-0.5 truncate">Pilih varian</p>
             )}
           </div>
 
-          {/* CTA +: minimum 40x40px touch target */}
+          {/* CTA +: touch target responsive for mobile grid */}
           <motion.button
             type="button"
             whileTap={{ scale: 0.9 }}
@@ -853,7 +853,7 @@ function ProductGridCard({
               }
             }}
             style={{ backgroundColor: buttonColor }}
-            className={`flex h-10 w-10 min-w-[40px] min-h-[40px] items-center justify-center text-white text-base font-bold shadow-xs hover:opacity-90 transition-all shrink-0 ${buttonRadius}`}
+            className={`flex h-9 w-9 sm:h-10 sm:w-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] items-center justify-center text-white text-base font-bold shadow-xs hover:opacity-90 transition-all shrink-0 ${buttonRadius}`}
             aria-label={`Tambah ${product.name}`}
           >
             +
@@ -884,10 +884,10 @@ function ProductListCard({
     <div
       style={{ backgroundColor: surfaceColor }}
       onClick={() => isInteractive && onSelectProduct(product)}
-      className="flex items-center gap-3 p-3 rounded-2xl border border-black/5 shadow-2xs hover:shadow-sm transition-all cursor-pointer group"
+      className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-2xl border border-black/5 shadow-2xs hover:shadow-sm transition-all cursor-pointer group"
     >
       {/* Thumbnail */}
-      <div className="relative h-18 w-18 shrink-0 overflow-hidden rounded-xl bg-black/3">
+      <div className="relative h-16 w-16 sm:h-18 sm:w-18 shrink-0 overflow-hidden rounded-xl bg-black/3">
         {imageUrl && !imgError ? (
           <img
             src={imageUrl}
@@ -920,11 +920,11 @@ function ProductListCard({
           {formatCurrency(product.unit_price)}
         </p>
         {needsVariant && (
-          <p className="text-[10px] opacity-55 mt-0.5">Pilih varian</p>
+          <p className="text-[10px] opacity-55 mt-0.5 truncate">Pilih varian</p>
         )}
       </div>
 
-      {/* "+" add button — minimum 40x40px touch target */}
+      {/* "+" add button — responsive touch target */}
       <motion.button
         type="button"
         whileTap={{ scale: 0.9 }}
@@ -938,7 +938,7 @@ function ProductListCard({
           }
         }}
         style={{ backgroundColor: buttonColor }}
-        className={`flex h-10 w-10 min-w-[40px] min-h-[40px] items-center justify-center text-white text-base font-bold shadow-xs hover:opacity-90 transition-all shrink-0 ${buttonRadius}`}
+        className={`flex h-9 w-9 sm:h-10 sm:w-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] items-center justify-center text-white text-base font-bold shadow-xs hover:opacity-90 transition-all shrink-0 ${buttonRadius}`}
         aria-label={`Tambah ${product.name}`}
       >
         +

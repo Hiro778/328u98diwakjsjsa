@@ -147,8 +147,8 @@ export default function QRGenerator({
       <div className="flex w-full items-center justify-center">
         <canvas
           ref={canvasRef}
-          className="block max-h-[55vh] max-w-full w-auto rounded-xl border border-border bg-white p-3"
-          style={{ maxWidth: 'min(70vw, 340px)', imageRendering: 'pixelated' }}
+          className="block max-h-[55vh] max-w-full w-auto rounded-xl border border-border bg-white p-2.5 sm:p-3"
+          style={{ maxWidth: 'min(70vw, 340px)', width: '100%', height: 'auto', aspectRatio: '1 / 1', imageRendering: 'pixelated' }}
         />
       </div>
 

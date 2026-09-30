@@ -23,6 +23,7 @@ import AdminBusinessesPage from './pages/admin/AdminBusinessesPage'
 import AdminBusinessDetailPage from './pages/admin/AdminBusinessDetailPage'
 import AdminSubscriptionsPage from './pages/admin/AdminSubscriptionsPage'
 import AdminSubscriptionDetailPage from './pages/admin/AdminSubscriptionDetailPage'
+import AdminActivationCodesPage from './pages/admin/AdminActivationCodesPage'
 import AdminAIUsagePage from './pages/admin/AdminAIUsagePage'
 import AdminSupportPage from './pages/admin/AdminSupportPage'
 import AdminSupportDetailPage from './pages/admin/AdminSupportDetailPage'
@@ -135,6 +136,7 @@ const router = createBrowserRouter([
               { path: 'businesses/:id', element: <AdminBusinessDetailPage /> },
               { path: 'subscriptions', element: <AdminSubscriptionsPage /> },
               { path: 'subscriptions/:id', element: <AdminSubscriptionDetailPage /> },
+              { path: 'activation-codes', element: <AdminActivationCodesPage /> },
               { path: 'ai-usage', element: <AdminAIUsagePage /> },
               { path: 'ai-usage/:userId', element: <AdminPlaceholderPage title="User AI Usage Detail" description="Rincian penggunaan model AI, breakdown tools, dan penyesuaian kredit atomik." stage="Tahap 6" /> },
               { path: 'support', element: <AdminSupportPage /> },

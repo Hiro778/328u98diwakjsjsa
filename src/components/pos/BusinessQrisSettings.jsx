@@ -225,7 +225,7 @@ export default function BusinessQrisSettings({ businessId, onToast }) {
       />
 
       {/* Header section */}
-      <div className="p-6 sm:p-8 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface-elevated/20">
+      <div className="p-4 sm:p-8 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface-elevated/20">
         <div>
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -351,10 +351,10 @@ export default function BusinessQrisSettings({ businessId, onToast }) {
           </div>
         ) : (
           /* Has QRIS: Preview and Actions */
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 bg-surface-elevated/40 rounded-2xl border border-border p-6 sm:p-8">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6 bg-surface-elevated/40 rounded-2xl border border-border p-4 sm:p-8">
             {/* QR Image Preview Card */}
             <div className="relative group shrink-0">
-              <div className="flex h-52 w-52 sm:h-56 sm:w-56 items-center justify-center rounded-2xl bg-white p-3 shadow-md border border-border/80 overflow-hidden">
+              <div className="flex h-48 w-48 sm:h-56 sm:w-56 max-w-full items-center justify-center rounded-2xl bg-white p-3 shadow-md border border-border/80 overflow-hidden">
                 {loadingPreview ? (
                   <div className="flex flex-col items-center justify-center text-zinc-500">
                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent mb-2" />
@@ -394,7 +394,7 @@ export default function BusinessQrisSettings({ businessId, onToast }) {
                   </p>
                 </div>
 
-                <div className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-1.5 text-xs font-semibold">
+                <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-border bg-surface px-3 py-1.5 text-xs font-semibold">
                   <span className="text-text-muted">Status:</span>
                   {isEnabled ? (
                     <span className="text-emerald-500 font-bold flex items-center gap-1.5">

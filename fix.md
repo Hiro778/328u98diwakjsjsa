@@ -1,42 +1,107 @@
-Bereskan GitHub Push Protection di project ini.
+MOBILE RESPONSIVE FIX ONLY — DO NOT CHANGE DESKTOP UI
 
-Konteks:
-- Commit lokal saat ini: 566fdff
-- GitHub menolak push karena mendeteksi secret:
-  1. Supabase Secret Key di debug_image_audit.mjs:15
-  2. Groq API Key di bot/config.js:283
-- debug_image_audit.mjs sudah di-git rm --cached karena hanya script debug lokal.
-- bot Telegram tetap digunakan dan HARUS tetap berfungsi.
-- bot/config.js JANGAN dihapus.
-- Bot akan dijalankan di Vercel.
+Context:
+Desktop BisnisSehat saat ini sudah terlihat bagus.
+Mobile pada viewport sekitar 390px masih banyak masalah:
+- horizontal overflow
+- beberapa content terpotong
+- pricing cards terlalu desktop-oriented
+- QR Menu / Simulator masih terasa fixed-width
+- notification dropdown terlalu lebar
+- beberapa teks terlalu low-contrast
+- spacing/header belum optimal untuk mobile
 
-Tugas:
-1. Audit perubahan Git saat ini sebelum melakukan commit/push.
-2. Pastikan debug_image_audit.mjs tidak masuk commit.
-3. Ubah seluruh API key hardcoded yang memang digunakan bot menjadi environment variables dengan process.env.
-   Contoh:
-   groq: process.env.GROQ_API_KEY || ""
-   Pertahankan struktur APIkey dan seluruh pemanggilan config.APIkey.* agar kompatibel.
-4. Jangan mengubah behavior bot selain sumber credential.
-5. Pastikan .env, .env.local, credential lokal, dan secret lain tidak masuk Git.
-6. Buat/update .env.example hanya dengan nama variable, tanpa nilai secret.
-7. Audit repository untuk pola secret seperti:
-   gsk_, sb_secret_, service_role, Google API key, dan credential API lainnya.
-8. Jangan menampilkan nilai secret di output/report.
-9. Jangan menghapus bot Telegram atau fitur bot.
-10. Jangan menggunakan GitHub "unblock secret".
-11. Setelah aman, buat commit baru yang menggantikan commit lokal sebelumnya.
-12. Push ke origin main.
-13. Setelah push, lakukan:
-    git fetch origin
-    git rev-list --left-right --count origin/main...main
-14. Target akhir harus:
-    0 0
-15. Verifikasi bahwa origin/main menunjuk ke commit terbaru.
+IMPORTANT SCOPE LOCK:
+- Fokus ONLY viewport mobile.
+- Jangan redesign desktop.
+- Jangan mengubah business logic.
+- Jangan mengubah Supabase/RLS/RPC/API.
+- Jangan mengubah QRIS/payment/order logic.
+- Jangan mengubah Admin RBAC.
+- Jangan mengubah desktop visual hierarchy.
+- Jangan mengganti design system secara global.
+- Jangan melakukan refactor besar.
 
-PENTING:
-- Jangan melakukan perubahan di luar kebutuhan secret cleanup dan Git push.
-- Jangan reset atau menghapus source code bot.
-- Jangan commit API key asli.
-- Jika menemukan secret lain yang belum bisa dipindahkan dengan aman, STOP sebelum push dan laporkan nama file + nomor baris tanpa menampilkan nilai secret.
-- Jangan menganggap "Everything up-to-date" sebagai bukti berhasil. Verifikasi dengan rev-list.
+TARGET:
+Mobile widths:
+- 360px
+- 390px
+- 412px
+Desktop regression:
+- 1280px
+- 1440px
+
+TASK:
+
+1. Audit global responsive CSS/layout:
+   - fixed width
+   - min-width
+   - width > viewport
+   - fixed positioning
+   - absolute positioning
+   - overflow-x
+   - grid columns
+   - flex rows
+   - large desktop paddings
+   - hardcoded card widths
+
+2. Fix horizontal overflow FIRST.
+   Mobile page must not require horizontal scrolling.
+
+3. Fix mobile app header:
+   - hamburger stays accessible
+   - logo/title fits
+   - notification/profile controls don't overflow
+   - preserve existing desktop header.
+
+4. Fix pricing/top-up cards:
+   - mobile width: calc(100vw - 32px) or equivalent container width
+   - internal padding responsive
+   - buttons full-width where appropriate
+   - text remains readable
+   - preserve desktop appearance.
+
+5. Fix notification dropdown:
+   - mobile width must fit viewport
+   - use approximately calc(100vw - 32px)
+   - max-width for larger screens
+   - prevent clipping/overflow
+   - preserve desktop dropdown.
+
+6. Fix QR Menu / Simulator:
+   - mobile preview must fit 360/390/412px viewport
+   - no horizontal overflow
+   - simulator controls wrap appropriately
+   - preview/canvas scales to available width
+   - QR remains readable
+   - product cards fit inside preview
+   - desktop simulator remains unchanged.
+
+7. Fix mobile typography/readability:
+   - identify text that becomes too dark/low contrast
+   - preserve existing color system
+   - do NOT randomly change all colors.
+
+8. Use CSS media queries/container queries where appropriate instead of JS viewport hacks.
+
+9. Add/extend responsive regression tests if the project already has them.
+   At minimum verify:
+   - no obvious fixed-width overflow at 360px
+   - pricing card width
+   - notification panel width
+   - simulator width
+   - mobile header layout.
+
+10. Run:
+   npm run build
+
+11. If possible run the existing test suite relevant to affected components.
+
+12. Final report:
+   - exact files changed
+   - exact mobile problems fixed
+   - desktop behavior preserved
+   - test results
+   - build result
+
+STOP after this task.

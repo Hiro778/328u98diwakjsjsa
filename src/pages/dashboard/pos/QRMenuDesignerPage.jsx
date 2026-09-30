@@ -603,8 +603,8 @@ export default function QRMenuDesignerPage() {
     <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden bg-background">
       {/* Top Navigation Bar */}
       <header className="shrink-0 flex items-center justify-between gap-2 border-b border-border bg-surface px-3 py-2.5 sm:px-4 sm:py-3 shadow-2xs">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <BackButton fallbackUrl="/dashboard/pos/qr-menu" label="Kembali" />
+        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+          <BackButton fallbackUrl="/dashboard/pos/qr-menu" label="Kembali" className="!mb-0 shrink-0" />
           <div className="min-w-0">
             <h1 className="text-sm sm:text-base font-extrabold text-navy-700 leading-tight truncate">
               QR Menu Designer
@@ -788,7 +788,7 @@ export default function QRMenuDesignerPage() {
         {/* ── CENTER PANEL: LIVE SIMULATOR CANVAS ── */}
         <main className={`w-full flex-1 bg-cream/60 flex-col overflow-hidden ${mobileTab === 'preview' ? 'flex' : 'hidden lg:flex'}`}>
           {/* Device Size Switcher Bar */}
-          <div className="shrink-0 flex items-center justify-center gap-1.5 sm:gap-2 py-2 px-2 border-b border-border/60 bg-surface/50 overflow-x-auto">
+          <div className="shrink-0 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 py-2 px-2 border-b border-border/60 bg-surface/50">
             <button
               type="button"
               onClick={() => setDeviceMode('mobile')}
@@ -838,23 +838,23 @@ export default function QRMenuDesignerPage() {
           {/* Simulator Viewport Container */}
           <div className="flex-1 overflow-y-auto p-2 sm:p-4 flex items-start justify-center">
             <div
-              className={`transition-all duration-300 relative ${
+              className={`transition-all duration-300 relative w-full ${
                 deviceMode === 'mobile'
-                  ? 'w-full max-w-[390px] rounded-3xl sm:rounded-[36px] shadow-2xl border-4 sm:border-8 border-slate-800 bg-white overflow-hidden my-auto'
+                  ? 'max-w-[390px] rounded-3xl sm:rounded-[36px] shadow-2xl border-4 sm:border-8 border-slate-800 bg-white overflow-hidden my-auto'
                   : deviceMode === 'tablet'
-                  ? 'w-full max-w-[640px] rounded-2xl sm:rounded-3xl shadow-2xl border-4 sm:border-8 border-slate-800 bg-white overflow-hidden my-auto'
-                  : 'w-full max-w-3xl rounded-2xl shadow-lg border border-border bg-white overflow-hidden'
+                  ? 'max-w-[640px] rounded-2xl sm:rounded-3xl shadow-2xl border-4 sm:border-8 border-slate-800 bg-white overflow-hidden my-auto'
+                  : 'max-w-3xl rounded-2xl shadow-lg border border-border bg-white overflow-hidden'
               }`}
             >
               {/* Phone Speaker Notch for Mobile */}
               {deviceMode === 'mobile' && (
-                <div className="absolute top-0 inset-x-0 h-4 bg-slate-800 z-50 flex items-center justify-center">
+                <div className="absolute top-0 inset-x-0 h-4 bg-slate-800 z-50 flex items-center justify-center pointer-events-none">
                   <div className="h-1.5 w-16 bg-slate-600 rounded-full" />
                 </div>
               )}
 
               {/* Shared Renderer in Simulator */}
-              <div className="max-h-[760px] overflow-y-auto">
+              <div className="max-h-[calc(100vh-210px)] sm:max-h-[760px] overflow-y-auto pt-3 sm:pt-0">
                 <PublicMenuRenderer
                   business={business}
                   products={products}

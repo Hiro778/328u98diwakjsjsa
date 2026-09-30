@@ -187,7 +187,7 @@ export default function QRMenuPublishedPage() {
           exit={{ opacity: 0, height: 0 }}
           className="mt-4 overflow-hidden rounded-2xl border border-border bg-surface"
         >
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {/* Size Selection */}
             <div className="mb-5">
               <p className="text-xs font-semibold text-navy-700 mb-2">Ukuran Cetak</p>
