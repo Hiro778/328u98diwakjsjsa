@@ -45,21 +45,53 @@ export async function redeemActivationCode(code) {
 }
 
 /**
- * Admin: Generate a new PRO activation code with 128-bit CSPRNG entropy.
+ * Admin: Generate a new PRO activation code bound to recipient email with 128-bit CSPRNG entropy.
  * Plaintext code is returned ONLY once in this response and NEVER saved in plaintext in the database.
  *
+ * @param {string} targetEmail Recipient email address (required)
  * @param {number} [durationDays=30]
  * @param {object} [metadata={}]
- * @returns {Promise<{ success: boolean, id: string, code: string, plan: string, duration_days: number, created_at: string }>}
+ * @returns {Promise<{ success: boolean, id: string, code: string, target_email: string, plan: string, duration_days: number, created_at: string }>}
  */
-export async function adminGenerateActivationCode(durationDays = 30, metadata = {}) {
+export async function adminGenerateActivationCode(targetEmail, durationDays = 30, metadata = {}) {
+  if (!targetEmail || typeof targetEmail !== 'string' || !targetEmail.trim()) {
+    throw new Error('Email penerima wajib diisi.')
+  }
+
+  const cleanEmail = targetEmail.trim().toLowerCase()
+
   const { data, error } = await supabase.rpc('admin_generate_pro_activation_code', {
+    p_target_email: cleanEmail,
     p_duration_days: durationDays,
     p_metadata: metadata,
   })
 
   if (error) {
     throw new Error(error.message || 'Gagal membuat kode aktivasi PRO')
+  }
+
+  return data
+}
+
+/**
+ * Admin: Revoke an unused PRO activation code.
+ *
+ * @param {string} codeId UUID of activation code record
+ * @param {string} [reason='Dicabut oleh admin']
+ * @returns {Promise<{ success: boolean, message: string }>}
+ */
+export async function adminRevokeActivationCode(codeId, reason = 'Dicabut oleh admin') {
+  if (!codeId) {
+    throw new Error('ID kode aktivasi wajib diisi.')
+  }
+
+  const { data, error } = await supabase.rpc('admin_revoke_pro_activation_code', {
+    p_code_id: codeId,
+    p_reason: reason || 'Dicabut oleh admin',
+  })
+
+  if (error) {
+    throw new Error(error.message || 'Gagal mencabut kode aktivasi PRO')
   }
 
   return data

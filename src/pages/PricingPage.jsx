@@ -395,7 +395,9 @@ export default function PricingPage() {
                             <span>Memvalidasi Kode...</span>
                           </>
                         ) : hasActiveSubscription ? (
-                          'Perpanjang Masa Aktif PRO'
+                          'Perpanjang Pro'
+                        ) : hasCancelledSubscription ? (
+                          'Berlangganan Pro Kembali'
                         ) : (
                           'Aktivasi PRO Sekarang'
                         )}
@@ -489,7 +491,7 @@ export default function PricingPage() {
                   disabled={cancelling}
                   className="rounded-xl border border-border bg-surface hover:bg-surface-hover px-4 py-2.5 text-xs font-semibold text-text-primary transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  Kembali
+                  Batal, Tetap Berlangganan
                 </button>
                 <button
                   type="button"
@@ -503,7 +505,7 @@ export default function PricingPage() {
                       <span>Memproses...</span>
                     </>
                   ) : (
-                    'Ya, Hentikan Langganan'
+                    'Ya, Hentikan Pro'
                   )}
                 </button>
               </div>

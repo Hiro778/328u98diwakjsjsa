@@ -96,9 +96,14 @@ export default function ActivationQrModal({ codeData, onClose }) {
           <h2 id="activation-modal-title" className="text-xl font-bold tracking-tight">
             Kode Aktivasi PRO Berhasil Dibuat
           </h2>
-          <p className="text-emerald-100 text-xs mt-1">
-            Masa Aktif: {codeData?.duration_days || 30} Hari
-          </p>
+          <div className="mt-2 space-y-0.5 text-emerald-100 text-xs">
+            <p>
+              Untuk: <span className="font-semibold text-white font-mono">{codeData?.target_email || '-'}</span>
+            </p>
+            <p>
+              Durasi: <span className="font-semibold text-white">{codeData?.duration_days || 30} Hari</span>
+            </p>
+          </div>
         </div>
 
         {/* Security Warning Banner */}
@@ -107,9 +112,10 @@ export default function ActivationQrModal({ codeData, onClose }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           <div>
-            <span className="font-bold">PERINGATAN KEAMANAN:</span> Kode plaintext dan QR ini{' '}
-            <strong className="underline">hanya dapat dilihat SEKALI</strong>. Setelah modal ini ditutup,
-            database hanya menyimpan hash dan tidak dapat menampilkan kembali kode asli.
+            <span className="font-bold">PERINGATAN KEAMANAN:</span> Kode aktivasi hanya ditampilkan sekali. Simpan atau kirimkan kode ini kepada penerima.
+            <div className="text-[11px] text-amber-800 mt-0.5">
+              Setelah modal ditutup, database hanya menyimpan hash SHA-256 dan kode asli tidak dapat dimunculkan kembali.
+            </div>
           </div>
         </div>
 

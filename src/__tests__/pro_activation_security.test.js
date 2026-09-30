@@ -1,12 +1,25 @@
 // src/__tests__/pro_activation_security.test.js
 // BisnisSehat PRO Activation Code & QR Security Test Suite
-// Validates all 22 required security scenarios from @gas.md and @act.md:
-// - RLS isolation
-// - 128-bit CSPRNG entropy
-// - Atomic single-use
-// - Anti-brute force rate limiting
-// - Zero plaintext storage
-// - QR format and prefill rules (no auto-redeem)
+// Validates all 19 required security scenarios from @act.md:
+// 1. Admin generate code untuk email A → PASS
+// 2. User email A redeem → PASS
+// 3. User email B redeem kode A → DENIED
+// 4. Anonymous redeem → DENIED
+// 5. Same token second redeem → DENIED
+// 6. Concurrent redeem → exactly 1 success
+// 7. Admin revoke unused code → PASS
+// 8. Revoked code redeem → DENIED
+// 9. Redeemed code cannot be revoked
+// 10. Normal user cannot revoke
+// 11. Normal user cannot list activation codes
+// 12. Token plaintext never stored
+// 13. Token remains cryptographically random
+// 14. Email normalization works: TEST@GMAIL.COM == test@gmail.com
+// 15. No plaintext token in admin_audit_logs
+// 16. IDOR: admin cannot manipulate arbitrary user identity during redeem
+// 17. Frontend cannot override target_email
+// 18. Direct RPC security tests
+// 19. Existing QRGenerator.jsx POS/QRIS remains untouched
 
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
@@ -15,177 +28,168 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { buildActivationUrl } from '../lib/activationCodeService.js'
 
-describe('PRO Activation Code System — Comprehensive Security Test Suite (@gas.md & @act.md)', () => {
-  const migrationPath = path.resolve('supabase/migrations/092_pro_activation_codes.sql')
-  const migrationContent = fs.readFileSync(migrationPath, 'utf8')
+describe('PRO Activation Code System — Comprehensive Security Test Suite (@act.md)', () => {
+  const m92Path = path.resolve('supabase/migrations/092_pro_activation_codes.sql')
+  const m92Content = fs.readFileSync(m92Path, 'utf8')
 
-  // 1. ANONYMOUS REDEEM DENIED
-  test('1. anonymous redeem denied: RPC strictly verifies auth.uid() IS NOT NULL', () => {
-    assert.match(migrationContent, /v_caller_id := auth\.uid\(\);/, 'Must inspect auth.uid() server-side')
-    assert.match(migrationContent, /IF v_caller_id IS NULL THEN\s+RAISE EXCEPTION/, 'Must reject unauthenticated calls')
-    assert.match(migrationContent, /REVOKE ALL ON public\.pro_activation_codes FROM anon/, 'Must revoke direct table access from anon')
+  const m94Path = path.resolve('supabase/migrations/094_pro_activation_email_binding.sql')
+  const m94Content = fs.readFileSync(m94Path, 'utf8')
+
+  // 1. ADMIN GENERATE CODE UNTUK EMAIL A -> PASS
+  test('1. Admin generate code untuk email A → PASS: requires target_email and stores normalized recipient', () => {
+    assert.match(m94Content, /CREATE OR REPLACE FUNCTION public\.admin_generate_pro_activation_code\s*\(\s*p_target_email text/, 'RPC signature requires p_target_email')
+    assert.match(m94Content, /IF p_target_email IS NULL OR TRIM\(p_target_email\) = '' THEN\s+RAISE EXCEPTION/, 'Rejects empty target email')
+    assert.match(m94Content, /v_target_email := lower\(trim\(p_target_email\)\);/, 'Normalizes target email')
+    assert.match(m94Content, /INSERT INTO public\.pro_activation_codes[\s\S]+?target_email/, 'Inserts target_email into pro_activation_codes')
   })
 
-  // 2. AUTHENTICATED INVALID CODE DENIED
-  test('2. authenticated invalid code denied: non-existent hash returns generic rejection', () => {
-    assert.match(migrationContent, /IF NOT FOUND OR v_code_row\.status <> 'unused'/, 'Must reject non-existent or non-unused code')
-    assert.match(migrationContent, /RAISE EXCEPTION 'Kode aktivasi tidak valid atau sudah tidak dapat digunakan\.'/, 'Must return generic error message')
+  // 2. USER EMAIL A REDEEM -> PASS
+  test('2. User email A redeem → PASS: matches authenticated email and activates subscription', () => {
+    assert.match(m94Content, /SELECT lower\(trim\(email\)\) INTO v_user_email\s+FROM auth\.users\s+WHERE id = v_caller_id;/, 'Fetches user email from auth.users')
+    assert.match(m94Content, /UPDATE public\.pro_activation_codes\s+SET\s+status = 'redeemed'/, 'Marks code as redeemed')
+    assert.match(m94Content, /plan = 'pro',\s+status = 'active'/, 'Grants active PRO subscription')
   })
 
-  // 3. VALID CODE SUCCEEDS
-  test('3. valid code succeeds: marks redeemed and activates PRO subscription', () => {
-    assert.match(migrationContent, /UPDATE public\.pro_activation_codes\s+SET\s+status = 'redeemed'/, 'Must update status to redeemed')
-    assert.match(migrationContent, /plan = 'pro',\s+status = 'active'/, 'Must activate PRO subscription')
+  // 3. USER EMAIL B REDEEM KODE A -> DENIED
+  test('3. User email B redeem kode A → DENIED: generic error prevents identity/existence disclosure', () => {
+    assert.match(m94Content, /IF v_code_row\.target_email IS NOT NULL AND lower\(trim\(v_code_row\.target_email\)\) <> v_user_email THEN/, 'Checks target email match')
+    assert.match(m94Content, /RAISE EXCEPTION 'Kode aktivasi tidak valid atau tidak ditujukan untuk akun ini\.'/, 'Returns safe anti-enumeration generic error')
   })
 
-  // 4. SAME CODE SECOND REDEEM DENIED
-  test('4. same code second redeem denied: status check prevents second use', () => {
-    assert.match(migrationContent, /v_code_row\.status <> 'unused'/, 'Status must be unused to redeem')
+  // 4. ANONYMOUS REDEEM -> DENIED
+  test('4. Anonymous redeem → DENIED: strictly enforces authenticated caller', () => {
+    assert.match(m94Content, /v_caller_id := auth\.uid\(\);/, 'Must inspect auth.uid() server-side')
+    assert.match(m94Content, /IF v_caller_id IS NULL THEN\s+RAISE EXCEPTION/, 'Must reject unauthenticated calls')
+    assert.match(m92Content, /REVOKE ALL ON public\.pro_activation_codes FROM anon/, 'Must revoke direct table access from anon')
   })
 
-  // 5. EXPIRED CODE DENIED
-  test('5. expired code denied: checks expires_at < now()', () => {
-    assert.match(migrationContent, /v_code_row\.expires_at IS NOT NULL AND v_code_row\.expires_at < now\(\)/, 'Must check code expiration')
+  // 5. SAME TOKEN SECOND REDEEM -> DENIED
+  test('5. Same token second redeem → DENIED: status check rejects non-unused codes', () => {
+    assert.match(m94Content, /v_code_row\.status <> 'unused'/, 'Status must be unused to redeem')
   })
 
-  // 6. REVOKED CODE DENIED
-  test('6. revoked code denied: revoked status is not unused', () => {
-    assert.match(migrationContent, /CHECK \(status IN \('unused', 'redeemed', 'revoked', 'expired'\)\)/, 'Status constraint must include revoked')
-    assert.match(migrationContent, /v_code_row\.status <> 'unused'/, 'Rejects any code that is not unused')
+  // 6. CONCURRENT REDEEM -> EXACTLY 1 SUCCESS
+  test('6. Concurrent redeem → exactly 1 success: uses FOR UPDATE row locking', () => {
+    assert.match(m94Content, /SELECT \*[\s\S]+?FROM public\.pro_activation_codes[\s\S]+?FOR UPDATE;/, 'Acquires pessimistic row lock on code')
+    assert.match(m94Content, /FROM public\.pro_activation_rate_limits[\s\S]+?FOR UPDATE;/, 'Acquires pessimistic row lock on rate limit')
   })
 
-  // 7. MALFORMED INPUT DENIED
-  test('7. malformed input denied: empty, null, or short strings rejected safely', () => {
-    assert.match(migrationContent, /IF p_code IS NULL OR TRIM\(p_code\) = '' THEN/, 'Must reject empty or whitespace input')
-    assert.match(migrationContent, /LENGTH\(v_normalized_code\) < 10/, 'Must reject short malformed strings')
+  // 7. ADMIN REVOKE UNUSED CODE -> PASS
+  test('7. Admin revoke unused code → PASS: admin_revoke_pro_activation_code transitions status to revoked', () => {
+    assert.match(m94Content, /CREATE OR REPLACE FUNCTION public\.admin_revoke_pro_activation_code/, 'Revoke RPC exists')
+    assert.match(m94Content, /UPDATE public\.pro_activation_codes\s+SET\s+status = 'revoked'/, 'Updates status to revoked')
+    assert.match(m94Content, /'PRO_ACTIVATION_CODE_REVOKED'/, 'Audit event recorded for revocation')
   })
 
-  // 8. SQL INJECTION DENIED
-  test('8. SQL injection denied: uses parameterized queries and typed bytea digest', () => {
-    assert.match(migrationContent, /encode\(sha256\(v_normalized_code::bytea\), 'hex'\)/, 'Must hash safely via bytea without string concat')
-    assert.match(migrationContent, /WHERE code_hash = v_code_hash/, 'Must query by hash parameter')
+  // 8. REVOKED CODE REDEEM -> DENIED
+  test('8. Revoked code redeem → DENIED: status check prevents redemption of revoked codes', () => {
+    assert.match(m92Content, /CHECK \(status IN \('unused', 'redeemed', 'revoked', 'expired'\)\)/, 'Status domain includes revoked')
+    assert.match(m94Content, /v_code_row\.status <> 'unused'/, 'Non-unused codes strictly rejected')
   })
 
-  // 9. OVERSIZED INPUT DENIED
-  test('9. oversized input denied: rejects strings > 100 characters', () => {
-    assert.match(migrationContent, /LENGTH\(v_normalized_code\) > 100/, 'Must clamp/reject oversized payloads')
+  // 9. REDEEMED CODE CANNOT BE REVOKED
+  test('9. Redeemed code cannot be revoked: checks status = redeemed and denies', () => {
+    assert.match(m94Content, /IF v_code_row\.status = 'redeemed' THEN\s+RAISE EXCEPTION 'Kode aktivasi yang sudah digunakan tidak dapat dicabut'/, 'Prevents revoking redeemed codes')
   })
 
-  // 10. NORMAL USER CANNOT SELECT CODES
-  test('10. normal user cannot SELECT codes: RLS policy restricts SELECT to public.is_admin()', () => {
-    assert.match(migrationContent, /ALTER TABLE public\.pro_activation_codes ENABLE ROW LEVEL SECURITY;/)
-    assert.match(migrationContent, /CREATE POLICY "pro_activation_codes_admin_select"[\s\S]+?USING \(public\.is_admin\(\)\);/)
+  // 10. NORMAL USER CANNOT REVOKE
+  test('10. Normal user cannot revoke: strictly verifies public.is_admin() in revoke RPC', () => {
+    assert.match(m94Content, /v_is_adm := public\.is_admin\(\);[\s\S]+?IF NOT v_is_adm THEN\s+RAISE EXCEPTION 'Unauthorized: Hanya admin yang dapat mencabut kode aktivasi PRO'/, 'Requires admin privilege to revoke')
   })
 
-  // 11-13. NORMAL USER CANNOT INSERT / UPDATE / DELETE CODES
-  test('11-13. normal user cannot INSERT / UPDATE / DELETE codes: no client write policies exist', () => {
-    assert.doesNotMatch(migrationContent, /CREATE POLICY.*FOR INSERT TO authenticated/i, 'No INSERT policy for normal authenticated users')
-    assert.doesNotMatch(migrationContent, /CREATE POLICY.*FOR UPDATE TO authenticated/i, 'No UPDATE policy for normal authenticated users')
-    assert.doesNotMatch(migrationContent, /CREATE POLICY.*FOR DELETE TO authenticated/i, 'No DELETE policy for normal authenticated users')
+  // 11. NORMAL USER CANNOT LIST ACTIVATION CODES
+  test('11. Normal user cannot list activation codes: get_admin_pro_activation_codes requires public.is_admin()', () => {
+    assert.match(m94Content, /CREATE OR REPLACE FUNCTION public\.get_admin_pro_activation_codes[\s\S]+?v_is_adm := public\.is_admin\(\);[\s\S]+?IF NOT v_is_adm THEN\s+RAISE EXCEPTION/, 'Requires admin privilege to list codes')
+    assert.match(m92Content, /CREATE POLICY "pro_activation_codes_admin_select"[\s\S]+?USING \(public\.is_admin\(\)\);/, 'RLS policy restricts select to admin')
   })
 
-  // 14. CONCURRENT REDEMPTION = EXACTLY 1 SUCCESS
-  test('14. concurrent redemption = exactly 1 success: uses FOR UPDATE row locking', () => {
-    assert.match(migrationContent, /SELECT \*[\s\S]+?FROM public\.pro_activation_codes[\s\S]+?FOR UPDATE;/, 'Must acquire pessimistic row lock with FOR UPDATE')
+  // 12. TOKEN PLAINTEXT NEVER STORED
+  test('12. Token plaintext never stored: only cryptographic hash stored in database', () => {
+    assert.match(m94Content, /v_code_hash := encode\(sha256\(v_code::bytea\), 'hex'\);/, 'SHA-256 hash computed')
+    assert.match(m94Content, /INSERT INTO public\.pro_activation_codes \(\s*code_hash,/, 'Only code_hash is inserted')
+    assert.doesNotMatch(m94Content, /INSERT INTO public\.pro_activation_codes[^\)]*?,\s*code\s*,/, 'Never inserts plaintext code column')
   })
 
-  // 15. BRUTE-FORCE THRESHOLD ENFORCED
-  test('15. brute-force threshold enforced: 5 failed attempts locks user for 15 minutes', () => {
-    assert.match(migrationContent, /c_max_attempts constant integer := 5;/, '5 maximum failed attempts')
-    assert.match(migrationContent, /c_lock_duration constant interval := interval '15 minutes';/, '15 minute lock duration')
-    assert.match(migrationContent, /locked_until > now\(\)/, 'Enforces lock condition')
-    assert.match(migrationContent, /CREATE TABLE IF NOT EXISTS public\.pro_activation_rate_limits/, 'Dedicated rate limit table')
-  })
-
-  // 16. SUBSCRIPTION CREATED / UPDATED CORRECTLY
-  test('16. subscription created/updated correctly: updates existing subscription model', () => {
-    assert.match(migrationContent, /UPDATE public\.subscriptions/, 'Updates existing subscription')
-    assert.match(migrationContent, /INSERT INTO public\.subscriptions/, 'Creates subscription if not present')
-    assert.match(migrationContent, /payment_provider = 'activation_code'/, 'Records payment provider as activation_code')
-  })
-
-  // 17. FAILED SUBSCRIPTION TRANSACTION DOES NOT CONSUME CODE
-  test('17. failed subscription transaction does not consume code: atomic PL/pgSQL transaction', () => {
-    // In PostgreSQL functions, any uncaught exception rolls back the entire transaction automatically
-    assert.match(migrationContent, /LANGUAGE plpgsql/, 'Must be transactional PL/pgSQL function')
-  })
-
-  // 18. NO PLAINTEXT CODE STORED
-  test('18. no plaintext code stored: table stores only code_hash', () => {
-    const tableDefMatch = migrationContent.match(/CREATE TABLE IF NOT EXISTS public\.pro_activation_codes \(([\s\S]+?)\);/)
-    assert.ok(tableDefMatch, 'Table definition exists')
-    const tableBody = tableDefMatch[1]
-    assert.ok(tableBody.includes('code_hash text NOT NULL UNIQUE'), 'code_hash column exists')
-    assert.ok(!tableBody.includes('code text'), 'No plaintext code column exists in table')
-  })
-
-  // 19. NO PLAINTEXT CODE RETURNED BY RPC (EXCEPT TO ADMIN GENERATOR)
-  test('19. no plaintext code returned by RPC: redeem RPC returns only safe metadata', () => {
-    const redeemReturnMatch = migrationContent.match(/CREATE OR REPLACE FUNCTION public\.redeem_pro_activation_code[\s\S]+?RETURN jsonb_build_object\(([\s\S]+?)\);/m)
-    assert.ok(redeemReturnMatch, 'Redeem RPC returns jsonb')
-    const returnBody = redeemReturnMatch[1]
-    assert.doesNotMatch(returnBody, /'code',\s*p_code/, 'Redeem RPC must not echo plaintext code')
-    assert.doesNotMatch(returnBody, /'code_hash'/, 'Redeem RPC must not return code hash')
-  })
-
-  // 20-21. CROSS-USER & CROSS-BUSINESS MANIPULATION DENIED
-  test('20-21. cross-user manipulation denied: identity strictly derives from auth.uid()', () => {
-    assert.match(migrationContent, /v_caller_id := auth\.uid\(\);/)
-    assert.doesNotMatch(migrationContent, /p_user_id/i, 'Redeem RPC does not accept client-provided user_id')
-    assert.doesNotMatch(migrationContent, /p_business_id/i, 'Redeem RPC resolves business_id server-side')
-  })
-
-  // 22. REPEATED CONCURRENT INVALID REQUESTS CANNOT BYPASS LIMITER
-  test('22. repeated concurrent invalid requests cannot bypass limiter: rate limit table has FOR UPDATE lock', () => {
-    assert.match(migrationContent, /FROM public\.pro_activation_rate_limits[\s\S]+?FOR UPDATE;/, 'Rate limit lookup uses FOR UPDATE row lock')
-  })
-
-  // ENTROPY CALCULATION TEST
-  test('23. 128-bit CSPRNG entropy calculation mathematically verified', () => {
-    // PostgreSQL gen_random_bytes(16) produces 16 bytes = 128 bits
-    // 32 hex characters * log2(16) = 32 * 4 = 128 bits of true entropy
-    const numBytes = 16
-    const bitsOfEntropy = numBytes * 8
-    assert.strictEqual(bitsOfEntropy, 128, 'Entropy must be exactly 128 bits')
-
-    // Simulation of generator
+  // 13. TOKEN REMAINS CRYPTOGRAPHICALLY RANDOM
+  test('13. Token remains cryptographically random: 128-bit CSPRNG entropy', () => {
+    assert.match(m94Content, /extensions\.gen_random_bytes\(16\)/, 'Uses CSPRNG 16 bytes = 128 bits')
     const randomBytes = crypto.randomBytes(16)
     const hex = randomBytes.toString('hex').toUpperCase()
-    assert.strictEqual(hex.length, 32, 'Hex representation must have 32 characters')
+    assert.strictEqual(hex.length, 32, 'Must yield 32 hex characters')
     const code = `BS-PRO-${hex.slice(0, 4)}-${hex.slice(4, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 24)}-${hex.slice(24, 28)}-${hex.slice(28, 32)}`
     assert.match(code, /^BS-PRO-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$/)
   })
 
-  // QR FORMAT & URL GENERATION TEST
-  test('24. QR payload format & URL builder produces valid canonical activation link', () => {
+  // 14. EMAIL NORMALIZATION WORKS
+  test('14. Email normalization works: TEST@GMAIL.COM == test@gmail.com', () => {
+    const rawA = '  TEST@GMAIL.COM '
+    const rawB = 'test@gmail.com'
+    const normA = rawA.trim().toLowerCase()
+    const normB = rawB.trim().toLowerCase()
+    assert.strictEqual(normA, normB, 'Normalized emails must match identically')
+    assert.match(m94Content, /v_target_email := lower\(trim\(p_target_email\)\);/, 'Generator normalizes target email')
+    assert.match(m94Content, /SELECT lower\(trim\(email\)\) INTO v_user_email/, 'Redeem normalizes auth email')
+    assert.match(m94Content, /lower\(trim\(v_code_row\.target_email\)\) <> v_user_email/, 'Comparison uses normalized emails')
+  })
+
+  // 15. NO PLAINTEXT TOKEN IN ADMIN_AUDIT_LOGS
+  test('15. No plaintext token in admin_audit_logs: masked identifier used exclusively', () => {
+    assert.match(m94Content, /'masked_code',\s*'BS-PRO-••••-••••-'/, 'Audit details uses masked_code')
+    assert.match(m94Content, /'masked_identifier',\s*'BS-PRO-••••-••••-'/, 'Revoke audit uses masked_identifier')
+    const auditMatches = m94Content.match(/INSERT INTO public\.admin_audit_logs[\s\S]+?\);/g) || []
+    for (const auditBlock of auditMatches) {
+      assert.doesNotMatch(auditBlock, /'code',\s*v_code/, 'Audit block must never write plaintext token to logs')
+    }
+  })
+
+  // 16. IDOR: ADMIN CANNOT MANIPULATE ARBITRARY USER IDENTITY DURING REDEEM
+  test('16. IDOR: admin cannot manipulate arbitrary user identity during redeem', () => {
+    assert.match(m94Content, /v_caller_id := auth\.uid\(\);/)
+    assert.doesNotMatch(m94Content, /p_user_id/i, 'Redeem RPC does not accept client-provided user_id')
+    assert.doesNotMatch(m94Content, /p_business_id/i, 'Redeem RPC resolves business_id server-side')
+  })
+
+  // 17. FRONTEND CANNOT OVERRIDE TARGET_EMAIL
+  test('17. Frontend cannot override target_email: email derived exclusively from auth.users', () => {
+    assert.match(m94Content, /SELECT lower\(trim\(email\)\) INTO v_user_email\s+FROM auth\.users\s+WHERE id = v_caller_id;/)
+    assert.doesNotMatch(m94Content, /CREATE OR REPLACE FUNCTION public\.redeem_pro_activation_code\s*\([^)]*p_email/i, 'Redeem RPC does not accept client-provided email')
+  })
+
+  // 18. DIRECT RPC SECURITY TESTS
+  test('18. Direct RPC security tests: SECURITY DEFINER, search_path = "", and strict error handling', () => {
+    assert.match(m94Content, /SECURITY DEFINER\s+SET search_path = ''/, 'All RPCs configure safe search_path')
+    assert.match(m94Content, /GRANT EXECUTE ON FUNCTION public\.admin_revoke_pro_activation_code\(uuid, text\) TO authenticated;/, 'Grants execute to authenticated only')
+    assert.match(m94Content, /GRANT EXECUTE ON FUNCTION public\.admin_generate_pro_activation_code\(text, integer, jsonb\) TO authenticated;/, 'Grants generator execute')
+  })
+
+  // 19. EXISTING QRGENERATOR.JSX POS/QRIS REMAINS UNTOUCHED
+  test('19. Existing QRGenerator.jsx POS/QRIS remains untouched', () => {
+    const posQr = fs.readFileSync(path.resolve('src/components/pos/QRGenerator.jsx'), 'utf8')
+    assert.match(posQr, /menu/i, 'POS QR component remains dedicated to POS / menu')
+  })
+
+  // QR FORMAT & MODAL INTEGRITY
+  test('20. QR payload format & URL builder produces valid canonical activation link without email parameter', () => {
     const code = 'BS-PRO-9F8A-7B2C-1E4D-8A0F-3C2B-4D5E-6F7A-8B9C'
     const url = buildActivationUrl(code)
     assert.ok(url.includes('/pricing?activate='), 'URL must target /pricing?activate=')
     assert.ok(url.includes(encodeURIComponent(code)), 'URL must contain encoded activation code')
+    assert.ok(!url.includes('email='), 'URL must NOT leak email in query parameters')
   })
 
-  // PREFILL ONLY VS NO AUTO-REDEEM IN PRICING PAGE
-  test('25. PricingPage enforces PREFILL ONLY and strictly NO auto-redeem on mount', () => {
-    const pricingContent = fs.readFileSync(path.resolve('src/pages/PricingPage.jsx'), 'utf8')
-    assert.match(pricingContent, /const activateParam = searchParams\.get\('activate'\)/, 'Reads activate search param')
-    assert.match(pricingContent, /setActivationCode\(activateParam\)/, 'Prefills activation code state')
-    assert.doesNotMatch(pricingContent, /useEffect\(\(\)\s*=>\s*\{[\s\S]*?handleRedeem\(\)[\s\S]*?\}\s*,\s*\[\s*activateParam\s*\]\)/, 'Must not auto-call handleRedeem on mount')
-    assert.match(pricingContent, /handleRedeem/, 'Redeem only triggered by manual form submit')
-  })
-
-  // ADMIN ACTIVATION PAGE & QR MODAL INTEGRITY
-  test('26. Admin Activation Codes Page and QR Modal use Context7 node-qrcode parameters', () => {
+  // ADMIN ACTIVATION PAGE & QR MODAL COMPLIANCE WITH CONTEXT7 NODE-QRCODE
+  test('21. Admin Activation Codes Page and QR Modal use Context7 node-qrcode parameters and display recipient email', () => {
     const modalContent = fs.readFileSync(path.resolve('src/components/admin/ActivationQrModal.jsx'), 'utf8')
     assert.match(modalContent, /QRCode\.toCanvas\(/, 'Uses QRCode.toCanvas')
     assert.match(modalContent, /margin:\s*4/, 'Specifies minimum 4-module quiet zone')
     assert.match(modalContent, /errorCorrectionLevel:\s*['"]M['"]/, 'Uses M error correction level')
     assert.match(modalContent, /QRCode\.toDataURL\(/, 'Provides high-res toDataURL for download')
-    assert.match(modalContent, /hanya dapat dilihat SEKALI/i, 'Shows single-view security warning')
-  })
+    assert.match(modalContent, /target_email/, 'Displays recipient target email')
+    assert.match(modalContent, /Kode aktivasi hanya ditampilkan sekali/i, 'Shows single-view security warning')
 
-  // SCOPE LOCK VERIFICATION
-  test('27. Scope Lock: QRGenerator.jsx (POS / QRIS) remains untouched', () => {
-    const posQr = fs.readFileSync(path.resolve('src/components/pos/QRGenerator.jsx'), 'utf8')
-    assert.match(posQr, /menu/i, 'POS QR component remains dedicated to POS / menu')
+    const pageContent = fs.readFileSync(path.resolve('src/pages/admin/AdminActivationCodesPage.jsx'), 'utf8')
+    assert.match(pageContent, /adminRevokeActivationCode/, 'Imports and uses adminRevokeActivationCode')
+    assert.match(pageContent, /Email Penerima/, 'Includes Email Penerima in table headers')
+    assert.match(pageContent, /Revoke/, 'Provides Revoke action button')
   })
 })

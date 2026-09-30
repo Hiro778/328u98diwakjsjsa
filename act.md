@@ -1,121 +1,390 @@
+IMPLEMENT ONLY — REDESIGN PRO ACTIVATION CODE OWNERSHIP
 
+Tujuan:
+Ubah sistem kode aktivasi PRO agar setiap kode terikat ke email penerima dan dapat direvoke dari Admin.
 
-▸ Thought for 3s, 634 tokens
-  Task 34 is executing the full test suite. Reviewing `act.md` again is needed to understand the current user request. Context7's query involved `qrcode`, and documentation was fetched from multiple sources...
+CURRENT STATE:
+- Existing public.pro_activation_codes
+- Existing pro_activation_rate_limits
+- Existing admin activation code page
+- Existing redeem_pro_activation_code()
+- Existing admin_generate_pro_activation_code()
+- Existing get_admin_pro_activation_codes()
+- Existing AdminActivationCodesPage.jsx
+- Existing ActivationQrModal.jsx
+- Existing admin RBAC / is_admin()
+- Migration 092_pro_activation_codes.sql sudah deployed ke production
 
-● ManageTask(status task-34) (ctrl+o to expand)
+JANGAN membuat sistem token baru yang tidak diperlukan.
+JANGAN membuat token deterministik berdasarkan email.
+JANGAN menggunakan email sebagai plaintext token.
+Token HARUS tetap cryptographically random.
 
-▸ Thought for 4s, 611 tokens
-  The request directs focus toward context7 and `act.md` for QR code generation using a specific package. Initial assessment suggests leveraging documentation fetched via context7, likely containing the targ...
+==================================================
+1. AUDIT EXISTING SCHEMA TERLEBIH DAHULU
+==================================================
 
-● ManageTask(status task-34)
-● ManageTask(status task-34)
-● ManageTask(status task-34) (ctrl+o to expand)
+Periksa schema public.pro_activation_codes.
 
-▸ Thought for 4s, 619 tokens
-  Live integration tests are progressing; this clears the path to focus on the `qrcode` component. Reviewing fetched documentation related to `qrcode`, particularly API signatures and rendering practices wit...
-  Berdasarkan referensi dokumentasi resmi melalui Context7 (/websites/deepwiki_soldair_node-qrcode) dan spesifikasi teknis pada act.md, berikut adalah rujukan teknis dokumentasi serta rancangan kelanjutan
-  implementasi QR untuk PRO Activation Code System:
-  ──────
-  ### 1. Referensi Dokumentasi Context7 (qrcode)
+Identifikasi:
+- code_hash
+- status
+- duration_days
+- redeemed_by
+- redeemed_at
+- created_by
+- metadata
+- created_at
+- expires_at jika ada
 
-  Berdasarkan hasil penelusuran via Context7 untuk package qrcode (versi terpasang ^1.5.4 di package.json):
+Jangan membuat tabel duplikat.
 
-  #### A. Metode API Browser
+Jika perlu field target email, gunakan migration baru dengan nama:
+093_pro_activation_email_binding.sql
 
-  Package qrcode menyediakan fungsi inti untuk lingkungan browser/React:
+==================================================
+2. TARGET EMAIL
+==================================================
 
-  1. QRCode.toCanvas(canvasElement, text, [options], [callback])
-      • Merender barcode 2D langsung ke elemen <canvas>.
-      • Mengembalikan Promise<void> jika callback tidak di-pass.
+Tambahkan:
 
-    QRCode.toCanvas(canvasRef.current, url, {
-      width: 280,
-      margin: 4, // 4 modules minimum quiet zone sesuai standar QR
-      errorCorrectionLevel: 'M', // Toleransi kerusakan 15%
-      color: {
-        dark: '#000000',
-        light: '#FFFFFF',
-      },
-    })
+target_email text
 
-  2. QRCode.toDataURL(text, [options], [callback])
-      • Menghasilkan base64 data URL (data:image/png;base64,...) yang dapat langsung disematkan pada tag <img src={dataUrl} /> atau diunduh oleh admin sebagai file PNG.
+Dengan normalisasi:
+lower(trim(email))
 
-    const dataUrl = await QRCode.toDataURL(url, {
-      width: 400,
-      margin: 4,
-      errorCorrectionLevel: 'M',
-    })
+Target email WAJIB diisi ketika admin membuat kode.
 
+Tambahkan index:
+idx_pro_activation_codes_target_email
 
-  #### B. Parameter & Standar Render
+Jangan menyimpan email sebagai bagian dari token.
 
-   Parameter                                   | Tipe                                       | Standar Default / Rekomendasi              | Keterangan
-  ---------------------------------------------|--------------------------------------------|--------------------------------------------|----------------------------------------------------------------------
-   margin                                      | number                                     | 4 modules                                  | Quiet zone wajib standar QR agar mudah discan oleh kamera smartphone
-   errorCorrectionLevel                        | string                                     | 'M' (atau 'H' jika ada label/logo)         | Level koreksi error ('L': 7%, 'M': 15%, 'Q': 25%, 'H': 30%)
-   width                                       | number                                     | 280 - 320px (layar), 600px+ (download)     | Ukuran pixel canvas / gambar hasil render
-   color.dark / light                          | string                                     | #000000 / #FFFFFF                          | Kontras warna hitam-putih murni untuk scan rate optimal
-  ──────
-  ### 2. Arsitektur QR Berdasarkan act.md
+==================================================
+3. GENERATE TOKEN
+==================================================
 
-  #### A. Format URL & Payload QR
+Admin UI harus meminta:
 
-  QR code yang digenerate oleh admin mengarahkan pengguna ke halaman aktivasi dengan query parameter:
+Email penerima
+Durasi PRO
 
-    https://bisnissehat.my.id/pricing?activate=<PLAINTEXT_CODE>
+Contoh:
 
-  Contoh: https://bisnissehat.my.id/pricing?activate=BS-PRO-9F8A-7B2C-1E4D-8A0F-3C2B
+Email:
+customer@gmail.com
 
+Durasi:
+30 hari
 
-Resume with -c (or command below):
-agy --conversation=51b43725-2ad3-40e2-a343-82262200ab91
+Server kemudian membuat token RANDOM menggunakan CSPRNG.
 
-  #### B. Aturan Prefill vs Auto-Redeem (Security Non-Negotiable)
+Contoh format:
 
-  1. Hanya PREFILL:
-      • Ketika user membuka link/scan QR, PricingPage hanya mengambil parameter activate dari URL lalu mengisi input field kode aktivasi secara otomatis (prefill).
-  2. DILARANG Auto-Redeem:
-      • Tidak boleh ada aksi redeem/RPC call otomatis saat halaman terbuka.
-      • User harus sadar dan secara manual menekan tombol "Aktivasi PRO".
-  3. Wajib Login Terlebih Dahulu:
-      • Jika user yang men-scan belum terautentikasi, alur diarahkan ke login terlebih dahulu, dan prefill kode dipertahankan saat redirect kembali.
+BS-PRO-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX
 
+Token plaintext hanya dikembalikan SATU KALI ketika generate.
 
-  #### C. Tampilan Plaintext & QR SEKALI di Sisi Admin
+Database hanya menyimpan:
+- code_hash
+- target_email
+- metadata/audit information
 
-  • Plaintext kode tidak disimpan di database (database hanya menyimpan SHA-256 / HMAC hash).
-  • Oleh karena itu, Admin Generator hanya dapat menampilkan teks kode dan QR code 1 KALI pada saat modal generate dibuat.
-  • Setelah modal ditutup atau halaman di-refresh, kode plaintext dan QR tidak dapat diambil atau dirender ulang dari server.
+Jangan pernah menyimpan plaintext token.
 
-  #### D. Scope Lock Integrity
+==================================================
+4. REDEEM SECURITY
+==================================================
 
-  • DILARANG MENGUBAH QRGenerator.jsx. Komponen tersebut khusus untuk QRIS / POS merchant.
-  • Komponen QR baru untuk admin akan dibuat tersendiri (misal: src/components/admin/ActivationQrCode.jsx atau modal QR khusus pada halaman /admin/activation-codes).
-  ──────
-  ### 3. Rencana Langkah Implementasi Lanjutan
+Modify redeem_pro_activation_code().
 
-  1. Database Migration (supabase/migrations/092_pro_activation_codes.sql):
-      • Tabel public.pro_activation_codes (code_hash, status, used_by, used_at, created_at, expires_at).
-      • Tabel/mekanisme rate limiting server-side anti-brute-force (maksimal 5 percobaan / user / 15 menit).
-      • RLS ketat: normal user tidak bisa SELECT/INSERT/UPDATE/DELETE.
-  2. RPC Server-Side (redeem_pro_activation_code):
-      • SECURITY DEFINER dengan row locking (FOR UPDATE).
-      • Mengambil auth.uid(), validasi hash, one-time use, aktivasi entitlement subscriptions atomic.
-  3. Komponen Admin QR (/admin/activation-codes):
-      • Generator dengan crypto.getRandomValues() (minimal 128-bit entropy).
-      • Modal tampil sekali: plaintext code, tombol copy, dan visual QR code menggunakan qrcode package.
-  4. Halaman Pengguna (PricingPage.jsx):
-      • Menghapus flow checkout Midtrans untuk subscription PRO.
-      • Menangkap ?activate= untuk prefill only tanpa auto-submit.
-      • Formulir aktivasi PRO dengan penanganan status (loading, success, invalid, rate limited, network error).
-  5. Security Test Suite:
-      • 22 skenario pengujian wajib sesuai act.md line 330–358.
+Saat user redeem:
 
+1. auth.uid() wajib ada.
+2. Ambil email user dari auth.users secara server-side.
+3. Normalisasi lower(trim(email)).
+4. Cari activation code berdasarkan hash.
+5. Pastikan status = unused.
+6. Pastikan target_email = authenticated user's email.
+7. Jika email tidak cocok:
+   DENY.
 
-  Silakan beri konfirmasi untuk langsung memulai pembuatan migration database dan komponen QR admin sesuai rancangan di atas.
+Error jangan membocorkan apakah token tersebut valid tetapi milik email lain.
 
-───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
->
-─────────────────────────────────────────────────────────────────────────────────────────────────────
+Gunakan generic error seperti:
+
+"Kode aktivasi tidak valid atau tidak ditujukan untuk akun ini."
+
+Jangan menerima target email dari frontend sebagai sumber kebenaran.
+
+Email penerima HARUS berasal dari auth.users.
+
+Tetap gunakan row locking FOR UPDATE agar concurrent redemption hanya menghasilkan satu success.
+
+==================================================
+5. SATU EMAIL — SATU ACTIVE TOKEN
+==================================================
+
+Jangan otomatis menghapus history.
+
+Jika admin membuat kode baru untuk email yang sama:
+
+- kode lama yang masih unused boleh di-REVOKE secara atomik
+  ATAU
+- tolak generate jika masih ada active unused token.
+
+Pilih mekanisme yang paling konsisten dengan schema existing.
+
+Yang penting:
+tidak ada dua kode aktif yang ambigu untuk email yang sama.
+
+Semua perubahan harus masuk admin_audit_logs.
+
+==================================================
+6. REVOKE / HAPUS KODE
+==================================================
+
+Tambahkan admin RPC:
+
+admin_revoke_pro_activation_code(
+    p_code_id uuid,
+    p_reason text
+)
+
+Rules:
+
+- hanya authenticated admin
+- gunakan public.is_admin()
+- SECURITY DEFINER
+- SET search_path = ''
+- revoke public/anon execute
+- hanya kode yang belum redeemed yang boleh direvoke
+- jangan hard-delete record yang sudah digunakan
+- simpan status = 'revoked'
+- simpan revoked_by
+- revoked_at
+- revoke_reason
+
+Audit event:
+
+PRO_ACTIVATION_CODE_REVOKED
+
+Audit harus menyimpan:
+- code id
+- masked identifier
+- target email
+- actor admin
+- reason
+
+Jangan simpan plaintext token di audit log.
+
+==================================================
+7. ADMIN LIST
+==================================================
+
+AdminActivationCodesPage harus menampilkan:
+
+KODE / IDENTIFIER
+EMAIL PENERIMA
+PAKET & DURASI
+STATUS
+DIBUAT TANGGAL
+DIBUAT OLEH
+DIGUNAKAN OLEH
+TANGGAL REDEEM
+ACTION
+
+Contoh:
+
+BS-PRO-••••-••••-b9f4
+customer@gmail.com
+PRO — 30 Hari
+Aktif / Belum Dipakai
+
+Action:
+
+Revoke
+
+Untuk status revoked:
+
+REVOKED
+
+dan tampilkan alasan.
+
+Jangan tampilkan plaintext token lama.
+
+==================================================
+8. GENERATE MODAL
+==================================================
+
+Ubah modal Generate Kode & QR:
+
+Email penerima:
+[________________________]
+
+Durasi:
+[30 hari ▼]
+
+[Generate Kode & QR]
+
+Setelah berhasil:
+
+Tampilkan:
+
+Kode Aktivasi
+BS-PRO-XXXX-XXXX-...
+
+Untuk:
+customer@gmail.com
+
+Durasi:
+30 Hari
+
+QR Code
+
+[Salin Kode]
+[Download QR]
+
+Warning:
+
+"Kode aktivasi hanya ditampilkan sekali.
+Simpan atau kirimkan kode ini kepada penerima."
+
+Plaintext jangan pernah muncul lagi setelah modal ditutup/reload.
+
+==================================================
+9. QR PAYLOAD
+==================================================
+
+Tetap gunakan:
+
+https://bisnissehat.my.id/pricing?activate=<PLAINTEXT_TOKEN>
+
+QR hanya membawa token random.
+
+Jangan masukkan email ke query parameter.
+
+PricingPage tetap:
+
+PREFILL ONLY.
+
+Tidak boleh auto-redeem.
+
+==================================================
+10. REDEEM UI
+==================================================
+
+Jika email user tidak cocok dengan target email:
+
+Jangan mengungkap:
+
+"Kode ini milik email X."
+
+Cukup:
+
+"Kode aktivasi tidak valid atau tidak ditujukan untuk akun ini."
+
+Jika cocok:
+
+Aktivasi PRO berhasil.
+
+==================================================
+11. SECURITY TESTS
+==================================================
+
+Tambahkan/update tests:
+
+1. Admin generate code untuk email A → PASS
+2. User email A redeem → PASS
+3. User email B redeem kode A → DENIED
+4. Anonymous redeem → DENIED
+5. Same token second redeem → DENIED
+6. Concurrent redeem → exactly 1 success
+7. Admin revoke unused code → PASS
+8. Revoked code redeem → DENIED
+9. Redeemed code cannot be revoked
+10. Normal user cannot revoke
+11. Normal user cannot list activation codes
+12. Token plaintext never stored
+13. Token remains cryptographically random
+14. Email normalization works:
+   TEST@GMAIL.COM == test@gmail.com
+15. No plaintext token in admin_audit_logs
+16. IDOR: admin cannot manipulate arbitrary user identity during redeem
+17. Frontend cannot override target_email
+18. Direct RPC security tests
+19. Existing QRGenerator.jsx POS/QRIS remains untouched
+
+==================================================
+12. MIGRATION DEPLOYMENT
+==================================================
+
+After implementation:
+
+npm test
+npm run lint
+npm run build
+
+Then:
+
+npx supabase db push
+npx supabase migration list
+
+Verify local = remote.
+
+Test LIVE production RPC.
+
+==================================================
+13. GIT + VERCEL
+==================================================
+
+After all tests pass:
+
+git status
+git add .
+git commit -m "feat: bind PRO activation codes to recipient email"
+git push origin main
+
+Verify:
+
+git status
+git log -1 --oneline
+git remote -v
+
+Working tree must be clean.
+
+Do NOT claim Vercel deployment succeeded unless the Git push succeeded.
+
+==================================================
+SCOPE LOCK
+==================================================
+
+Do NOT modify:
+
+- QRGenerator.jsx
+- POS QRIS flow
+- Midtrans/payment
+- subscriptions entitlement logic except activation-code redemption integration
+- Admin RBAC
+- Maintenance Mode
+- Announcement Banner
+- Support
+- AI Usage
+- unrelated settings
+- unrelated migrations
+
+STOP after implementation + production verification.
+
+FINAL REPORT MUST INCLUDE:
+- files changed
+- migration name
+- exact RPCs
+- target email behavior
+- revoke behavior
+- security test result
+- npm test result
+- lint result
+- build result
+- Supabase local/remote migration status
+- git commit hash
+- push result

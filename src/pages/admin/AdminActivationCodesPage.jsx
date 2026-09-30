@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   adminGenerateActivationCode,
+  adminRevokeActivationCode,
   getAdminActivationCodes,
 } from '../../lib/activationCodeService'
 import ActivationQrModal from '../../components/admin/ActivationQrModal'
@@ -23,9 +24,15 @@ export default function AdminActivationCodesPage() {
 
   // Generation Modal States
   const [showGeneratePrompt, setShowGeneratePrompt] = useState(false)
+  const [targetEmail, setTargetEmail] = useState('')
   const [durationDays, setDurationDays] = useState(30)
   const [generating, setGenerating] = useState(false)
   const [newlyGeneratedCode, setNewlyGeneratedCode] = useState(null)
+
+  // Revocation Modal States
+  const [revokeModalCode, setRevokeModalCode] = useState(null)
+  const [revokeReason, setRevokeReason] = useState('')
+  const [revoking, setRevoking] = useState(false)
 
   const fetchCodes = useCallback(async () => {
     try {
@@ -54,11 +61,17 @@ export default function AdminActivationCodesPage() {
 
   const handleGenerate = async (e) => {
     e.preventDefault()
+    if (!targetEmail.trim()) {
+      setError('Email penerima wajib diisi')
+      return
+    }
+
     try {
       setGenerating(true)
       setError(null)
-      const res = await adminGenerateActivationCode(Number(durationDays))
+      const res = await adminGenerateActivationCode(targetEmail.trim(), Number(durationDays))
       setShowGeneratePrompt(false)
+      setTargetEmail('')
       setNewlyGeneratedCode(res)
       fetchCodes()
     } catch (err) {
@@ -69,7 +82,26 @@ export default function AdminActivationCodesPage() {
     }
   }
 
-  const getStatusBadge = (status) => {
+  const handleRevoke = async (e) => {
+    e.preventDefault()
+    if (!revokeModalCode?.id) return
+
+    try {
+      setRevoking(true)
+      setError(null)
+      await adminRevokeActivationCode(revokeModalCode.id, revokeReason.trim() || 'Dicabut oleh admin')
+      setRevokeModalCode(null)
+      setRevokeReason('')
+      fetchCodes()
+    } catch (err) {
+      console.error('Revoke code error:', err)
+      setError(err.message || 'Gagal mencabut kode aktivasi')
+    } finally {
+      setRevoking(false)
+    }
+  }
+
+  const getStatusBadge = (status, revokeReasonText) => {
     switch (status) {
       case 'unused':
         return (
@@ -85,9 +117,16 @@ export default function AdminActivationCodesPage() {
         )
       case 'revoked':
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800">
-            Dicabut (Revoked)
-          </span>
+          <div className="space-y-0.5">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800">
+              REVOKED
+            </span>
+            {revokeReasonText && (
+              <div className="text-[10px] text-rose-600 italic">
+                Alasan: {revokeReasonText}
+              </div>
+            )}
+          </div>
         )
       case 'expired':
         return (
@@ -195,46 +234,67 @@ export default function AdminActivationCodesPage() {
           <table className="w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50 border-b border-slate-200 text-xs font-semibold uppercase text-slate-500 tracking-wider">
               <tr>
-                <th className="px-6 py-3.5">Kode / Identifier</th>
-                <th className="px-6 py-3.5">Paket & Durasi</th>
-                <th className="px-6 py-3.5">Status</th>
-                <th className="px-6 py-3.5">Dibuat Tanggal</th>
-                <th className="px-6 py-3.5">Digunakan Oleh</th>
-                <th className="px-6 py-3.5">Tanggal Redeem</th>
+                <th className="px-4 py-3.5">Kode / Identifier</th>
+                <th className="px-4 py-3.5">Email Penerima</th>
+                <th className="px-4 py-3.5">Paket & Durasi</th>
+                <th className="px-4 py-3.5">Status</th>
+                <th className="px-4 py-3.5">Dibuat Tanggal</th>
+                <th className="px-4 py-3.5">Dibuat Oleh</th>
+                <th className="px-4 py-3.5">Digunakan Oleh</th>
+                <th className="px-4 py-3.5">Tanggal Redeem</th>
+                <th className="px-4 py-3.5 text-right">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={9} className="px-6 py-12 text-center text-slate-400">
                     <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600 mb-2" />
                     <p className="text-xs">Memuat data kode aktivasi...</p>
                   </td>
                 </tr>
               ) : codes.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={9} className="px-6 py-12 text-center text-slate-400">
                     <p className="text-sm">Tidak ada kode aktivasi yang cocok dengan pencarian.</p>
                   </td>
                 </tr>
               ) : (
                 codes.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-4">
                       <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-1 rounded-sm border border-slate-200">
                         {item.masked_code || 'BS-PRO-••••-••••'}
                       </span>
                       <div className="text-[10px] text-slate-400 font-mono mt-1">ID: {item.id}</div>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-slate-900 uppercase">{item.plan}</div>
-                      <div className="text-xs text-slate-500">{item.duration_days} Hari</div>
+                    <td className="px-4 py-4">
+                      {item.target_email ? (
+                        <span className="font-mono text-xs font-medium text-slate-900 bg-emerald-50 text-emerald-900 border border-emerald-200 px-2 py-0.5 rounded-md">
+                          {item.target_email}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">Semua user</span>
+                      )}
                     </td>
-                    <td className="px-6 py-4">{getStatusBadge(item.status)}</td>
-                    <td className="px-6 py-4 text-xs text-slate-500">
+                    <td className="px-4 py-4">
+                      <div className="font-semibold text-slate-900 uppercase text-xs">PRO — {item.duration_days} Hari</div>
+                    </td>
+                    <td className="px-4 py-4">{getStatusBadge(item.status, item.revoke_reason)}</td>
+                    <td className="px-4 py-4 text-xs text-slate-500 whitespace-nowrap">
                       {item.created_at ? new Date(item.created_at).toLocaleString('id-ID') : '-'}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-4 text-xs text-slate-600">
+                      {item.created_by_user?.email ? (
+                        <div>
+                          <div className="font-medium text-slate-800">{item.created_by_user.full_name || item.created_by_user.email}</div>
+                          <div className="text-[10px] text-slate-400">{item.created_by_user.email}</div>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4">
                       {item.redeemed_user?.email ? (
                         <div>
                           <div className="font-medium text-slate-900 text-xs">
@@ -251,8 +311,24 @@ export default function AdminActivationCodesPage() {
                         <span className="text-xs text-slate-400 italic">Belum diklaim</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-xs text-slate-500">
+                    <td className="px-4 py-4 text-xs text-slate-500 whitespace-nowrap">
                       {item.redeemed_at ? new Date(item.redeemed_at).toLocaleString('id-ID') : '-'}
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      {item.status === 'unused' ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRevokeModalCode(item)
+                            setRevokeReason('')
+                          }}
+                          className="px-3 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 border border-rose-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                        >
+                          Revoke
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-300">-</span>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -290,7 +366,7 @@ export default function AdminActivationCodesPage() {
         )}
       </div>
 
-      {/* Modal: Generate Prompt */}
+      {/* Modal: Generate Prompt (Conforms to @act.md) */}
       {showGeneratePrompt && (
         <div
           role="dialog"
@@ -300,10 +376,24 @@ export default function AdminActivationCodesPage() {
           <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
             <h3 className="text-lg font-bold text-slate-900 mb-1">Generate Kode Aktivasi PRO</h3>
             <p className="text-xs text-slate-500 mb-5">
-              Kode akan dibuat secara aman menggunakan CSPRNG server-side dengan 128-bit entropy.
+              Setiap kode terikat aman ke email penerima dan digenerate dengan 128-bit CSPRNG server-side.
             </p>
 
             <form onSubmit={handleGenerate} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">
+                  Email Penerima <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="customer@gmail.com"
+                  value={targetEmail}
+                  onChange={(e) => setTargetEmail(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-emerald-500"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">
                   Durasi Paket PRO
@@ -323,7 +413,10 @@ export default function AdminActivationCodesPage() {
               <div className="flex items-center gap-3 pt-3">
                 <button
                   type="button"
-                  onClick={() => setShowGeneratePrompt(false)}
+                  onClick={() => {
+                    setShowGeneratePrompt(false)
+                    setTargetEmail('')
+                  }}
                   disabled={generating}
                   className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
                 >
@@ -340,7 +433,66 @@ export default function AdminActivationCodesPage() {
                       Memproses...
                     </>
                   ) : (
-                    'Generate & Tampilkan QR'
+                    'Generate Kode & QR'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Revoke Confirmation Modal (Conforms to @act.md) */}
+      {revokeModalCode && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+        >
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <h3 className="text-lg font-bold text-slate-900 mb-1">Cabut (Revoke) Kode Aktivasi</h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Kode aktivasi untuk <strong className="text-slate-700">{revokeModalCode.target_email || 'penerima'}</strong> akan dinonaktifkan secara permanen. Tindakan ini dicatat di audit log.
+            </p>
+
+            <form onSubmit={handleRevoke} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">
+                  Alasan Pencabutan (Opsional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Misal: Kesalahan email penerima / refund"
+                  value={revokeReason}
+                  onChange={(e) => setRevokeReason(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-rose-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRevokeModalCode(null)
+                    setRevokeReason('')
+                  }}
+                  disabled={revoking}
+                  className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={revoking}
+                  className="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition-colors shadow-xs flex items-center justify-center gap-2"
+                >
+                  {revoking ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Memproses...
+                    </>
+                  ) : (
+                    'Ya, Cabut Kode'
                   )}
                 </button>
               </div>
