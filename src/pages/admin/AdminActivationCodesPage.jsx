@@ -85,11 +85,16 @@ export default function AdminActivationCodesPage() {
   const handleRevoke = async (e) => {
     e.preventDefault()
     if (!revokeModalCode?.id) return
+    const trimmedReason = revokeReason.trim()
+    if (!trimmedReason) {
+      setError('Alasan pencabutan wajib diisi')
+      return
+    }
 
     try {
       setRevoking(true)
       setError(null)
-      await adminRevokeActivationCode(revokeModalCode.id, revokeReason.trim() || 'Dicabut oleh admin')
+      await adminRevokeActivationCode(revokeModalCode.id, trimmedReason)
       setRevokeModalCode(null)
       setRevokeReason('')
       fetchCodes()
@@ -242,7 +247,7 @@ export default function AdminActivationCodesPage() {
                 <th className="px-4 py-3.5">Dibuat Oleh</th>
                 <th className="px-4 py-3.5">Digunakan Oleh</th>
                 <th className="px-4 py-3.5">Tanggal Redeem</th>
-                <th className="px-4 py-3.5 text-right">Aksi</th>
+                <th className="px-4 py-3.5 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -314,7 +319,7 @@ export default function AdminActivationCodesPage() {
                     <td className="px-4 py-4 text-xs text-slate-500 whitespace-nowrap">
                       {item.redeemed_at ? new Date(item.redeemed_at).toLocaleString('id-ID') : '-'}
                     </td>
-                    <td className="px-4 py-4 text-right">
+                    <td className="px-4 py-4 text-right whitespace-nowrap">
                       {item.status === 'unused' ? (
                         <button
                           type="button"
@@ -322,12 +327,22 @@ export default function AdminActivationCodesPage() {
                             setRevokeModalCode(item)
                             setRevokeReason('')
                           }}
-                          className="px-3 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 border border-rose-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                          className="inline-flex items-center px-3 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 border border-rose-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                         >
                           Revoke
                         </button>
+                      ) : item.status === 'redeemed' ? (
+                        <span className="text-xs font-medium text-slate-500">
+                          Sudah digunakan
+                        </span>
+                      ) : item.status === 'revoked' ? (
+                        <span className="text-xs font-semibold text-rose-600">
+                          Revoked
+                        </span>
                       ) : (
-                        <span className="text-xs text-slate-300">-</span>
+                        <span className="text-xs text-slate-400">
+                          -
+                        </span>
                       )}
                     </td>
                   </tr>
@@ -442,7 +457,7 @@ export default function AdminActivationCodesPage() {
         </div>
       )}
 
-      {/* Modal: Revoke Confirmation Modal (Conforms to @act.md) */}
+      {/* Modal: Revoke Confirmation Modal (Conforms strictly to @act.md) */}
       {revokeModalCode && (
         <div
           role="dialog"
@@ -450,19 +465,59 @@ export default function AdminActivationCodesPage() {
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
         >
           <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
-            <h3 className="text-lg font-bold text-slate-900 mb-1">Cabut (Revoke) Kode Aktivasi</h3>
-            <p className="text-xs text-slate-500 mb-4">
-              Kode aktivasi untuk <strong className="text-slate-700">{revokeModalCode.target_email || 'penerima'}</strong> akan dinonaktifkan secara permanen. Tindakan ini dicatat di audit log.
-            </p>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Cabut (Revoke) Kode Aktivasi</h3>
+                <p className="text-xs text-slate-500">Konfirmasi pencabutan kode aktivasi PRO.</p>
+              </div>
+            </div>
+
+            {/* Code Details */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2 mb-4 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Kode Aktivasi:</span>
+                <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
+                  {revokeModalCode.masked_code || 'BS-PRO-••••-••••'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Target Email:</span>
+                <span className="font-mono font-medium text-slate-800">
+                  {revokeModalCode.target_email || '-'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Durasi Paket:</span>
+                <span className="font-semibold text-slate-800">
+                  {revokeModalCode.duration_days || 30} Hari
+                </span>
+              </div>
+            </div>
+
+            {/* Warning Callout */}
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 mb-4 flex items-start gap-2.5 text-xs text-rose-800">
+              <svg className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <span className="font-semibold">Peringatan:</span> Kode aktivasi yang dicabut tidak dapat digunakan lagi oleh siapapun. Tindakan ini permanen dan dicatat dalam audit log.
+              </div>
+            </div>
 
             <form onSubmit={handleRevoke} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">
-                  Alasan Pencabutan (Opsional)
+                  Alasan Pencabutan <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="Misal: Kesalahan email penerima / refund"
+                  required
+                  placeholder="Masukkan alasan pencabutan (wajib)..."
                   value={revokeReason}
                   onChange={(e) => setRevokeReason(e.target.value)}
                   className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-rose-500"
@@ -477,14 +532,14 @@ export default function AdminActivationCodesPage() {
                     setRevokeReason('')
                   }}
                   disabled={revoking}
-                  className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+                  className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={revoking}
-                  className="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition-colors shadow-xs flex items-center justify-center gap-2"
+                  className="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-xs font-semibold transition-colors shadow-xs flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {revoking ? (
                     <>
@@ -492,7 +547,7 @@ export default function AdminActivationCodesPage() {
                       Memproses...
                     </>
                   ) : (
-                    'Ya, Cabut Kode'
+                    'Revoke Kode'
                   )}
                 </button>
               </div>

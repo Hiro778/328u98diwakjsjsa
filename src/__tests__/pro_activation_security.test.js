@@ -192,4 +192,31 @@ describe('PRO Activation Code System — Comprehensive Security Test Suite (@act
     assert.match(pageContent, /Email Penerima/, 'Includes Email Penerima in table headers')
     assert.match(pageContent, /Revoke/, 'Provides Revoke action button')
   })
+
+  // 22. ADMIN ACTIVATION CODES PAGE ACTION COLUMN & REVOCATION MODAL COMPLIANCE (@act.md)
+  test('22. Admin Activation Codes Page conforms strictly to @act.md: Action column, state branching, and confirmation modal', () => {
+    const pageContent = fs.readFileSync(path.resolve('src/pages/admin/AdminActivationCodesPage.jsx'), 'utf8')
+
+    // Table Action Column
+    assert.match(pageContent, /<th[^>]*>Action<\/th>/, 'Table header specifies Action column')
+    assert.match(pageContent, /item\.status === 'unused'\s*\?[\s\S]+?Revoke/, 'Shows Revoke button for unused status')
+    assert.match(pageContent, /item\.status === 'redeemed'\s*\?[\s\S]+?Sudah digunakan/, 'Shows "Sudah digunakan" text for redeemed status without Revoke button')
+    assert.match(pageContent, /item\.status === 'revoked'\s*\?[\s\S]+?Revoked/, 'Shows "Revoked" text for revoked status')
+
+    // Confirmation Modal fields & warning
+    assert.match(pageContent, /revokeModalCode\.masked_code/, 'Displays masked activation code in modal')
+    assert.match(pageContent, /revokeModalCode\.target_email/, 'Displays target email in modal')
+    assert.match(pageContent, /revokeModalCode\.duration_days/, 'Displays duration in modal')
+    assert.match(pageContent, /Kode aktivasi yang dicabut tidak dapat digunakan lagi/i, 'Shows warning that code cannot be used again')
+
+    // Required reason validation & button labels
+    assert.match(pageContent, /Alasan Pencabutan[\s\S]+?<span[^>]*>\*<\/span>/, 'Indicates reason is mandatory')
+    assert.match(pageContent, /const trimmedReason = revokeReason\.trim\(\)/, 'Trims revocation reason')
+    assert.match(pageContent, /if \(!trimmedReason\)[\s\S]+?Alasan pencabutan wajib diisi/, 'Validates mandatory reason before calling RPC')
+    assert.match(pageContent, />\s*Batal\s*<\/button>/, 'Includes Batal button')
+    assert.match(pageContent, /'Revoke Kode'[\s\S]*?<\/button>/, 'Includes Revoke Kode submit button')
+
+    // Service call security
+    assert.match(pageContent, /adminRevokeActivationCode\(revokeModalCode\.id,\s*trimmedReason\)/, 'Passes only code ID and reason to service')
+  })
 })
