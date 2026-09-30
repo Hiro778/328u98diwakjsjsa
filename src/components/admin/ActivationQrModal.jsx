@@ -85,20 +85,20 @@ export default function ActivationQrModal({ codeData, onClose }) {
       aria-labelledby="activation-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto"
     >
-      <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-150">
+      <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-3 sm:my-8 animate-in fade-in zoom-in-95 duration-150 max-h-[calc(100dvh-24px)] flex flex-col">
         {/* Header */}
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-700 p-6 text-white text-center">
-          <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3 backdrop-blur-xs">
-            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-700 p-4 sm:p-6 text-white text-center shrink-0">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-2.5 sm:mb-3 backdrop-blur-xs">
+            <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
             </svg>
           </div>
-          <h2 id="activation-modal-title" className="text-xl font-bold tracking-tight">
+          <h2 id="activation-modal-title" className="text-lg sm:text-xl font-bold tracking-tight">
             Kode Aktivasi PRO Berhasil Dibuat
           </h2>
-          <div className="mt-2 space-y-0.5 text-emerald-100 text-xs">
-            <p>
-              Untuk: <span className="font-semibold text-white font-mono">{codeData?.target_email || '-'}</span>
+          <div className="mt-1.5 sm:mt-2 space-y-0.5 text-emerald-100 text-xs">
+            <p className="truncate max-w-full">
+              Untuk: <span className="font-semibold text-white font-mono break-all">{codeData?.target_email || '-'}</span>
             </p>
             <p>
               Durasi: <span className="font-semibold text-white">{codeData?.duration_days || 30} Hari</span>
@@ -107,11 +107,11 @@ export default function ActivationQrModal({ codeData, onClose }) {
         </div>
 
         {/* Security Warning Banner */}
-        <div className="bg-amber-50 border-b border-amber-200 p-3.5 flex items-start gap-2.5 text-amber-900 text-xs">
+        <div className="bg-amber-50 border-b border-amber-200 p-3 sm:p-3.5 flex items-start gap-2.5 text-amber-900 text-xs shrink-0">
           <svg className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
-          <div>
+          <div className="min-w-0">
             <span className="font-bold">PERINGATAN KEAMANAN:</span> Kode aktivasi hanya ditampilkan sekali. Simpan atau kirimkan kode ini kepada penerima.
             <div className="text-[11px] text-amber-800 mt-0.5">
               Setelah modal ditutup, database hanya menyimpan hash SHA-256 dan kode asli tidak dapat dimunculkan kembali.
@@ -120,10 +120,10 @@ export default function ActivationQrModal({ codeData, onClose }) {
         </div>
 
         {/* Content Body */}
-        <div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto flex-1">
           {/* QR Code Canvas */}
           <div className="flex flex-col items-center justify-center">
-            <div className="p-2.5 sm:p-3 bg-white border-2 border-slate-200 rounded-xl shadow-inner flex items-center justify-center min-h-[220px] sm:min-h-[290px] w-full max-w-[290px]">
+            <div className="p-2 sm:p-3 bg-white border-2 border-slate-200 rounded-xl shadow-inner flex items-center justify-center min-h-[200px] sm:min-h-[290px] w-full max-w-[260px] sm:max-w-[290px]">
               {renderError ? (
                 <div className="text-rose-600 text-xs text-center p-4">{renderError}</div>
               ) : (
@@ -140,17 +140,17 @@ export default function ActivationQrModal({ codeData, onClose }) {
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
               Plaintext Kode Aktivasi
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <input
                 type="text"
                 readOnly
                 value={code}
-                className="w-full font-mono text-sm tracking-wider font-bold bg-slate-100 border border-slate-300 rounded-lg px-3 py-2.5 text-slate-800 select-all focus:outline-hidden"
+                className="w-full font-mono text-xs sm:text-sm tracking-wider font-bold bg-slate-100 border border-slate-300 rounded-lg px-3 py-2 sm:py-2.5 text-slate-800 select-all focus:outline-hidden"
               />
               <button
                 type="button"
                 onClick={handleCopyCode}
-                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 active:bg-black text-white text-xs font-medium rounded-lg shrink-0 transition-colors shadow-xs flex items-center gap-1.5"
+                className="px-4 py-2 sm:py-2.5 bg-slate-800 hover:bg-slate-900 active:bg-black text-white text-xs font-medium rounded-lg shrink-0 transition-colors shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 {copied ? (
                   <>
@@ -172,12 +172,12 @@ export default function ActivationQrModal({ codeData, onClose }) {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 pt-2">
             <button
               type="button"
               onClick={handleDownloadQr}
               disabled={downloading}
-              className="flex-1 py-2.5 px-4 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-2"
+              className="flex-1 py-2.5 px-4 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -188,7 +188,7 @@ export default function ActivationQrModal({ codeData, onClose }) {
             <button
               type="button"
               onClick={onClose}
-              className="py-2.5 px-5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+              className="w-full sm:w-auto py-2.5 px-5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer text-center"
             >
               Tutup & Selesai
             </button>

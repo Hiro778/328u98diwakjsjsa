@@ -98,6 +98,51 @@ export async function adminRevokeActivationCode(codeId, reason = 'Dicabut oleh a
 }
 
 /**
+ * Admin (SUPER_ADMIN only): Permanently delete history of revoked or expired PRO activation codes.
+ *
+ * @param {string} codeId UUID of activation code record
+ * @param {string} [reason] Non-empty deletion reason (required)
+ * @returns {Promise<{ success: boolean, id: string, message: string }>}
+ */
+export async function deleteProActivationCode(codeId, reason) {
+  if (!codeId) {
+    throw new Error('ID kode aktivasi wajib diisi.')
+  }
+
+  const cleanReason = (reason || '').trim()
+  if (!cleanReason) {
+    throw new Error('Alasan penghapusan wajib diisi.')
+  }
+
+  const { data, error } = await supabase.rpc('admin_delete_pro_activation_code', {
+    p_code_id: codeId,
+    p_reason: cleanReason,
+  })
+
+  if (error) {
+    const msg = error.message || ''
+    if (msg.includes('Hanya Super Admin')) {
+      throw new Error('Akses ditolak: Hanya Super Admin yang diizinkan menghapus riwayat kode aktivasi.')
+    }
+    if (msg.includes('tidak ditemukan')) {
+      throw new Error('Kode aktivasi tidak ditemukan atau sudah dihapus sebelumnya.')
+    }
+    if (msg.includes('sudah digunakan')) {
+      throw new Error('Kode aktivasi yang sudah digunakan tidak dapat dihapus.')
+    }
+    if (msg.includes('masih aktif')) {
+      throw new Error('Kode aktivasi masih aktif. Cabut (revoke) kode terlebih dahulu sebelum menghapus.')
+    }
+    if (msg.includes('Unauthorized') || msg.includes('Autentikasi')) {
+      throw new Error('Sesi login tidak valid. Silakan login terlebih dahulu.')
+    }
+    throw new Error(msg || 'Gagal menghapus riwayat kode aktivasi.')
+  }
+
+  return data
+}
+
+/**
  * Admin: Fetch list of activation codes (masked codes only).
  *
  * @param {object} params

@@ -201,7 +201,7 @@ describe('PRO Activation Code System — Comprehensive Security Test Suite (@act
     assert.match(pageContent, /<th[^>]*>Action<\/th>/, 'Table header specifies Action column')
     assert.match(pageContent, /item\.status === 'unused'\s*\?[\s\S]+?Revoke/, 'Shows Revoke button for unused status')
     assert.match(pageContent, /item\.status === 'redeemed'\s*\?[\s\S]+?Sudah digunakan/, 'Shows "Sudah digunakan" text for redeemed status without Revoke button')
-    assert.match(pageContent, /item\.status === 'revoked'\s*\?[\s\S]+?Revoked/, 'Shows "Revoked" text for revoked status')
+    assert.match(pageContent, /item\.status === 'revoked' \|\| item\.status === 'expired'\s*\?[\s\S]+?Hapus/, 'Shows Hapus button for revoked and expired statuses')
 
     // Confirmation Modal fields & warning
     assert.match(pageContent, /revokeModalCode\.masked_code/, 'Displays masked activation code in modal')
@@ -218,5 +218,129 @@ describe('PRO Activation Code System — Comprehensive Security Test Suite (@act
 
     // Service call security
     assert.match(pageContent, /adminRevokeActivationCode\(revokeModalCode\.id,\s*trimmedReason\)/, 'Passes only code ID and reason to service')
+  })
+
+  // =========================================================================
+  // SECTION 8: PERMANENT DELETION SECURITY & ADVERSARIAL TESTS (@act.md)
+  // =========================================================================
+  const m95Path = path.resolve('supabase/migrations/095_pro_activation_delete.sql')
+  const m95Content = fs.readFileSync(m95Path, 'utf8')
+  const servicePath = path.resolve('src/lib/activationCodeService.js')
+  const serviceContent = fs.readFileSync(servicePath, 'utf8')
+
+  // 1. ANONYMOUS CANNOT DELETE
+  test('23. Permanent Deletion 1: Anonymous cannot delete → DENIED (auth.uid check & REVOKE FROM anon)', () => {
+    assert.match(m95Content, /v_caller_id := auth\.uid\(\);/, 'Checks auth.uid() server-side')
+    assert.match(m95Content, /IF v_caller_id IS NULL THEN\s+RAISE EXCEPTION 'Unauthorized: Autentikasi diperlukan'\s+USING ERRCODE = '42501';/, 'Rejects unauthenticated callers with 42501')
+    assert.match(m95Content, /REVOKE ALL ON FUNCTION public\.admin_delete_pro_activation_code\(uuid, text\) FROM PUBLIC, anon;/, 'Revokes execute from PUBLIC and anon')
+  })
+
+  // 2. NORMAL USER CANNOT DELETE
+  test('24. Permanent Deletion 2: Normal user cannot delete → DENIED (is_super_admin check)', () => {
+    assert.match(m95Content, /v_is_super := public\.is_super_admin\(\);/, 'Checks public.is_super_admin()')
+    assert.match(m95Content, /IF NOT v_is_super THEN\s+RAISE EXCEPTION 'Forbidden: Hanya Super Admin yang diizinkan menghapus riwayat kode aktivasi'\s+USING ERRCODE = '42501';/, 'Rejects non-super-admins with 42501')
+  })
+
+  // 3. ADMIN CANNOT DELETE
+  test('25. Permanent Deletion 3: ADMIN cannot delete → DENIED (only SUPER_ADMIN permitted)', () => {
+    // is_super_admin() specifically checks role = 'SUPER_ADMIN' (062_admin_rbac_foundation.sql)
+    assert.match(m95Content, /public\.is_super_admin\(\)/, 'Uses is_super_admin helper, which excludes ADMIN role')
+    assert.doesNotMatch(m95Content, /public\.is_admin\(\)/, 'Must NOT use generic is_admin() helper for deletion')
+  })
+
+  // 4. SUPER_ADMIN CAN DELETE REVOKED
+  test('26. Permanent Deletion 4: SUPER_ADMIN can delete REVOKED → PERMITTED', () => {
+    assert.match(m95Content, /v_code_row\.status NOT IN \('revoked', 'expired'\)/, 'Permits deletion when status is revoked')
+  })
+
+  // 5. SUPER_ADMIN CAN DELETE EXPIRED
+  test('27. Permanent Deletion 5: SUPER_ADMIN can delete EXPIRED → PERMITTED', () => {
+    assert.match(m95Content, /v_code_row\.status NOT IN \('revoked', 'expired'\)/, 'Permits deletion when status is expired')
+  })
+
+  // 6. SUPER_ADMIN CANNOT DELETE REDEEMED
+  test('28. Permanent Deletion 6: SUPER_ADMIN cannot delete REDEEMED → DENIED with clear error', () => {
+    assert.match(m95Content, /IF v_code_row\.status = 'redeemed' THEN\s+RAISE EXCEPTION 'Kode aktivasi yang sudah digunakan \(redeemed\) tidak dapat dihapus'\s+USING ERRCODE = 'P0001';/, 'Strictly prohibits deleting redeemed codes')
+  })
+
+  // 7. SUPER_ADMIN CANNOT DELETE ACTIVE/UNUSED
+  test('29. Permanent Deletion 7: SUPER_ADMIN cannot delete ACTIVE/UNUSED → DENIED with clear error', () => {
+    assert.match(m95Content, /IF v_code_row\.status = 'unused' THEN\s+RAISE EXCEPTION 'Kode aktivasi masih aktif\. Cabut \(revoke\) kode terlebih dahulu sebelum menghapus'\s+USING ERRCODE = 'P0001';/, 'Strictly prohibits deleting unused/active codes')
+  })
+
+  // 8. INVALID CODE_ID REJECTED
+  test('30. Permanent Deletion 8: Invalid or missing code_id is rejected (P0001 / P0002)', () => {
+    assert.match(m95Content, /IF p_code_id IS NULL THEN\s+RAISE EXCEPTION 'ID kode aktivasi wajib diisi'\s+USING ERRCODE = 'P0001';/, 'Rejects null code_id with P0001')
+    assert.match(m95Content, /IF NOT FOUND THEN\s+RAISE EXCEPTION 'Kode aktivasi tidak ditemukan'\s+USING ERRCODE = 'P0002';/, 'Rejects nonexistent code_id with P0002')
+  })
+
+  // 9. MISSING REASON REJECTED
+  test('31. Permanent Deletion 9: Missing or whitespace reason is rejected (P0001)', () => {
+    assert.match(m95Content, /v_reason := TRIM\(COALESCE\(p_reason, ''\)\);/, 'Trims deletion reason')
+    assert.match(m95Content, /IF v_reason = '' THEN\s+RAISE EXCEPTION 'Alasan penghapusan wajib diisi'\s+USING ERRCODE = 'P0001';/, 'Rejects empty deletion reason with P0001')
+  })
+
+  // 10. IDOR: SUPERADMIN CAN ONLY DELETE EXPLICITLY REQUESTED CODE_ID
+  test('32. Permanent Deletion 10: IDOR protection: Deletion strictly targets explicit code_id with row lock', () => {
+    assert.match(m95Content, /SELECT \* INTO v_code_row\s+FROM public\.pro_activation_codes\s+WHERE id = p_code_id\s+FOR UPDATE;/, 'Locks single targeted code by id')
+    assert.match(m95Content, /DELETE FROM public\.pro_activation_codes\s+WHERE id = p_code_id;/, 'Deletes single targeted row by id')
+  })
+
+  // 11. AUDIT LOG REMAINS AFTER DELETION
+  test('33. Permanent Deletion 11: Audit log survives deletion with action PRO_ACTIVATION_CODE_DELETED', () => {
+    assert.match(m95Content, /INSERT INTO public\.admin_audit_logs[\s\S]+?'PRO_ACTIVATION_CODE_DELETED'/, 'Inserts PRO_ACTIVATION_CODE_DELETED into admin_audit_logs')
+    assert.match(m95Content, /DELETE FROM public\.pro_activation_codes/, 'Row in pro_activation_codes deleted without affecting admin_audit_logs')
+  })
+
+  // 12. PLAINTEXT ACTIVATION CODE NEVER APPEARS IN AUDIT LOG
+  test('34. Permanent Deletion 12: Plaintext code never appears in audit log (masked only)', () => {
+    assert.match(m95Content, /'masked_code',\s*'BS-PRO-••••-••••-' \|\| SUBSTRING\(v_code_row\.id::text FROM 1 FOR 4\)/, 'Audit metadata masks code')
+    assert.doesNotMatch(m95Content, /code_hash/, 'Audit log does not expose code_hash unnecessarily')
+  })
+
+  // 13. SUBSCRIPTION REMAINS UNTOUCHED
+  test('35. Permanent Deletion 13: Subscription tables remain untouched during activation code deletion', () => {
+    assert.doesNotMatch(m95Content, /DELETE FROM\s+public\.subscriptions/i, 'Does not delete from subscriptions')
+    assert.doesNotMatch(m95Content, /UPDATE\s+public\.subscriptions/i, 'Does not update subscriptions')
+    assert.doesNotMatch(m95Content, /DELETE FROM\s+auth\.users/i, 'Does not delete user accounts')
+  })
+
+  // 14. REDEEMED USER'S SUBSCRIPTION REMAINS UNTOUCHED
+  test('36. Permanent Deletion 14: Redeemed user subscriptions remain untouched (redeemed codes protected from deletion)', () => {
+    assert.match(m95Content, /IF v_code_row\.status = 'redeemed' THEN\s+RAISE EXCEPTION/, 'Blocks deletion of redeemed codes to protect customer subscription integrity')
+  })
+
+  // 15. DELETING ONE CODE DOES NOT DELETE OTHER CODES
+  test('37. Permanent Deletion 15: Deleting one code does not cascade to other activation codes', () => {
+    assert.match(m95Content, /DELETE FROM public\.pro_activation_codes\s+WHERE id = p_code_id;/, 'DELETE is strictly constrained by WHERE id = p_code_id')
+  })
+
+  // 16. DOUBLE-DELETE IS SAFELY REJECTED
+  test('38. Permanent Deletion 16: Double-delete is safely rejected with P0002 not found error', () => {
+    assert.match(m95Content, /IF NOT FOUND THEN\s+RAISE EXCEPTION 'Kode aktivasi tidak ditemukan'\s+USING ERRCODE = 'P0002';/, 'Subsequent delete attempts encounter NOT FOUND')
+  })
+
+  // 17. FRONTEND SERVICE DELETE FUNCTION VALIDATION
+  test('39. Frontend Service deleteProActivationCode validates inputs and calls admin_delete_pro_activation_code', () => {
+    assert.match(serviceContent, /export async function deleteProActivationCode\(codeId,\s*reason\)/, 'Exports deleteProActivationCode')
+    assert.match(serviceContent, /supabase\.rpc\('admin_delete_pro_activation_code',/, 'Calls admin_delete_pro_activation_code RPC')
+    assert.match(serviceContent, /Hanya Super Admin/, 'Maps Super Admin unauthorized error to safe user message')
+    assert.match(serviceContent, /sudah digunakan/, 'Maps redeemed protection error to safe user message')
+    assert.match(serviceContent, /masih aktif/, 'Maps active/unused error to safe user message')
+  })
+
+  // 18. ADMIN UI DESTRUCTION MODAL & BEHAVIOR
+  test('40. Admin UI conforms to Section 7 of @act.md: Destructive confirmation modal with masked info & warning', () => {
+    const pageContent = fs.readFileSync(path.resolve('src/pages/admin/AdminActivationCodesPage.jsx'), 'utf8')
+    assert.match(pageContent, /deleteProActivationCode/, 'Imports deleteProActivationCode')
+    assert.match(pageContent, /Hapus riwayat kode\?/, 'Modal title is "Hapus riwayat kode?"')
+    assert.match(pageContent, /Data kode ini akan dihapus permanen dan tidak dapat dipulihkan\./, 'Modal contains exact permanent warning')
+    assert.match(pageContent, /deleteModalCode\.masked_code/, 'Displays masked code in modal')
+    assert.match(pageContent, /deleteModalCode\.target_email/, 'Displays target email in modal')
+    assert.match(pageContent, /Contoh: Kode sudah tidak diperlukan/, 'Input placeholder matches act.md example')
+    assert.match(pageContent, /Hapus Permanen/, 'Submit button labeled "Hapus Permanen"')
+    assert.match(pageContent, /Batal/, 'Cancel button labeled "Batal"')
+    assert.match(pageContent, /handleDelete/, 'Form submits via handleDelete')
+    assert.match(pageContent, /setSuccessToast/, 'Sets success toast on deletion without full page reload')
   })
 })

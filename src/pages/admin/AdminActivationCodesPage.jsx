@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   adminGenerateActivationCode,
   adminRevokeActivationCode,
+  deleteProActivationCode,
   getAdminActivationCodes,
 } from '../../lib/activationCodeService'
 import ActivationQrModal from '../../components/admin/ActivationQrModal'
@@ -15,6 +16,7 @@ export default function AdminActivationCodesPage() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [successToast, setSuccessToast] = useState(null)
 
   // Filters
   const [search, setSearch] = useState('')
@@ -33,6 +35,11 @@ export default function AdminActivationCodesPage() {
   const [revokeModalCode, setRevokeModalCode] = useState(null)
   const [revokeReason, setRevokeReason] = useState('')
   const [revoking, setRevoking] = useState(false)
+
+  // Deletion Modal States (SUPER_ADMIN only)
+  const [deleteModalCode, setDeleteModalCode] = useState(null)
+  const [deleteReason, setDeleteReason] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   const fetchCodes = useCallback(async () => {
     try {
@@ -106,6 +113,32 @@ export default function AdminActivationCodesPage() {
     }
   }
 
+  const handleDelete = async (e) => {
+    e.preventDefault()
+    if (!deleteModalCode?.id) return
+    const trimmedReason = deleteReason.trim()
+    if (!trimmedReason) {
+      setError('Alasan penghapusan wajib diisi')
+      return
+    }
+
+    try {
+      setDeleting(true)
+      setError(null)
+      await deleteProActivationCode(deleteModalCode.id, trimmedReason)
+      setDeleteModalCode(null)
+      setDeleteReason('')
+      setSuccessToast('Riwayat kode aktivasi berhasil dihapus permanen.')
+      setTimeout(() => setSuccessToast(null), 4000)
+      fetchCodes()
+    } catch (err) {
+      console.error('Delete code error:', err)
+      setError(err.message || 'Gagal menghapus riwayat kode aktivasi')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const getStatusBadge = (status, revokeReasonText) => {
     switch (status) {
       case 'unused':
@@ -149,14 +182,14 @@ export default function AdminActivationCodesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full min-w-0">
       {/* Page Title & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
             Kode Aktivasi & QR PRO
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             Kelola dan buat kode aktivasi paket PRO dengan QR code instan (128-bit CSPRNG entropy).
           </p>
         </div>
@@ -164,7 +197,7 @@ export default function AdminActivationCodesPage() {
         <button
           type="button"
           onClick={() => setShowGeneratePrompt(true)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-sm font-semibold shadow-xs transition-colors shrink-0"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-sm font-semibold shadow-xs transition-colors shrink-0 cursor-pointer"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -186,6 +219,25 @@ export default function AdminActivationCodesPage() {
             type="button"
             onClick={() => setError(null)}
             className="text-xs font-medium text-rose-600 hover:text-rose-800"
+          >
+            Tutup
+          </button>
+        </div>
+      )}
+
+      {/* Global Success Banner */}
+      {successToast && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-sm flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span>{successToast}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessToast(null)}
+            className="text-xs font-medium text-emerald-600 hover:text-emerald-800 cursor-pointer"
           >
             Tutup
           </button>
@@ -234,9 +286,9 @@ export default function AdminActivationCodesPage() {
       </div>
 
       {/* Table Data */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-600">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden w-full">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-left text-sm text-slate-600 min-w-[720px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-xs font-semibold uppercase text-slate-500 tracking-wider">
               <tr>
                 <th className="px-4 py-3.5">Kode / Identifier</th>
@@ -268,14 +320,14 @@ export default function AdminActivationCodesPage() {
                 codes.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="px-4 py-4">
-                      <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-1 rounded-sm border border-slate-200">
+                      <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-1 rounded-sm border border-slate-200 whitespace-nowrap">
                         {item.masked_code || 'BS-PRO-••••-••••'}
                       </span>
-                      <div className="text-[10px] text-slate-400 font-mono mt-1">ID: {item.id}</div>
+                      <div className="text-[10px] text-slate-400 font-mono mt-1 break-all max-w-[150px]">ID: {item.id}</div>
                     </td>
                     <td className="px-4 py-4">
                       {item.target_email ? (
-                        <span className="font-mono text-xs font-medium text-slate-900 bg-emerald-50 text-emerald-900 border border-emerald-200 px-2 py-0.5 rounded-md">
+                        <span className="font-mono text-xs font-medium text-slate-900 bg-emerald-50 text-emerald-900 border border-emerald-200 px-2 py-0.5 rounded-md break-all">
                           {item.target_email}
                         </span>
                       ) : (
@@ -331,13 +383,20 @@ export default function AdminActivationCodesPage() {
                         >
                           Revoke
                         </button>
+                      ) : item.status === 'revoked' || item.status === 'expired' ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteModalCode(item)
+                            setDeleteReason('')
+                          }}
+                          className="inline-flex items-center px-3 py-1 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                        >
+                          Hapus
+                        </button>
                       ) : item.status === 'redeemed' ? (
                         <span className="text-xs font-medium text-slate-500">
                           Sudah digunakan
-                        </span>
-                      ) : item.status === 'revoked' ? (
-                        <span className="text-xs font-semibold text-rose-600">
-                          Revoked
                         </span>
                       ) : (
                         <span className="text-xs text-slate-400">
@@ -386,9 +445,9 @@ export default function AdminActivationCodesPage() {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs"
         >
-          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-full max-w-md bg-white rounded-2xl p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150 max-h-[calc(100dvh-24px)] overflow-y-auto">
             <h3 className="text-lg font-bold text-slate-900 mb-1">Generate Kode Aktivasi PRO</h3>
             <p className="text-xs text-slate-500 mb-5">
               Setiap kode terikat aman ke email penerima dan digenerate dengan 128-bit CSPRNG server-side.
@@ -462,9 +521,9 @@ export default function AdminActivationCodesPage() {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs"
         >
-          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-full max-w-md bg-white rounded-2xl p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150 max-h-[calc(100dvh-24px)] overflow-y-auto">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
                 <svg className="w-5 h-5 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -548,6 +607,123 @@ export default function AdminActivationCodesPage() {
                     </>
                   ) : (
                     'Revoke Kode'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Permanent Deletion Confirmation (SUPER_ADMIN) */}
+      {deleteModalCode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 max-h-[calc(100dvh-24px)] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 text-rose-600">
+                <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <h3 className="text-lg font-bold text-slate-900">
+                  Hapus riwayat kode?
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteModalCode(null)
+                  setDeleteReason('')
+                }}
+                disabled={deleting}
+                className="text-slate-400 hover:text-slate-600 text-sm font-semibold p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Code Details */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2 mb-4 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Kode Aktivasi:</span>
+                <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
+                  {deleteModalCode.masked_code || 'BS-PRO-••••-••••'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Target Email:</span>
+                <span className="font-mono font-medium text-slate-800">
+                  {deleteModalCode.target_email || '-'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Status:</span>
+                <span className="font-semibold uppercase text-rose-700">
+                  {deleteModalCode.status}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Durasi Paket:</span>
+                <span className="font-semibold text-slate-800">
+                  PRO — {deleteModalCode.duration_days || 30} Hari
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Dibuat Tanggal:</span>
+                <span className="text-slate-700">
+                  {deleteModalCode.created_at ? new Date(deleteModalCode.created_at).toLocaleString('id-ID') : '-'}
+                </span>
+              </div>
+            </div>
+
+            {/* Warning Callout */}
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 mb-4 flex items-start gap-2.5 text-xs text-rose-900 font-medium">
+              <svg className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                Data kode ini akan dihapus permanen dan tidak dapat dipulihkan.
+              </div>
+            </div>
+
+            <form onSubmit={handleDelete} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1.5">
+                  Alasan Penghapusan <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Kode sudah tidak diperlukan"
+                  value={deleteReason}
+                  onChange={(e) => setDeleteReason(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-rose-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteModalCode(null)
+                    setDeleteReason('')
+                  }}
+                  disabled={deleting}
+                  className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={deleting || !deleteReason.trim()}
+                  className="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-xs font-semibold transition-colors shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {deleting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Menghapus...
+                    </>
+                  ) : (
+                    'Hapus Permanen'
                   )}
                 </button>
               </div>
