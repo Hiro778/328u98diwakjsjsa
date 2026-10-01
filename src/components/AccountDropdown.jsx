@@ -72,7 +72,7 @@ export default function AccountDropdown() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.97 }}
             transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute right-0 top-full mt-2 w-64 rounded-2xl border border-border bg-surface-elevated shadow-xl z-50 overflow-hidden"
+            className="absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-24px)] rounded-2xl border border-border bg-surface-elevated shadow-xl z-50 overflow-hidden"
           >
             {/* Profile header */}
             <div className="px-4 py-3.5 bg-surface border-b border-border flex items-center gap-3">

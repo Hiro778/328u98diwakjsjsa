@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { motion, useScroll, useTransform, useSpring, useReducedMotion } from 'motion/react';
 import { Link } from 'react-router';
 import { PLAN_CONFIG, PLANS } from '../../data/categories';
@@ -64,6 +64,16 @@ const PLANS_DATA = [
 export default function PricingExperience() {
   const containerRef = useRef(null);
   const shouldReduce = useReducedMotion();
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Compact 140vh scroll track: Every manual scroll step triggers active visual change
   const { scrollYProgress } = useScroll({
@@ -105,10 +115,10 @@ export default function PricingExperience() {
     <div 
       id="pricing-experience" 
       ref={containerRef} 
-      className="relative h-[140vh] bg-[#0B0F19] text-[#F8FAFC]"
+      className="relative md:h-[140vh] bg-[#0B0F19] text-[#F8FAFC]"
     >
-      {/* Sticky Fullscreen Canvas: Zero dead zone, instant visual presence */}
-      <div className="sticky top-0 h-screen w-full flex flex-col justify-between pt-16 sm:pt-20 pb-6 sm:pb-8 px-4 sm:px-6 lg:px-12 overflow-hidden">
+      {/* Sticky Fullscreen Canvas on Desktop / Natural Scrolling on Mobile */}
+      <div className="relative md:sticky md:top-0 min-h-screen md:h-screen w-full flex flex-col justify-between py-12 md:py-0 md:pt-16 sm:md:pt-20 md:pb-6 sm:md:pb-8 px-4 sm:px-6 lg:px-12 overflow-visible md:overflow-hidden">
         
         {/* Subtle Ambient Mesh */}
         <div className="absolute inset-0 pointer-events-none opacity-30">
@@ -117,8 +127,8 @@ export default function PricingExperience() {
 
         {/* SECTION HEADER: Reversible Scroll Fade */}
         <motion.div 
-          style={{ y: headerY, opacity: headerOpacity }}
-          className="relative z-20 max-w-3xl mx-auto text-center space-y-2 shrink-0"
+          style={{ y: isMobile ? 0 : headerY, opacity: isMobile ? 1 : headerOpacity }}
+          className="relative z-20 max-w-3xl mx-auto text-center space-y-2 shrink-0 mb-6 md:mb-0"
         >
           <div className="inline-flex items-center gap-2 px-3 py-0.5 rounded-md bg-[#151D2C] border border-[#222C3E] text-[11px] font-mono font-medium text-[#818CF8]">
             <span className="w-1.5 h-1.5 rounded-full bg-[#818CF8]" />
@@ -139,7 +149,7 @@ export default function PricingExperience() {
           
           {/* 1. FREE PLAN (md:col-span-5) */}
           <motion.div
-            style={{ x: freeCardX, scale: freeCardScale }}
+            style={{ x: isMobile ? 0 : freeCardX, scale: isMobile ? 1 : freeCardScale }}
             className="md:col-span-5 relative flex flex-col justify-between p-6 rounded-xl border border-[#222C3E] bg-[#151D2C] shadow-lg hover:border-slate-600 transition-colors"
           >
             <div>
@@ -203,7 +213,7 @@ export default function PricingExperience() {
 
           {/* 2. PRO PLAN (md:col-span-7) — Primary Visual Anchor */}
           <motion.div
-            style={{ x: proCardX, scale: proCardScale }}
+            style={{ x: isMobile ? 0 : proCardX, scale: isMobile ? 1 : proCardScale }}
             className="md:col-span-7 relative flex flex-col justify-between p-6 sm:p-7 rounded-xl border border-[#818CF8]/60 bg-[#1E293B] shadow-xl"
           >
             {/* Pro Anchor Badge */}

@@ -81,17 +81,17 @@ describe('Content Calendar Service & Business Logic (sce.md Specification)', () 
       const resCustom = validateCalendarItem({
         title: 'Promo',
         platform: 'Threads',
-        publishDate: '2026-10-01',
+        publishDate: '2027-01-01',
       })
       assert.equal(resCustom.valid, true)
 
       // Empty platform should be invalid
-      const resEmpty = validateCalendarItem({ title: 'Promo', platform: '', publishDate: '2026-10-01' })
+      const resEmpty = validateCalendarItem({ title: 'Promo', platform: '', publishDate: '2027-01-01' })
       assert.equal(resEmpty.valid, false)
       assert.ok(resEmpty.errors.platform)
 
       // "all" should be invalid for a single item
-      const resAll = validateCalendarItem({ title: 'Promo', platform: 'all', publishDate: '2026-10-01' })
+      const resAll = validateCalendarItem({ title: 'Promo', platform: 'all', publishDate: '2027-01-01' })
       assert.equal(resAll.valid, false)
       assert.ok(resAll.errors.platform)
     })

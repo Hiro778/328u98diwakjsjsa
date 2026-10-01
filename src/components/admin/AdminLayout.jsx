@@ -213,12 +213,12 @@ export default function AdminLayout() {
       {/* Main Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Admin Header */}
-        <header className="h-16 bg-[#111827]/90 backdrop-blur-md border-b border-[#1F2937] px-4 lg:px-8 flex items-center justify-between sticky top-0 z-30">
-          <div className="flex items-center gap-3">
+        <header className="h-16 bg-[#111827]/90 backdrop-blur-md border-b border-[#1F2937] px-3 sm:px-4 lg:px-8 flex items-center justify-between sticky top-0 z-30 pt-[env(safe-area-inset-top,0px)]">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {/* Mobile menu toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-lg bg-[#1F2937] text-gray-300 hover:text-white"
+              className="lg:hidden p-2 rounded-lg bg-[#1F2937] text-gray-300 hover:text-white shrink-0"
               aria-label="Toggle Mobile Admin Navigation"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -226,9 +226,11 @@ export default function AdminLayout() {
               </svg>
             </button>
 
-            <div className="flex items-center gap-2.5">
-              <span className="font-bold text-white text-base lg:text-lg">BisnisSehat Admin</span>
-              <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+              <span className="font-bold text-white text-sm sm:text-base lg:text-lg truncate max-w-[110px] min-[360px]:max-w-[140px] sm:max-w-none">
+                BisnisSehat Admin
+              </span>
+              <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
                 Control Center
               </span>
             </div>
@@ -283,7 +285,7 @@ export default function AdminLayout() {
               className="fixed inset-0 bg-black/60 backdrop-blur-xs"
               onClick={() => setMobileMenuOpen(false)}
             />
-            <div className="relative w-64 bg-[#111827] border-r border-[#1F2937] flex flex-col h-full z-10">
+            <div className="relative w-64 max-w-[calc(100vw-48px)] bg-[#111827] border-r border-[#1F2937] flex flex-col h-full z-10 pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
               <div className="h-16 flex items-center justify-between px-6 border-b border-[#1F2937]">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center font-black text-black text-sm">
@@ -372,7 +374,7 @@ export default function AdminLayout() {
         )}
 
         {/* Content Outlet */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 p-3 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto min-w-0">
           <Outlet />
         </main>
       </div>

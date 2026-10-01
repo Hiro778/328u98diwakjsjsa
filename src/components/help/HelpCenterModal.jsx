@@ -132,13 +132,13 @@ export default function HelpCenterModal({ isOpen, onClose, initialQuery = '' }) 
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 16 }}
         transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-10 w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl border border-border bg-[#0F172A] text-slate-100 shadow-2xl overflow-hidden"
+        className="relative z-10 w-full max-w-[calc(100vw-24px)] sm:max-w-4xl max-h-[calc(100dvh-24px)] flex flex-col rounded-2xl border border-border bg-[#0F172A] text-slate-100 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-border/80 bg-surface/80 px-5 sm:px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary border border-primary/20">
+        <div className="flex items-center justify-between border-b border-border/80 bg-surface/80 px-4 sm:px-6 py-3.5 sm:py-4">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary border border-primary/20">
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path
                   strokeLinecap="round"
@@ -147,17 +147,17 @@ export default function HelpCenterModal({ isOpen, onClose, initialQuery = '' }) 
                 />
               </svg>
             </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-lg font-bold text-white tracking-tight truncate">
                 Pusat Bantuan & FAQ
               </h2>
-              <p className="text-xs text-text-muted">
+              <p className="text-[11px] sm:text-xs text-text-muted truncate">
                 Katalog bantuan instrumen operasional, akun, dan panduan penggunaan BisnisSehat.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={onClose}
@@ -173,11 +173,11 @@ export default function HelpCenterModal({ isOpen, onClose, initialQuery = '' }) 
         </div>
 
         {/* Top Navigation Tabs */}
-        <div className="flex items-center border-b border-border/60 bg-surface-hover/30 px-5 sm:px-6 gap-2 pt-2 text-xs sm:text-sm">
+        <div className="flex items-center border-b border-border/60 bg-surface-hover/30 px-3 sm:px-6 gap-1 sm:gap-2 pt-2 text-xs sm:text-sm overflow-x-auto min-w-0">
           <button
             type="button"
             onClick={() => setActiveTab('faq')}
-            className={`pb-2.5 px-3 font-semibold border-b-2 transition-all ${
+            className={`pb-2.5 px-2.5 sm:px-3 font-semibold border-b-2 transition-all whitespace-nowrap shrink-0 ${
               activeTab === 'faq'
                 ? 'border-primary text-primary'
                 : 'border-transparent text-text-muted hover:text-white'

@@ -66,6 +66,10 @@ export default function CustomerSupportWidget() {
       <div
         ref={widgetRef}
         className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-35 flex flex-col items-end select-none"
+        style={{
+          bottom: 'max(1rem, env(safe-area-inset-bottom, 1rem))',
+          right: 'max(1rem, env(safe-area-inset-right, 1rem))',
+        }}
         data-testid="customer-support-widget"
       >
         {/* ── Support Panel Popover ── */}

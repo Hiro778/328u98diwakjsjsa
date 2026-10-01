@@ -435,7 +435,7 @@ export default function AdminSupportPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs min-w-[600px]">
               <thead className="bg-[#0B0F19] text-gray-400 uppercase text-[10px] tracking-wider border-b border-[#1F2937]">
                 <tr>
                   <th className="px-4 py-3">Tiket & Pengguna</th>

@@ -37,7 +37,7 @@ function DetailModal({ logId, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
       <div
-        className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+        className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl flex flex-col max-h-[90dvh] overflow-hidden"
         role="dialog"
         aria-modal="true"
       >
@@ -524,7 +524,7 @@ export default function AdminAuditLogsPage() {
 
         {!loading && !error && logs.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-zinc-300">
+            <table className="w-full text-left text-xs text-zinc-300 min-w-[650px]">
               <thead className="bg-zinc-950/80 text-zinc-400 uppercase text-[11px] tracking-wider border-b border-zinc-800/80">
                 <tr>
                   <th scope="col" className="px-5 py-3.5 font-medium">Waktu</th>

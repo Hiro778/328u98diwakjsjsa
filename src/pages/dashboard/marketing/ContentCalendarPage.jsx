@@ -396,7 +396,7 @@ export default function ContentCalendarPage() {
           {/* Filters: Search, Platform, Status */}
           <div className="flex flex-wrap items-center gap-2.5">
             {/* Search Input */}
-            <div className="relative min-w-[180px] flex-1 sm:flex-none">
+            <div className="relative min-w-[140px] sm:min-w-[180px] flex-1 sm:flex-none">
               <input
                 type="text"
                 placeholder="Cari judul, topik, hashtag..."
@@ -556,7 +556,7 @@ export default function ContentCalendarPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-[550px]">
                 <thead className="border-b border-border bg-cream/40 dark:bg-navy-900/40 text-text-muted">
                   <tr>
                     <th className="px-3 py-2.5 font-semibold">Tanggal &amp; Waktu</th>
@@ -649,7 +649,7 @@ export default function ContentCalendarPage() {
       {/* MODAL: ADD / EDIT CONTENT FORM */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-xl max-h-[90dvh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="text-base font-bold text-navy-700 dark:text-navy-100">
                 {editingItem ? 'Edit Jadwal Konten' : 'Tambah Jadwal Konten Baru'}
@@ -1099,7 +1099,7 @@ export default function ContentCalendarPage() {
       {/* CONFIRM DELETE DIALOG (Supports single occurrence & entire series) */}
       {deleteConfirmItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-xl text-center">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-xl text-center max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/40 text-red-600">
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

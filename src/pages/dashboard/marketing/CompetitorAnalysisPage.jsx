@@ -969,7 +969,7 @@ export default function CompetitorAnalysisPage() {
               <section className="mb-8">
                 <h2 className="text-lg font-bold text-navy-700 mb-3">Perbandingan Kompetitor</h2>
                 <div className="overflow-x-auto bg-surface border border-border rounded-xl">
-                  <table className="w-full text-sm text-left">
+                  <table className="w-full text-sm text-left min-w-[600px]">
                     <thead className="bg-gray-50 text-gray-600 font-medium">
                       <tr>
                         <th className="px-4 py-3 rounded-l-lg">Kompetitor</th>

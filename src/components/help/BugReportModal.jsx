@@ -150,7 +150,7 @@ export default function BugReportModal({ isOpen, onClose }) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="bug-report-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto"
       data-testid="bug-report-modal"
     >
       <motion.div
@@ -158,7 +158,7 @@ export default function BugReportModal({ isOpen, onClose }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 8 }}
         transition={{ duration: 0.2, ease: 'easeOut' }}
-        className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl text-text-primary"
+        className="relative w-full max-w-[calc(100vw-24px)] sm:max-w-lg max-h-[calc(100dvh-24px)] overflow-y-auto rounded-2xl border border-border bg-surface shadow-2xl text-text-primary"
       >
         {/* Success Overlay */}
         <AnimatePresence>
@@ -193,7 +193,7 @@ export default function BugReportModal({ isOpen, onClose }) {
         </AnimatePresence>
 
         {/* Modal Header */}
-        <div className="flex items-start justify-between border-b border-border bg-surface-hover/30 px-6 py-4">
+        <div className="flex items-start justify-between border-b border-border bg-surface-hover/30 px-4 sm:px-6 py-4">
           <div>
             <div className="flex items-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-rose-500/10 text-rose-500">
@@ -225,7 +225,7 @@ export default function BugReportModal({ isOpen, onClose }) {
         </div>
 
         {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
           {submitError && (
             <div
               className="p-3 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-400 text-xs flex items-center justify-between"

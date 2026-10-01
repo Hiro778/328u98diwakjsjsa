@@ -116,7 +116,7 @@ export default function ReceiptSettingsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6 min-w-0 w-full">
       <Toast message={toast?.message} type={toast?.type} onDismiss={() => {}} />
 
       <BackButton fallbackUrl="/dashboard/pos" />
@@ -131,13 +131,13 @@ export default function ReceiptSettingsPage() {
             <span>/</span>
             <span className="text-text-secondary font-medium">Pengaturan Struk</span>
           </div>
-          <h1 className="text-2xl font-extrabold text-navy-700">Profil & Pengaturan Struk</h1>
-          <p className="text-sm text-text-secondary mt-0.5">
+          <h1 className="text-xl sm:text-2xl font-extrabold text-navy-700">Profil & Pengaturan Struk</h1>
+          <p className="text-xs sm:text-sm text-text-secondary mt-0.5">
             Atur identitas toko dan format tampilan struk untuk cetak thermal &amp; WhatsApp.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           <Link
             to="/dashboard/pos"
             className="rounded-xl border border-border bg-surface px-4 py-2 text-xs font-semibold text-text-secondary hover:bg-surface-hover transition-colors"

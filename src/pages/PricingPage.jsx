@@ -133,21 +133,21 @@ export default function PricingPage() {
   const loginReturnUrl = `/pricing${activationCode ? `?activate=${encodeURIComponent(activationCode.trim())}` : ''}`
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-text-primary px-4 py-8 sm:px-6">
+    <div className="flex min-h-screen flex-col bg-background text-text-primary px-3 py-6 sm:px-6 sm:py-8 min-w-0 w-full">
       {/* Top Navigation Bar */}
-      <div className="mx-auto flex w-full max-w-lg items-center justify-between pb-6">
+      <div className="mx-auto flex w-full max-w-lg items-center justify-between pb-6 gap-2">
         <Link
           to={user ? '/dashboard' : '/'}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-secondary transition-colors hover:text-text-primary"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-secondary transition-colors hover:text-text-primary shrink-0"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
           </svg>
-          {user ? 'Kembali ke Dashboard' : 'Kembali ke Beranda'}
+          {user ? 'Kembali' : 'Beranda'}
         </Link>
 
         {user && (
-          <span className="text-xs text-text-muted truncate max-w-[180px]">
+          <span className="text-xs text-text-muted truncate max-w-[140px] sm:max-w-[180px]">
             {user.email}
           </span>
         )}
@@ -250,7 +250,7 @@ export default function PricingPage() {
           </AnimatePresence>
 
           {/* Pricing Card */}
-          <div className="rounded-2xl border border-border bg-surface p-7 shadow-xl shadow-black/20">
+          <div className="rounded-2xl border border-border bg-surface p-4 sm:p-7 shadow-xl shadow-black/20">
             {authLoading ? (
               <div className="space-y-4 py-6 text-center">
                 <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
@@ -445,7 +445,7 @@ export default function PricingPage() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="w-full max-w-md rounded-2xl border border-border bg-surface-elevated p-6 shadow-2xl text-left"
+              className="w-full max-w-md rounded-2xl border border-border bg-surface-elevated p-4 sm:p-6 shadow-2xl text-left max-h-[calc(100dvh-24px)] overflow-y-auto"
               role="alertdialog"
               aria-modal="true"
               aria-labelledby="cancel-dialog-title"
@@ -484,12 +484,12 @@ export default function PricingPage() {
               </div>
 
               {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-2.5 pt-2">
+              <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowCancelModal(false)}
                   disabled={cancelling}
-                  className="rounded-xl border border-border bg-surface hover:bg-surface-hover px-4 py-2.5 text-xs font-semibold text-text-primary transition-colors cursor-pointer disabled:opacity-50"
+                  className="w-full sm:w-auto text-center justify-center rounded-xl border border-border bg-surface hover:bg-surface-hover px-4 py-2.5 text-xs font-semibold text-text-primary transition-colors cursor-pointer disabled:opacity-50"
                 >
                   Batal, Tetap Berlangganan
                 </button>
@@ -497,7 +497,7 @@ export default function PricingPage() {
                   type="button"
                   onClick={handleConfirmCancel}
                   disabled={cancelling}
-                  className="rounded-xl bg-danger hover:bg-danger/90 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  className="w-full sm:w-auto text-center justify-center rounded-xl bg-danger hover:bg-danger/90 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
                   {cancelling ? (
                     <>

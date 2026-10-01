@@ -623,7 +623,7 @@ export default function AdminSettingsPage() {
       {/* Confirmation Modal for Destructive / High-Impact Settings */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-800 p-6 shadow-2xl space-y-4 animate-scaleUp">
+          <div className="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-800 p-6 shadow-2xl space-y-4 animate-scaleUp max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="flex items-center gap-3 text-rose-400">
               <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20">
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">

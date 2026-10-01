@@ -133,7 +133,7 @@ describe('Creative Studio Token System & Pro 200 Monthly Allowance (ai.md)', () 
 
     it('first Pro billing period grants exactly 200 tokens', () => {
       const db = new DatabaseLedgerSimulator();
-      db.seedBusinessAndSub('bus-1', 'user-1', 'sub-1', 'pro', 'active', '2026-10-01');
+      db.seedBusinessAndSub('bus-1', 'user-1', 'sub-1', 'pro', 'active', '2027-12-31');
 
       const res = db.grantProMonthlyAllowance('bus-1', 'sub-1', '2026-09-01T00:00:00.000Z');
       assert.strictEqual(res.success, true);
@@ -143,7 +143,7 @@ describe('Creative Studio Token System & Pro 200 Monthly Allowance (ai.md)', () 
 
     it('same billing period repeated grant yields exactly 0 additional tokens (idempotency)', () => {
       const db = new DatabaseLedgerSimulator();
-      db.seedBusinessAndSub('bus-1', 'user-1', 'sub-1', 'pro', 'active', '2026-10-01');
+      db.seedBusinessAndSub('bus-1', 'user-1', 'sub-1', 'pro', 'active', '2027-12-31');
 
       const res1 = db.grantProMonthlyAllowance('bus-1', 'sub-1', '2026-09-01T00:00:00.000Z');
       assert.strictEqual(res1.granted, 200);
@@ -176,7 +176,7 @@ describe('Creative Studio Token System & Pro 200 Monthly Allowance (ai.md)', () 
 
     it('10 concurrent same-period grants result in exactly 200 tokens total', () => {
       const db = new DatabaseLedgerSimulator();
-      db.seedBusinessAndSub('bus-1', 'user-1', 'sub-1', 'pro', 'active', '2026-10-01');
+      db.seedBusinessAndSub('bus-1', 'user-1', 'sub-1', 'pro', 'active', '2027-12-31');
 
       const period = '2026-09-01T00:00:00.000Z';
       const results = [];

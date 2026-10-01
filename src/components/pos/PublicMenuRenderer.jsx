@@ -726,7 +726,7 @@ export default function PublicMenuRenderer({
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
             className={`${
-              isSimulator ? 'absolute bottom-3 inset-x-3' : 'fixed bottom-4 inset-x-4 max-w-md mx-auto'
+              isSimulator ? 'absolute bottom-3 inset-x-3' : 'fixed bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] inset-x-3 sm:inset-x-4 max-w-md mx-auto'
             } z-40`}
           >
             <div
@@ -751,7 +751,7 @@ export default function PublicMenuRenderer({
                 whileTap={{ scale: 0.95 }}
                 onClick={() => isInteractive && onOpenCart()}
                 style={{ backgroundColor: buttonColor }}
-                className={`px-5 py-2.5 text-xs font-bold text-white shadow-md transition-all hover:opacity-90 ${getButtonRadius()}`}
+                className={`px-5 py-3 text-xs font-bold text-white shadow-md transition-all hover:opacity-90 min-h-[44px] flex items-center justify-center ${getButtonRadius()}`}
               >
                 Lihat Keranjang ({cartCount})
               </motion.button>

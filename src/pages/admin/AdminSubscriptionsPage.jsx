@@ -243,7 +243,7 @@ export default function AdminSubscriptionsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs min-w-[650px]">
               <thead className="bg-[#0B0F19] border-b border-[#1F2937] text-gray-400 font-medium uppercase text-[10px] tracking-wider">
                 <tr>
                   <th className="px-4 py-3">User / Business</th>

@@ -4,11 +4,11 @@ import BackButton from '../../../components/BackButton';
 import {
   CREDIT_PACKAGES,
   getCreditOverview,
-  createTopupOrder,
   verifyTopupPayment,
   getUsageHistory,
   getTopupHistory,
 } from '../../../services/creativeCreditService';
+import { handleAiCreditWhatsAppPurchase } from '../../../services/aiCreditPurchaseService';
 
 export default function CreativeCreditsPage() {
   const { user, business } = useAuth();
@@ -23,7 +23,6 @@ export default function CreativeCreditsPage() {
   const [activeTab, setActiveTab] = useState('usage'); // 'usage' | 'topup'
   const [loading, setLoading] = useState(true);
   const [verifyingOrder, setVerifyingOrder] = useState(false);
-  const [submittingPkg, setSubmittingPkg] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
@@ -94,53 +93,24 @@ export default function CreativeCreditsPage() {
     }
   }
 
-  async function handleTopup(packageKey) {
+  function handleTopup(pkg) {
     setErrorMsg(null);
     setSuccessMsg(null);
-    setSubmittingPkg(packageKey);
 
-    try {
-      const order = await createTopupOrder(packageKey);
+    const result = handleAiCreditWhatsAppPurchase({
+      packageData: pkg,
+      userEmail: user?.email,
+    });
 
-      if (window.snap && order.snap_token) {
-        window.snap.pay(order.snap_token, {
-          onSuccess: async function () {
-            setSuccessMsg('Pembayaran selesai! Memverifikasi ke server...');
-            if (order.order_id) {
-              try {
-                await verifyTopupPayment(order.order_id);
-              } catch (e) {
-                console.warn('Verify error:', e);
-              }
-            }
-            await loadAllData();
-          },
-          onPending: function () {
-            setSuccessMsg('Menunggu penyelesaian pembayaran.');
-            loadAllData();
-          },
-          onError: function () {
-            setErrorMsg('Pembayaran gagal atau dibatalkan.');
-          },
-          onClose: function () {
-            loadAllData();
-          },
-        });
-      } else if (order.redirect_url) {
-        window.location.href = order.redirect_url;
-      } else {
-        setErrorMsg('Gagal menginisialisasi pembayaran.');
-      }
-    } catch (err) {
-      console.error('Topup error:', err);
-      setErrorMsg(err.message || 'Terjadi kesalahan saat memproses top up.');
-    } finally {
-      setSubmittingPkg(null);
+    if (!result.success) {
+      setErrorMsg(result.error);
+    } else {
+      setSuccessMsg(`Membuka WhatsApp Admin untuk pemesanan paket ${pkg.name}...`);
     }
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-8">
+    <div className="max-w-6xl mx-auto p-3 sm:p-6 space-y-6 sm:space-y-8 min-w-0 w-full">
       <BackButton fallbackUrl="/dashboard/marketing" label="Kembali" />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-200 dark:border-gray-800 pb-5">
@@ -253,14 +223,13 @@ export default function CreativeCreditsPage() {
             Pilihan Paket Top Up
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Pilih paket credits sesuai kebutuhan promosi UMKM Anda. Pembayaran resmi & otomatis terverifikasi.
+            Pilih paket credits sesuai kebutuhan promosi UMKM Anda. Pembelian langsung terhubung ke WhatsApp Admin resmi untuk pembayaran aman & pengisian saldo.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {Object.values(CREDIT_PACKAGES).map((pkg) => {
             const isPopular = pkg.badge === 'Paling populer';
-            const isSubmitting = submittingPkg === pkg.key;
 
             return (
               <div
@@ -301,15 +270,14 @@ export default function CreativeCreditsPage() {
                 <div className="pt-6">
                   <button
                     type="button"
-                    disabled={isSubmitting}
-                    onClick={() => handleTopup(pkg.key)}
-                    className={`w-full py-2.5 px-4 rounded-lg text-sm font-semibold transition-colors ${
+                    onClick={() => handleTopup(pkg)}
+                    className={`w-full py-2.5 px-4 rounded-lg text-sm font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                       isPopular
                         ? 'bg-blue-600 hover:bg-blue-700 text-white'
                         : 'bg-gray-100 hover:bg-gray-200 text-gray-800 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-white'
                     }`}
                   >
-                    {isSubmitting ? 'Memproses...' : 'Beli Paket'}
+                    Beli Credit
                   </button>
                 </div>
               </div>
@@ -320,8 +288,8 @@ export default function CreativeCreditsPage() {
 
       {/* Section Riwayat */}
       <div className="space-y-4 pt-6 border-t border-gray-200 dark:border-gray-800">
-        <div className="flex items-center justify-between">
-          <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => setActiveTab('usage')}
               className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${
@@ -345,7 +313,7 @@ export default function CreativeCreditsPage() {
           </div>
           <button
             onClick={loadAllData}
-            className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white"
+            className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white self-start sm:self-auto"
           >
             ↻ Refresh
           </button>

@@ -251,7 +251,7 @@ export default function AdminFooterSocialLinksPage() {
         /* Links table */
         <div className="rounded-xl border border-zinc-800 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[550px]">
               <thead>
                 <tr className="border-b border-zinc-800 bg-zinc-900/50">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wider">Urutan</th>
@@ -354,7 +354,7 @@ export default function AdminFooterSocialLinksPage() {
       {/* Create/Edit Modal */}
       {modal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl">
+          <div className="w-full max-w-lg rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="p-6 border-b border-zinc-800">
               <h2 className="text-lg font-bold text-zinc-100">
                 {modal.mode === 'create' ? 'Tambah Social Link' : 'Edit Social Link'}
@@ -476,7 +476,7 @@ export default function AdminFooterSocialLinksPage() {
       {/* Delete confirmation modal */}
       {deleteConfirm.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-800 p-6 shadow-2xl space-y-4">
+          <div className="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-800 p-6 shadow-2xl space-y-4 max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="flex items-center gap-3 text-rose-400">
               <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20">
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">

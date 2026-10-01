@@ -111,7 +111,7 @@ export default function NotificationDropdown() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.96 }}
             transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl border border-border bg-surface shadow-xl z-50 overflow-hidden flex flex-col max-h-[80vh]"
+            className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full mt-2 w-auto sm:w-96 rounded-2xl border border-border bg-surface shadow-xl z-50 overflow-hidden flex flex-col max-h-[calc(100dvh-5rem)]"
           >
             {/* Header */}
             <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-surface">
@@ -123,14 +123,24 @@ export default function NotificationDropdown() {
                   </span>
                 )}
               </div>
-              {unreadCount > 0 && (
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <button
+                    onClick={markAllAsRead}
+                    className="text-xs font-medium text-navy-600 hover:text-navy-800 transition-colors"
+                  >
+                    Tandai dibaca
+                  </button>
+                )}
                 <button
-                  onClick={markAllAsRead}
-                  className="text-xs font-medium text-navy-600 hover:text-navy-800 transition-colors"
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="p-1 rounded-md text-text-muted hover:text-text-primary text-xs cursor-pointer sm:hidden"
+                  aria-label="Tutup notifikasi"
                 >
-                  Tandai semua dibaca
+                  ✕
                 </button>
-              )}
+              </div>
             </div>
 
             {/* Notification List */}
@@ -216,7 +226,7 @@ export default function NotificationDropdown() {
                         onClick={(e) => handleDelete(e, item.id)}
                         aria-label="Hapus notifikasi"
                         title="Hapus"
-                        className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-text-muted hover:text-rose-600 transition-all p-1 rounded-md hover:bg-black/5 shrink-0"
+                        className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 text-text-muted hover:text-rose-600 transition-all p-1 rounded-md hover:bg-black/5 shrink-0 cursor-pointer"
                       >
                         <svg
                           className="h-3.5 w-3.5"

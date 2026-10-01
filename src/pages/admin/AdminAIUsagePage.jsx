@@ -321,7 +321,7 @@ export default function AdminAIUsagePage() {
       {/* Data Table */}
       <div className="rounded-xl bg-[#0f172a] border border-slate-800/80 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-300">
+          <table className="w-full text-left text-sm text-slate-300 min-w-[750px]">
             <thead className="bg-slate-900/80 text-xs font-semibold uppercase text-slate-400 tracking-wider border-b border-slate-800">
               <tr>
                 <th className="py-3.5 px-4">Waktu</th>
@@ -475,7 +475,7 @@ export default function AdminAIUsagePage() {
       {/* Detail Modal */}
       {selectedRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-          <div className="w-full max-w-xl bg-[#0f172a] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="w-full max-w-xl bg-[#0f172a] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90dvh]">
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
               <div>

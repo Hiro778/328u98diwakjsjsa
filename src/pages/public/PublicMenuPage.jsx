@@ -1270,7 +1270,7 @@ export default function PublicMenuPage() {
                     borderColor: 'var(--qr-border)',
                     backgroundColor: qrSurface,
                   }}
-                  className="border-t p-4 space-y-3"
+                  className="border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] space-y-3"
                 >
                   <div className="flex justify-between text-sm">
                     <span style={{ color: 'color-mix(in srgb, var(--qr-text) 60%, transparent)' }}>Subtotal ({cartCount} item)</span>
@@ -1319,14 +1319,14 @@ export default function PublicMenuPage() {
                 backgroundColor: qrSurface,
                 color: qrText,
               }}
-              className="absolute bottom-0 left-0 right-0 max-h-[90vh] overflow-y-auto rounded-t-3xl shadow-2xl"
+              className="absolute bottom-0 left-0 right-0 max-h-[90dvh] overflow-y-auto rounded-t-3xl shadow-2xl"
             >
               {/* Drag handle */}
               <div className="flex justify-center pt-3 pb-1">
                 <div style={{ backgroundColor: 'var(--qr-border)' }} className="h-1.5 w-12 rounded-full" />
               </div>
 
-              <div className="px-5 pb-6 space-y-5">
+              <div className="px-5 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] space-y-5">
                 {/* Header */}
                 <div className="flex items-center justify-between pt-2">
                   <div>

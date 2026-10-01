@@ -374,7 +374,7 @@ export default function AdminPaymentsPage() {
       {/* Payments Table */}
       <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[680px]">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-950/40 text-slate-400">
                 <th className="px-4 py-3 font-semibold">Tipe & ID Pembayaran</th>

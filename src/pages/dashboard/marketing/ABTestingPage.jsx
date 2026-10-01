@@ -847,7 +847,7 @@ export default function ABTestingPage() {
             <span className="text-xs text-text-muted">Data yang dicatat</span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[480px]">
               <thead className="bg-gray-50 dark:bg-gray-800/50 text-text-muted text-xs font-medium">
                 <tr>
                   <th className="px-4 py-3 text-left">Metrik</th>
@@ -1081,7 +1081,7 @@ export default function ABTestingPage() {
       {!loading && !listError && experiments.length > 0 && (
         <div className="bg-surface border border-border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[650px]">
               <thead className="bg-gray-50 dark:bg-gray-800/50 text-text-muted text-xs font-medium">
                 <tr>
                   <th className="px-4 py-3 text-left">Nama</th>
@@ -1265,7 +1265,7 @@ function ResultFieldsForm({ values, onChange }) {
 function ConfirmDialog({ title = 'Hapus eksperimen?', message = 'Eksperimen, variant, dan seluruh hasil yang terkait akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.', confirmLabel = 'Hapus Permanen', cancelLabel = 'Batal', onConfirm, onCancel, danger = true }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-      <div className="bg-surface border border-border rounded-2xl shadow-xl max-w-md w-full p-6 text-text-primary">
+      <div className="bg-surface border border-border rounded-2xl shadow-xl max-w-md w-full p-4 sm:p-6 text-text-primary max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <h3 className="text-base font-bold text-navy-700 dark:text-white mb-2">{title}</h3>
         <p className="text-sm text-text-secondary mb-6 leading-relaxed">{message}</p>
         <div className="flex justify-end gap-3">

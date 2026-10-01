@@ -49,9 +49,9 @@ export default function EditorialNavbar() {
         backdropFilter: navBackdrop,
         WebkitBackdropFilter: navBackdrop,
       }}
-      className="fixed top-0 inset-x-0 z-50 border-b transition-colors duration-300"
+      className="fixed top-0 inset-x-0 z-50 border-b transition-colors duration-300 pt-[env(safe-area-inset-top,0px)]"
     >
-      <div className="max-w-7xl mx-auto px-6 sm:px-8 h-20 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 h-20 flex items-center justify-between">
         {/* Brand */}
         <a href="/" className="flex items-center gap-3 group">
           <div className="h-9 w-9 rounded-lg bg-[#1E293B] border border-[#222C3E] flex items-center justify-center text-[#818CF8] font-bold text-xs group-hover:border-[#818CF8]/50 transition-colors">
@@ -145,7 +145,7 @@ export default function EditorialNavbar() {
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-b border-[#222C3E] bg-[#151D2C]/98 backdrop-blur-xl px-6 py-6 space-y-4">
+        <div className="md:hidden border-b border-[#222C3E] bg-[#151D2C]/98 backdrop-blur-xl px-5 sm:px-6 py-6 space-y-4 max-h-[calc(100dvh-5rem)] overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
           <nav className="flex flex-col space-y-3 text-base font-medium text-slate-200">
             {navLinks.map((link) => (
               link.href.startsWith('/') ? (

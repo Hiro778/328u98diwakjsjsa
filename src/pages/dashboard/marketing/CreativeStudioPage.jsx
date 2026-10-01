@@ -279,28 +279,28 @@ export default function CreativeStudioPage() {
   const canRevisePRD = availableCredits >= CREDIT_COSTS.prd_revision;
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="max-w-4xl mx-auto p-3 sm:p-6 min-w-0 w-full">
       <BackButton fallbackUrl="/dashboard/marketing" label="Kembali" />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">AI Creative Studio</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">AI Creative Studio</h1>
+          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">
             Generate marketing brief and PRD with AI assistance
           </p>
         </div>
 
         {/* Credit Balance & Free AI Badge */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
           {creditOverview && (
-            <div className="flex items-center gap-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 px-4 py-2 rounded-xl shadow-sm">
+            <div className="flex items-center gap-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 px-3 sm:px-4 py-2 rounded-xl shadow-sm">
               <div>
                 <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                   Creative Credits
                 </div>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-xl font-extrabold text-blue-600 dark:text-blue-400">
+                  <span className="text-lg sm:text-xl font-extrabold text-blue-600 dark:text-blue-400">
                     {creditOverview.balance?.available ?? 0}
                   </span>
                   <span className="text-xs text-gray-400">Credits</span>
@@ -322,7 +322,7 @@ export default function CreativeStudioPage() {
           )}
           <button
             onClick={() => navigate('/dashboard/marketing/credits')}
-            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded-lg transition-colors shadow-sm cursor-pointer"
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded-lg transition-colors shadow-sm cursor-pointer shrink-0"
           >
             + Top Up
           </button>
@@ -345,11 +345,11 @@ export default function CreativeStudioPage() {
       )}
 
       {/* Progress Steps: Campaign -> Brief -> PRD (Workflow stops at PRD) */}
-      <div className="flex items-center mb-8 text-sm">
+      <div className="flex items-center mb-6 sm:mb-8 text-xs sm:text-sm overflow-x-auto pb-2 min-w-0 w-full">
         {['campaign', 'brief', 'prd'].map((s, i) => (
-          <div key={s} className="flex items-center">
+          <div key={s} className="flex items-center shrink-0">
             <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-xs ${
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-semibold text-xs ${
                 step === s
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : ['campaign', 'brief', 'prd'].indexOf(step) > i
@@ -360,13 +360,13 @@ export default function CreativeStudioPage() {
               {i + 1}
             </div>
             <span
-              className={`ml-2 font-medium ${
+              className={`ml-1.5 sm:ml-2 font-medium ${
                 step === s ? 'text-indigo-600' : 'text-gray-500'
               }`}
             >
               {s === 'prd' ? 'PRD' : s.charAt(0).toUpperCase() + s.slice(1)}
             </span>
-            {i < 2 && <div className="w-12 h-px bg-gray-300 mx-3"></div>}
+            {i < 2 && <div className="w-5 sm:w-12 h-px bg-gray-300 mx-1.5 sm:mx-3 shrink-0"></div>}
           </div>
         ))}
       </div>

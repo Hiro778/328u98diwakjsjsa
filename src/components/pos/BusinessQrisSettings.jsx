@@ -453,13 +453,13 @@ export default function BusinessQrisSettings({ businessId, onToast }) {
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {showDeleteModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.15 }}
-              className="w-full max-w-[calc(100vw-2rem)] sm:max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-surface-elevated p-5 sm:p-6 shadow-2xl"
+              className="w-full max-w-[calc(100vw-24px)] sm:max-w-md max-h-[calc(100dvh-24px)] overflow-y-auto rounded-2xl border border-border bg-surface-elevated p-4 sm:p-6 shadow-2xl"
             >
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-400">

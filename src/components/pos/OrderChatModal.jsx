@@ -103,7 +103,7 @@ export default function OrderChatModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -119,7 +119,7 @@ export default function OrderChatModal({
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.95, opacity: 0, y: 12 }}
           transition={{ duration: 0.2, ease: 'easeOut' }}
-          className="relative flex flex-col w-full max-w-lg h-[560px] max-h-[90vh] rounded-2xl bg-white shadow-2xl border border-gray-100 overflow-hidden z-10"
+          className="relative flex flex-col w-full max-w-[calc(100vw-24px)] sm:max-w-lg h-[560px] max-h-[calc(100dvh-24px)] rounded-2xl bg-white shadow-2xl border border-gray-100 overflow-hidden z-10"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50/80">

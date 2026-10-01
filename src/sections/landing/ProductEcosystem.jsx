@@ -101,7 +101,7 @@ export default function ProductEcosystem() {
     <section 
       id="ecosystem-section" 
       ref={sectionRef}
-      className="relative pt-20 sm:pt-24 pb-12 sm:pb-16 px-6 lg:px-12 bg-[#0B0F19] text-[#F8FAFC] border-b border-[#222C3E] overflow-hidden"
+      className="relative pt-20 sm:pt-24 pb-12 sm:pb-16 px-4 sm:px-6 lg:px-12 bg-[#0B0F19] text-[#F8FAFC] border-b border-[#222C3E] overflow-hidden"
     >
       <div className="max-w-7xl mx-auto relative z-10">
         

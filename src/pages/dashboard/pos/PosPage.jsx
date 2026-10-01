@@ -57,6 +57,7 @@ export default function POSPage() {
   // QRIS payment is confirmed atomically via merchantProcessOrder RPC when POS/Kasir clicks "Proses".
   const [chatOrder, setChatOrder] = useState(null)
   const [showQrisSettingsModal, setShowQrisSettingsModal] = useState(false)
+  const [mobileTab, setMobileTab] = useState('catalog') // 'catalog' | 'cart'
 
   useEffect(() => {
     if (business?.id) {
@@ -363,15 +364,44 @@ export default function POSPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-64px)] gap-0">
+    <div className="flex flex-col lg:flex-row max-lg:min-h-[calc(100dvh-64px)] lg:h-[calc(100vh-64px)] gap-0 w-full min-w-0">
       <Toast message={toast?.message} type={toast?.type} onDismiss={() => {}} />
+
+      {/* Mobile Tab Switcher (< lg) */}
+      <div className="lg:hidden shrink-0 flex items-center justify-around border-b border-border bg-surface px-2 py-2 shadow-2xs gap-2">
+        <button
+          type="button"
+          onClick={() => setMobileTab('catalog')}
+          className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+            mobileTab === 'catalog'
+              ? 'bg-warm-400 text-white shadow-xs'
+              : 'text-text-secondary hover:bg-cream border border-border/50'
+          }`}
+        >
+          <span>🛍️</span>
+          <span>Katalog Produk</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab('cart')}
+          className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+            mobileTab === 'cart'
+              ? 'bg-warm-400 text-white shadow-xs'
+              : 'text-text-secondary hover:bg-cream border border-border/50'
+          }`}
+        >
+          <span>🛒</span>
+          <span>Pesanan ({cart.reduce((s, i) => s + (i.quantity || 1), 0)})</span>
+        </button>
+      </div>
+
       {/* Left: Products */}
-      <div className="flex flex-1 flex-col border-r border-border">
-        <div className="border-b border-border p-4">
+      <div className={`w-full flex-1 flex-col border-r border-border min-w-0 ${mobileTab === 'catalog' ? 'flex' : 'hidden lg:flex'}`}>
+        <div className="border-b border-border p-3 sm:p-4">
           <BackButton fallbackUrl="/dashboard" label="Kembali" />
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg font-extrabold text-navy-700">POS / Kasir</h1>
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <h1 className="text-base sm:text-lg font-extrabold text-navy-700">POS / Kasir</h1>
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               <Link
                 to="/dashboard/pos/receipt-settings"
                 className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-surface-hover hover:text-navy-700 transition-colors shadow-2xs"
@@ -481,7 +511,7 @@ export default function POSPage() {
       </div>
 
       {/* Right: Cart + Orders */}
-      <div className="flex w-[380px] flex-col bg-surface">
+      <div className={`w-full lg:w-[380px] flex-col bg-surface shrink-0 min-w-0 ${mobileTab === 'cart' ? 'flex' : 'hidden lg:flex'}`}>
         {/* Cart */}
         <div className="border-b border-border p-4">
           <div className="flex items-center justify-between">

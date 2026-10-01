@@ -39,7 +39,7 @@ export default function EditorialHero() {
   return (
     <section 
       ref={containerRef}
-      className="relative min-h-[94vh] pt-28 sm:pt-36 pb-20 px-6 lg:px-12 flex flex-col justify-center overflow-hidden bg-[#0B0F19] text-[#F8FAFC] border-b border-[#222C3E]"
+      className="relative min-h-[94dvh] pt-24 sm:pt-36 pb-16 sm:pb-20 px-4 sm:px-6 lg:px-12 flex flex-col justify-center overflow-hidden bg-[#0B0F19] text-[#F8FAFC] border-b border-[#222C3E]"
     >
       {/* Blueprint grid overlay */}
       <div 
@@ -192,7 +192,7 @@ export default function EditorialHero() {
             </div>
 
             {/* Interactive Module Tabs */}
-            <div className="flex border-b border-[#222C3E] bg-[#101625] px-4 pt-2 gap-1 text-[11px] font-mono">
+            <div className="flex border-b border-[#222C3E] bg-[#101625] px-4 pt-2 gap-1 text-[11px] font-mono overflow-x-auto scrollbar-none whitespace-nowrap">
               <button
                 onClick={() => setActiveTab('keuangan')}
                 className={`px-3 py-1.5 rounded-t-md font-semibold transition-colors cursor-pointer ${

@@ -321,7 +321,7 @@ export default function ProductionCapacityPlanner() {
       </AnimatePresence>
 
       {/* Product Selector */}
-      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface p-4 sm:p-6 shadow-sm">
         <label className="block text-sm font-bold text-navy-700 mb-2">Pilih Produk yang Akan Direncanakan</label>
         {products.length === 0 ? (
           <div className="py-4 text-center text-sm text-text-muted">
@@ -332,7 +332,7 @@ export default function ProductionCapacityPlanner() {
             <select
               value={selectedProductId}
               onChange={(e) => setSelectedProductId(e.target.value)}
-              className="flex-1 min-w-[280px] rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-medium text-navy-700 focus:border-profit-500 focus:outline-none focus:ring-2 focus:ring-profit-500/20"
+              className="w-full min-w-0 sm:flex-1 sm:min-w-[280px] rounded-xl border border-border bg-surface px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium text-navy-700 focus:border-profit-500 focus:outline-none focus:ring-2 focus:ring-profit-500/20"
             >
               {products.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -349,7 +349,7 @@ export default function ProductionCapacityPlanner() {
           {/* Left Column: BOM & Production Settings */}
           <div className="lg:col-span-2 space-y-8">
             {/* BOM / Resep Section */}
-            <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+            <div className="rounded-2xl border border-border bg-surface p-4 sm:p-6 shadow-sm">
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="text-lg font-bold text-navy-700">BOM (Bill of Materials) / Resep</h2>
@@ -446,7 +446,7 @@ export default function ProductionCapacityPlanner() {
                         const invStock = inventoryMap[item.material_product_id] ?? 0
                         return (
                           <div key={index} className="flex flex-wrap items-center gap-3 rounded-xl border border-border p-3 bg-surface/50">
-                            <div className="flex-1 min-w-[200px]">
+                            <div className="w-full sm:flex-1 sm:min-w-[180px]">
                               <label className="block text-[10px] font-bold text-text-muted mb-1">Bahan Baku</label>
                               <select
                                 value={item.material_product_id}
@@ -460,7 +460,7 @@ export default function ProductionCapacityPlanner() {
                                 ))}
                               </select>
                             </div>
-                            <div className="w-32">
+                            <div className="flex-1 min-w-[110px] sm:w-32 sm:flex-none">
                               <label className="block text-[10px] font-bold text-navy-700 mb-1">Kebutuhan per Batch</label>
                               <input
                                 type="number"
@@ -472,7 +472,7 @@ export default function ProductionCapacityPlanner() {
                                 className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-navy-700"
                               />
                             </div>
-                            <div className="w-24">
+                            <div className="w-20 sm:w-24">
                               <label className="block text-[10px] font-bold text-text-muted mb-1">Satuan</label>
                               <input
                                 type="text"

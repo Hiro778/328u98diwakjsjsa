@@ -600,7 +600,7 @@ export default function QRMenuDesignerPage() {
   const publicMenuUrl = `${window.location.origin}/menu/${business?.id}`
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden bg-background">
+    <div className="flex flex-col max-lg:min-h-[calc(100dvh-80px)] lg:h-[calc(100vh-80px)] overflow-hidden bg-background">
       {/* Top Navigation Bar */}
       <header className="shrink-0 flex items-center justify-between gap-2 border-b border-border bg-surface px-3 py-2.5 sm:px-4 sm:py-3 shadow-2xs">
         <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
@@ -633,7 +633,7 @@ export default function QRMenuDesignerPage() {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-1.5 rounded-xl bg-warm-400 px-3.5 sm:px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-warm-500 disabled:opacity-60 transition-all hover:shadow-md"
+            className="flex items-center gap-1.5 rounded-xl bg-warm-400 px-3.5 sm:px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-warm-500 disabled:opacity-60 transition-all hover:shadow-md cursor-pointer"
           >
             {saving ? (
               <>
@@ -653,14 +653,14 @@ export default function QRMenuDesignerPage() {
       </header>
 
       {/* Mobile & Tablet Tab Bar (< lg screens per bug.md) */}
-      <div className="lg:hidden shrink-0 flex items-center justify-around border-b border-border bg-surface px-2 py-1.5 shadow-2xs">
+      <div className="lg:hidden shrink-0 flex items-center justify-around border-b border-border bg-surface px-2 py-1.5 shadow-2xs gap-1.5">
         <button
           type="button"
           onClick={() => setMobileTab('sections')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+          className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-colors cursor-pointer ${
             mobileTab === 'sections'
               ? 'bg-warm-400 text-white shadow-xs'
-              : 'text-text-secondary hover:bg-cream'
+              : 'text-text-secondary hover:bg-cream border border-border/50'
           }`}
         >
           <span>📋</span>
@@ -669,10 +669,10 @@ export default function QRMenuDesignerPage() {
         <button
           type="button"
           onClick={() => setMobileTab('preview')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+          className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-colors cursor-pointer ${
             mobileTab === 'preview'
               ? 'bg-warm-400 text-white shadow-xs'
-              : 'text-text-secondary hover:bg-cream'
+              : 'text-text-secondary hover:bg-cream border border-border/50'
           }`}
         >
           <span>📱</span>
@@ -681,10 +681,10 @@ export default function QRMenuDesignerPage() {
         <button
           type="button"
           onClick={() => setMobileTab('inspector')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+          className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-colors cursor-pointer ${
             mobileTab === 'inspector'
               ? 'bg-warm-400 text-white shadow-xs'
-              : 'text-text-secondary hover:bg-cream'
+              : 'text-text-secondary hover:bg-cream border border-border/50'
           }`}
         >
           <span>⚙️</span>
@@ -1713,7 +1713,7 @@ function BannerModal({ isOpen, onClose, banner, onSave, uploading }) {
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className="relative w-full max-w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl bg-surface p-4 sm:p-5 shadow-2xl z-10 space-y-4 max-h-[90vh] overflow-y-auto"
+            className="relative w-full max-w-[calc(100vw-24px)] sm:max-w-md rounded-2xl bg-surface p-3.5 sm:p-5 shadow-2xl z-10 space-y-4 max-h-[calc(100dvh-24px)] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="text-sm font-bold text-navy-800">
@@ -1831,7 +1831,7 @@ function BannerModal({ isOpen, onClose, banner, onSave, uploading }) {
               </div>
 
               {/* CTA Text & Link */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs font-bold text-navy-700 block mb-1">
                     Teks Tombol CTA
@@ -1927,7 +1927,7 @@ function SocialModal({ isOpen, onClose, link, onSave }) {
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className="relative w-full max-w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl bg-surface p-4 sm:p-5 shadow-2xl z-10 space-y-4 max-h-[90vh] overflow-y-auto"
+            className="relative w-full max-w-[calc(100vw-24px)] sm:max-w-md rounded-2xl bg-surface p-3.5 sm:p-5 shadow-2xl z-10 space-y-4 max-h-[calc(100dvh-24px)] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="text-sm font-bold text-navy-800">
