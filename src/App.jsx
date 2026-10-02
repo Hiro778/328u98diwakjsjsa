@@ -1,6 +1,7 @@
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router'
 import { ThemeProvider } from './context/ThemeContext'
 import { AuthProvider } from './context/AuthContext'
+import { SettingsProvider } from './context/SettingsContext'
 import LandingPage from './pages/LandingPage'
 import AuthPage from './pages/AuthPage'
 import AuthCallbackPage from './pages/AuthCallbackPage'
@@ -33,6 +34,8 @@ import AdminAuditLogsPage from './pages/admin/AdminAuditLogsPage'
 import AdminSettingsPage from './pages/admin/AdminSettingsPage'
 import AdminFooterSocialLinksPage from './pages/admin/AdminFooterSocialLinksPage'
 import AdminPlaceholderPage from './pages/admin/AdminPlaceholderPage'
+import AdminCreditActivationsPage from './pages/admin/AdminCreditActivationsPage'
+import ActivateCreditPage from './pages/ActivateCreditPage'
 import TentangKamiPage from './pages/TentangKamiPage'
 import RequireOnboarding from './components/RequireOnboarding'
 import RequireSubscription from './components/RequireSubscription'
@@ -85,10 +88,7 @@ import BenchmarkingPage from './pages/dashboard/analytics/BenchmarkingPage'
 import WeeklyRecapPage from './pages/dashboard/analytics/WeeklyRecapPage'
 
 const router = createBrowserRouter([
-  {
-    path: '/',
-    element: <LandingPage />,
-  },
+  // Authentication infrastructure required for admin recovery (@gas.md)
   {
     path: '/auth',
     element: <AuthPage />,
@@ -96,27 +96,6 @@ const router = createBrowserRouter([
   {
     path: '/auth/callback',
     element: <AuthCallbackPage />,
-  },
-  {
-    path: '/test-tools-view',
-    element: (
-      <div data-theme="dark" className="min-h-screen bg-[#0B0F19] text-[#F8FAFC] p-4 sm:p-8 max-w-7xl mx-auto">
-        <AllToolsPage />
-      </div>
-    ),
-  },
-  // Public menu (no auth required)
-  {
-    path: '/menu/:businessId',
-    element: <PublicMenuPage />,
-  },
-  {
-    path: '/menu/:businessId/product/:productId',
-    element: <PublicProductDetailPage />,
-  },
-  {
-    path: '/tentang-kami',
-    element: <TentangKamiPage />,
   },
   // Admin Control Center (Protected by RequireAuth & RequireAdmin server verification)
   {
@@ -137,6 +116,7 @@ const router = createBrowserRouter([
               { path: 'subscriptions', element: <AdminSubscriptionsPage /> },
               { path: 'subscriptions/:id', element: <AdminSubscriptionDetailPage /> },
               { path: 'activation-codes', element: <AdminActivationCodesPage /> },
+              { path: 'credit-activations', element: <AdminCreditActivationsPage /> },
               { path: 'ai-usage', element: <AdminAIUsagePage /> },
               { path: 'ai-usage/:userId', element: <AdminPlaceholderPage title="User AI Usage Detail" description="Rincian penggunaan model AI, breakdown tools, dan penyesuaian kredit atomik." stage="Tahap 6" /> },
               { path: 'support', element: <AdminSupportPage /> },
@@ -158,10 +138,39 @@ const router = createBrowserRouter([
       },
     ],
   },
-  // Global React MaintenanceGate covering authenticated user routes (@gl.md)
+  // Centralized Global MaintenanceGate covering public and user application routes (@gas.md & @gl.md)
   {
     element: <MaintenanceGate />,
     children: [
+      {
+        path: '/',
+        element: <LandingPage />,
+      },
+      {
+        path: '/tentang-kami',
+        element: <TentangKamiPage />,
+      },
+      {
+        path: '/activate-credit',
+        element: <ActivateCreditPage />,
+      },
+      {
+        path: '/test-tools-view',
+        element: (
+          <div data-theme="dark" className="min-h-screen bg-[#0B0F19] text-[#F8FAFC] p-4 sm:p-8 max-w-7xl mx-auto">
+            <AllToolsPage />
+          </div>
+        ),
+      },
+      // Public menu (no auth required, but gated during maintenance)
+      {
+        path: '/menu/:businessId',
+        element: <PublicMenuPage />,
+      },
+      {
+        path: '/menu/:businessId/product/:productId',
+        element: <PublicProductDetailPage />,
+      },
       {
         path: '/onboarding',
         element: <RequireAuth />,
@@ -194,33 +203,29 @@ const router = createBrowserRouter([
               { path: 'bantuan', element: <HelpCenterPage /> },
               { path: 'faq', element: <HelpCenterPage /> },
 
-              // Free Tools & Modules (Accessible to Free Users per lock.md & free.md)
-              { path: 'legalitas', element: <LegalitasPage /> },
-              { path: 'ekspor', element: <ExportCenterPage /> },
-              { path: 'kurs', element: <ExportCenterPage /> },
+              // General & Category Overview Pages
               { path: 'keuangan', element: <CategoryPage categoryId="finance" /> },
-              { path: 'keuangan/hpp-calculator', element: <HPPCalculator /> },
-              { path: 'keuangan/hpp', element: <HPPCalculator /> },
-              { path: 'keuangan/bep-calculator', element: <BEPCalculator /> },
-              { path: 'keuangan/bep', element: <BEPCalculator /> },
-
-              // Marketing Overview & Free/Hybrid Tools (Accessible to Free Users per lock.md)
               { path: 'marketing', element: <CategoryPage categoryId="marketing" /> },
-              { path: 'marketing/seo-optimizer', element: <SeoOptimizerPage /> },
-              { path: 'marketing/seo', element: <SeoOptimizerPage /> },
-              { path: 'marketing/content-generator', element: <CreativeStudioPage /> },
-              { path: 'marketing/credits', element: <CreativeCreditsPage /> },
+              { path: 'operasional', element: <CategoryPage categoryId="operations" /> },
+              { path: 'penjualan', element: <CategoryPage categoryId="sales" /> },
+              { path: 'analytics', element: <CategoryPage categoryId="analytics" /> },
 
-              // Pro-Only Marketing Tools (Strictly Gated by Paywall)
+              // ── TIER 1: BASIC TOOLS (Rp35.000/bln — Standalone Calculators) ──
               {
-                element: <RequireSubscription featureName="Fitur Marketing ini" />,
+                element: <RequireSubscription requiredPlan="basic" featureName="Fitur Basic ini" />,
                 children: [
-                  { path: 'marketing/ab-testing', element: <ABTestingPage /> },
-                  { path: 'marketing/ab-testing/:id', element: <ABTestingPage /> },
+                  { path: 'ekspor', element: <ExportCenterPage /> },
+                  { path: 'kurs', element: <ExportCenterPage /> },
+                  { path: 'keuangan/hpp-calculator', element: <HPPCalculator /> },
+                  { path: 'keuangan/hpp', element: <HPPCalculator /> },
+                  { path: 'keuangan/bep-calculator', element: <BEPCalculator /> },
+                  { path: 'keuangan/bep', element: <BEPCalculator /> },
+                  { path: 'keuangan/loan-simulation', element: <LoanSimulation /> },
+                  { path: 'marketing/seo-optimizer', element: <SeoOptimizerPage /> },
+                  { path: 'marketing/seo', element: <SeoOptimizerPage /> },
+                  { path: 'marketing/ads', element: <AdsPage /> },
                   { path: 'marketing/content-calendar', element: <ContentCalendarPage /> },
                   { path: 'marketing/calendar', element: <ContentCalendarPage /> },
-                  { path: 'marketing/competitor-analysis', element: <CompetitorAnalysisPage /> },
-                  { path: 'marketing/ads', element: <AdsPage /> },
                   { path: 'marketing/google-business', element: <Navigate to="/dashboard/marketing/ads" replace /> },
                   { path: 'marketing/google-business-profile', element: <Navigate to="/dashboard/marketing/ads" replace /> },
                   { path: 'marketing/google-profile', element: <Navigate to="/dashboard/marketing/ads" replace /> },
@@ -228,34 +233,48 @@ const router = createBrowserRouter([
                 ],
               },
 
-              // Other Pro Features (Finance, Operations, Sales, POS, Analytics)
+              // ── TIER 2: PRO TOOLS (Rp130.000/bln — DB, POS, AI, Analytics) ──
               {
-                element: <RequireSubscription />,
+                element: <RequireSubscription requiredPlan="pro" featureName="Fitur Pro ini" />,
                 children: [
+                  // Legalitas
+                  { path: 'legalitas', element: <LegalitasPage /> },
+
+                  // Marketing Pro
+                  { path: 'marketing/content-generator', element: <CreativeStudioPage /> },
+                  { path: 'marketing/credits', element: <CreativeCreditsPage /> },
+                  { path: 'marketing/ab-testing', element: <ABTestingPage /> },
+                  { path: 'marketing/ab-testing/:id', element: <ABTestingPage /> },
+                  { path: 'marketing/competitor-analysis', element: <CompetitorAnalysisPage /> },
+
+                  // Keuangan Pro
                   { path: 'keuangan/margin-analysis', element: <MarginAnalysis /> },
                   { path: 'keuangan/cash-flow-forecast', element: <CashFlowForecastPage /> },
                   { path: 'keuangan/tax-planning', element: <TaxPlanning /> },
                   { path: 'keuangan/financial-reports', element: <FinancialReports /> },
                   { path: 'keuangan/anomaly-detection', element: <AnomalyDetection /> },
                   { path: 'keuangan/financial-health-score', element: <FinancialHealthScore /> },
-                  { path: 'keuangan/loan-simulation', element: <LoanSimulation /> },
-                  { path: 'operasional', element: <CategoryPage categoryId="operations" /> },
+
+                  // Operasional Pro
                   { path: 'operasional/inventory', element: <InventoryPage /> },
                   { path: 'operasional/suppliers', element: <SupplierDatabasePage /> },
                   { path: 'operasional/telegram', element: <TelegramOperasionalPage /> },
                   { path: 'operasional/excel-penjualan', element: <ExcelPenjualanPage /> },
                   { path: 'operasional/production-capacity', element: <ProductionCapacityPlanner /> },
                   { path: 'operasional/whatsapp', element: <WhatsAppOperasionalPage /> },
-                  { path: 'penjualan', element: <CategoryPage categoryId="sales" /> },
+
+                  // Penjualan & CRM Pro
                   { path: 'penjualan/customer-crm', element: <CustomerCRM /> },
                   { path: 'penjualan/invoice-follow-up', element: <InvoiceFollowUp /> },
                   { path: 'penjualan/loyalty-program', element: <LoyaltyProgram /> },
                   { path: 'penjualan/whatsapp-sales-tracker', element: <WhatsAppSalesTracker /> },
-                  { path: 'analytics', element: <CategoryPage categoryId="analytics" /> },
+
+                  // Analytics Pro
                   { path: 'analytics/realtime', element: <RealtimeDashboard /> },
                   { path: 'analytics/benchmarking', element: <BenchmarkingPage /> },
                   { path: 'analytics/weekly-recap', element: <WeeklyRecapPage /> },
-                  // POS / QR Menu routes
+
+                  // POS / QR Menu Pro
                   { path: 'pos', element: <POSPage /> },
                   { path: 'pos/qr-menu', element: <QRMenuPage /> },
                   { path: 'pos/qr-menu/published', element: <QRMenuPublishedPage /> },
@@ -285,7 +304,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <RouterProvider router={router} />
+        <SettingsProvider>
+          <RouterProvider router={router} />
+        </SettingsProvider>
       </AuthProvider>
     </ThemeProvider>
   )
