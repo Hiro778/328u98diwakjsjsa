@@ -9,7 +9,11 @@ import {
   deleteSeoAuditHistory,
   clearSeoAuditHistory,
 } from '../../../lib/seoAnalyzer'
-import { fetchTargetUrlForSeo } from '../../../lib/seoService'
+import {
+  fetchTargetUrlForSeo,
+  fetchSeoKeywordResearch,
+  fetchSeoCompetitors,
+} from '../../../lib/seoService'
 
 // Preset demo templates for UMKM testing
 const SAMPLE_TEMPLATES = [
@@ -150,8 +154,74 @@ export default function SeoOptimizerPage() {
   const [currentAudit, setCurrentAudit] = useState(null)
 
   // Tabs & Filters
-  const [activeTab, setActiveTab] = useState('audit') // 'audit' | 'history'
+  const [activeTab, setActiveTab] = useState('audit') // 'audit' | 'keywords' | 'competitors' | 'history'
   const [issueFilter, setIssueFilter] = useState('all') // 'all' | 'critical' | 'warning' | 'passed'
+
+  // OpenSEO Vertical Slice: Keyword Research states
+  const [researchQuery, setResearchQuery] = useState('')
+  const [researchLoading, setResearchLoading] = useState(false)
+  const [researchError, setResearchError] = useState(null)
+  const [researchResults, setResearchResults] = useState([])
+
+  // OpenSEO Vertical Slice: Competitor Insights states
+  const [competitorQuery, setCompetitorQuery] = useState('')
+  const [competitorLoading, setCompetitorLoading] = useState(false)
+  const [competitorError, setCompetitorError] = useState(null)
+  const [competitorResults, setCompetitorResults] = useState([])
+
+  // Keyword research submit handler
+  const handleKeywordResearchSubmit = async (e) => {
+    e?.preventDefault()
+    const q = researchQuery.trim()
+    if (!q) {
+      setResearchError('Masukkan kata kunci yang ingin diriset.')
+      return
+    }
+    setResearchLoading(true)
+    setResearchError(null)
+    try {
+      const res = await fetchSeoKeywordResearch({
+        businessId: business?.id || user?.id,
+        keywords: q.split(',').map((s) => s.trim()).filter(Boolean),
+      })
+      if (!res.ok) {
+        setResearchError(res.error || res.message || 'Gagal memproses riset kata kunci.')
+      } else {
+        setResearchResults(Array.isArray(res.data) ? res.data : [])
+      }
+    } catch (err) {
+      setResearchError(err?.message || 'Terjadi kesalahan sistem saat riset kata kunci.')
+    } finally {
+      setResearchLoading(false)
+    }
+  }
+
+  // Competitor insights submit handler
+  const handleCompetitorSubmit = async (e) => {
+    e?.preventDefault()
+    const domain = competitorQuery.trim()
+    if (!domain) {
+      setCompetitorError('Masukkan domain target untuk menganalisis pesaing.')
+      return
+    }
+    setCompetitorLoading(true)
+    setCompetitorError(null)
+    try {
+      const res = await fetchSeoCompetitors({
+        businessId: business?.id || user?.id,
+        targetDomain: domain,
+      })
+      if (!res.ok) {
+        setCompetitorError(res.error || res.message || 'Gagal mengambil wawasan kompetitor.')
+      } else {
+        setCompetitorResults(Array.isArray(res.competitors) ? res.competitors : [])
+      }
+    } catch (err) {
+      setCompetitorError(err?.message || 'Terjadi kesalahan sistem saat menganalisis pesaing.')
+    } finally {
+      setCompetitorLoading(false)
+    }
+  }
 
   // History state with zero cascading-render warnings
   const [history, setHistory] = useState(() => loadSeoAuditHistory(tenantId))
@@ -354,20 +424,40 @@ export default function SeoOptimizerPage() {
             </p>
           </div>
           {/* Top navigation tabs */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setActiveTab('audit')}
-              className={`rounded-lg px-4 py-2 text-xs font-semibold transition-colors ${
+              className={`rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors ${
                 activeTab === 'audit'
                   ? 'bg-navy-700 text-white'
                   : 'border border-border bg-surface text-text-secondary hover:bg-cream'
               }`}
             >
-              Audit Baru
+              Audit On-Page
+            </button>
+            <button
+              onClick={() => setActiveTab('keywords')}
+              className={`rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors ${
+                activeTab === 'keywords'
+                  ? 'bg-navy-700 text-white'
+                  : 'border border-border bg-surface text-text-secondary hover:bg-cream'
+              }`}
+            >
+              Riset Kata Kunci
+            </button>
+            <button
+              onClick={() => setActiveTab('competitors')}
+              className={`rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors ${
+                activeTab === 'competitors'
+                  ? 'bg-navy-700 text-white'
+                  : 'border border-border bg-surface text-text-secondary hover:bg-cream'
+              }`}
+            >
+              Pesaing SERP
             </button>
             <button
               onClick={() => setActiveTab('history')}
-              className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold transition-colors ${
+              className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors ${
                 activeTab === 'history'
                   ? 'bg-navy-700 text-white'
                   : 'border border-border bg-surface text-text-secondary hover:bg-cream'
@@ -898,6 +988,194 @@ export default function SeoOptimizerPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* VIEW: KEYWORDS RESEARCH TAB (OpenSEO / DataForSEO vertical slice) */}
+      {activeTab === 'keywords' && (
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-border bg-surface p-5 shadow-xs">
+            <div className="mb-4">
+              <h2 className="text-base font-bold text-navy-700">Riset Kata Kunci Google</h2>
+              <p className="mt-1 text-xs text-text-secondary">
+                Cari volume pencarian bulanan, estimasi CPC, dan tingkat persaingan kata kunci di Google Indonesia.
+              </p>
+            </div>
+
+            <form onSubmit={handleKeywordResearchSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-navy-700">
+                  Kata Kunci Sasaran <span className="text-red-500">*</span>
+                </label>
+                <div className="mt-1.5 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="text"
+                    value={researchQuery}
+                    onChange={(e) => setResearchQuery(e.target.value)}
+                    placeholder="misal: kopi gayo, kopi robusta lampung, hampers kopi"
+                    disabled={researchLoading}
+                    className="flex-1 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-navy-900 placeholder:text-text-muted focus:border-profit-500 focus:outline-none focus:ring-1 focus:ring-profit-500 disabled:opacity-60"
+                  />
+                  <button
+                    type="submit"
+                    disabled={researchLoading}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-profit-600 px-5 py-2.5 text-xs font-bold text-white transition-all hover:bg-profit-500 disabled:opacity-60 shadow-xs cursor-pointer"
+                  >
+                    {researchLoading ? (
+                      <>
+                        <svg className="h-4 w-4 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                        </svg>
+                        <span>Mencari data...</span>
+                      </>
+                    ) : (
+                      <span>Riset Kata Kunci</span>
+                    )}
+                  </button>
+                </div>
+                <p className="mt-1 text-[11px] text-text-muted">
+                  Pisahkan beberapa kata kunci dengan tanda koma (maksimal 10 kata kunci per pencarian).
+                </p>
+              </div>
+
+              {researchError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                  <p className="font-semibold">Informasi Engine:</p>
+                  <p className="mt-0.5 leading-relaxed">{researchError}</p>
+                </div>
+              )}
+            </form>
+          </div>
+
+          {/* Results table */}
+          {researchResults.length > 0 && (
+            <div className="rounded-2xl border border-border bg-surface p-6 shadow-xs">
+              <h3 className="text-base font-bold text-navy-700">Hasil Analisis Kata Kunci</h3>
+              <p className="text-xs text-text-secondary mt-0.5">
+                Data metrik pasar Google Search Indonesia (ID)
+              </p>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-border bg-cream/40 text-text-muted">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold">Kata Kunci</th>
+                      <th className="px-4 py-3 font-semibold">Volume Pencarian</th>
+                      <th className="px-4 py-3 font-semibold">CPC (USD)</th>
+                      <th className="px-4 py-3 font-semibold">Persaingan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {researchResults.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-cream/20">
+                        <td className="px-4 py-3 font-medium text-navy-900">{item.keyword}</td>
+                        <td className="px-4 py-3 text-text-secondary font-mono">{Number(item.search_volume || 0).toLocaleString('id-ID')} /bln</td>
+                        <td className="px-4 py-3 text-text-secondary font-mono">${Number(item.cpc || 0).toFixed(2)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold ${
+                            item.competition_level === 'HIGH' ? 'bg-red-100 text-red-700' : item.competition_level === 'MEDIUM' ? 'bg-warm-100 text-warm-700' : 'bg-profit-100 text-profit-700'
+                          }`}>
+                            {item.competition_level || 'LOW'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* VIEW: COMPETITORS INSIGHTS TAB (OpenSEO / DataForSEO vertical slice) */}
+      {activeTab === 'competitors' && (
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-border bg-surface p-5 shadow-xs">
+            <div className="mb-4">
+              <h2 className="text-base font-bold text-navy-700">Wawasan Pesaing SERP</h2>
+              <p className="mt-1 text-xs text-text-secondary">
+                Petakan domain kompetitor yang memperebutkan visibilitas organik pada Google Search.
+              </p>
+            </div>
+
+            <form onSubmit={handleCompetitorSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-navy-700">
+                  Domain Website atau Toko <span className="text-red-500">*</span>
+                </label>
+                <div className="mt-1.5 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="text"
+                    value={competitorQuery}
+                    onChange={(e) => setCompetitorQuery(e.target.value)}
+                    placeholder="misal: tokokopi.id atau website-umkm.id"
+                    disabled={competitorLoading}
+                    className="flex-1 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-navy-900 placeholder:text-text-muted focus:border-profit-500 focus:outline-none focus:ring-1 focus:ring-profit-500 disabled:opacity-60"
+                  />
+                  <button
+                    type="submit"
+                    disabled={competitorLoading}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-profit-600 px-5 py-2.5 text-xs font-bold text-white transition-all hover:bg-profit-500 disabled:opacity-60 shadow-xs cursor-pointer"
+                  >
+                    {competitorLoading ? (
+                      <>
+                        <svg className="h-4 w-4 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                        </svg>
+                        <span>Menganalisis...</span>
+                      </>
+                    ) : (
+                      <span>Cari Pesaing</span>
+                    )}
+                  </button>
+                </div>
+                <p className="mt-1 text-[11px] text-text-muted">
+                  Masukkan domain tanpa https:// (contoh: kopikenangan.com).
+                </p>
+              </div>
+
+              {competitorError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                  <p className="font-semibold">Informasi Engine:</p>
+                  <p className="mt-0.5 leading-relaxed">{competitorError}</p>
+                </div>
+              )}
+            </form>
+          </div>
+
+          {/* Results table */}
+          {competitorResults.length > 0 && (
+            <div className="rounded-2xl border border-border bg-surface p-6 shadow-xs">
+              <h3 className="text-base font-bold text-navy-700">Daftar Pesaing Teratas</h3>
+              <p className="text-xs text-text-secondary mt-0.5">
+                Peringkat visibilitas kompetitor di Google
+              </p>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-border bg-cream/40 text-text-muted">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold">Domain Pesaing</th>
+                      <th className="px-4 py-3 font-semibold">Rata-rata Posisi</th>
+                      <th className="px-4 py-3 font-semibold">Skor Visibilitas</th>
+                      <th className="px-4 py-3 font-semibold">Relevansi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {competitorResults.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-cream/20">
+                        <td className="px-4 py-3 font-medium text-navy-900">{item.domain}</td>
+                        <td className="px-4 py-3 text-text-secondary font-mono">{item.avg_position ? Number(item.avg_position).toFixed(1) : '-'}</td>
+                        <td className="px-4 py-3 text-text-secondary font-mono">{Number(item.visibility || 0).toLocaleString('id-ID')}</td>
+                        <td className="px-4 py-3 text-profit-600 font-semibold">{item.competitor_relevance ? `${Math.round(item.competitor_relevance * 100)}%` : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

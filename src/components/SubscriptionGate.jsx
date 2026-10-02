@@ -9,11 +9,13 @@ import { useAuth } from '../context/AuthContext'
 import { verifySubscriptionPayment } from '../lib/subscriptionService'
 import { formatSyncResultMessage, getFriendlyErrorMessage } from '../lib/subscriptionUtils'
 
-export default function SubscriptionGate({ featureName = 'Fitur ini' }) {
+export default function SubscriptionGate({ featureName = 'Fitur ini', requiredPlan = 'pro' }) {
   const navigate = useNavigate()
-  const { hasExpiredSubscription, refreshSubscription } = useAuth()
+  const { hasExpiredSubscription, isBasic, refreshSubscription } = useAuth()
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState(null)
+
+  const isBasicReq = requiredPlan === 'basic'
 
   const handleSyncPayment = async () => {
     setSyncing(true)
@@ -25,7 +27,7 @@ export default function SubscriptionGate({ featureName = 'Fitur ini' }) {
       const isSubActive =
         verifyRes?.is_active === true ||
         (sub?.status === 'active' &&
-          sub?.plan === 'pro' &&
+          (isBasicReq ? ['basic', 'pro'].includes(sub?.plan?.toLowerCase()) : sub?.plan?.toLowerCase() === 'pro') &&
           sub?.expires_at &&
           new Date(sub.expires_at) > new Date())
 
@@ -61,16 +63,26 @@ export default function SubscriptionGate({ featureName = 'Fitur ini' }) {
 
         <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-warm-50 px-3 py-1 text-xs font-semibold text-warm-600">
           <span className="h-1.5 w-1.5 rounded-full bg-warm-500 animate-pulse" />
-          {hasExpiredSubscription ? 'Langganan Telah Berakhir' : 'Khusus Paket Pro'}
+          {hasExpiredSubscription
+            ? 'Langganan Telah Berakhir'
+            : isBasicReq
+            ? 'Khusus Pelanggan BisnisSehat'
+            : isBasic
+            ? 'Upgrade ke Paket Pro Diperlukan'
+            : 'Khusus Paket Pro'}
         </div>
 
         <h2 className="mt-4 text-xl font-extrabold text-text-primary">
-          {featureName} Memerlukan BisnisSehat Pro
+          {featureName} {isBasicReq ? 'Memerlukan Langganan Aktif' : 'Memerlukan BisnisSehat Pro'}
         </h2>
 
         <p className="mt-2 text-sm text-text-secondary leading-relaxed">
           {hasExpiredSubscription
-            ? 'Masa aktif BisnisSehat Pro kamu telah berakhir. Perpanjang sekarang untuk terus menikmati akses tanpa batas ke semua tools bisnis.'
+            ? 'Masa aktif langganan kamu telah berakhir. Perpanjang sekarang untuk terus menikmati akses tanpa batas.'
+            : isBasicReq
+            ? 'Akses kumpulan tools bisnis kalkulasi mandiri dengan paket Basic (Rp35.000/bulan) atau paket lengkap Pro (Rp130.000/bulan).'
+            : isBasic
+            ? 'Fitur ini membutuhkan koneksi database bisnis, POS kasir, atau modul AI yang tersedia di paket Pro seharga Rp130.000 / bulan.'
             : 'Upgrade ke BisnisSehat Pro seharga Rp130.000 / bulan untuk membuka akses penuh ke analisis, tools ekspor, AI insights, dan manajemen bisnis lanjutan.'}
         </p>
 
@@ -80,13 +92,13 @@ export default function SubscriptionGate({ featureName = 'Fitur ini' }) {
             <svg className="h-4 w-4 text-profit-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
-            <span>Semua tools bisnis & ekspor tanpa batas</span>
+            <span>{isBasicReq ? 'Akses tools kalkulasi mandiri (HPP, BEP, Ads, SEO, Kurs)' : 'Semua tools bisnis, POS kasir & AI tanpa batas'}</span>
           </div>
           <div className="flex items-center gap-2">
             <svg className="h-4 w-4 text-profit-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
-            <span>Sistem pembayaran resmi & aman</span>
+            <span>Sistem pembayaran resmi & aman via Midtrans</span>
           </div>
           <div className="flex items-center gap-2">
             <svg className="h-4 w-4 text-profit-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -125,10 +137,12 @@ export default function SubscriptionGate({ featureName = 'Fitur ini' }) {
         {/* CTA Buttons */}
         <div className="mt-6 flex flex-col gap-2.5">
           <Link
-            to="/pricing"
+            to={isBasicReq ? '/pricing?plan=basic' : '/pricing?plan=pro'}
             className="w-full rounded-xl bg-warm-500 px-6 py-3 text-center text-sm font-bold text-white shadow transition-all hover:bg-warm-600 hover:shadow-md"
           >
-            {hasExpiredSubscription ? 'Perpanjang Pro Sekarang →' : 'Upgrade ke Pro (Rp130.000 / bln) →'}
+            {hasExpiredSubscription
+              ? (isBasicReq ? 'Perpanjang Langganan Sekarang →' : 'Perpanjang Pro Sekarang →')
+              : (isBasicReq ? 'Berlangganan Mulai Rp35.000 / bln →' : 'Upgrade ke Pro (Rp130.000 / bln) →')}
           </Link>
 
           <button

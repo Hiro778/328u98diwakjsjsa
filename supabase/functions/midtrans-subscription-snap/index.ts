@@ -274,10 +274,29 @@ Deno.serve(async (req) => {
       const isPaid = txStatus === "settlement" || (txStatus === "capture" && fraudStatus !== "challenge");
 
       if (isPaid) {
-        // Validate amount (Rp 130.000 minimum)
-        if (Number(statusData.gross_amount) < 130000) {
-          console.error(`[midtrans-subscription-snap] Gross amount invalid: ${statusData.gross_amount}`);
+        // Canonical pricing specifications (@phase2.md)
+        const CANONICAL_BASIC_AMOUNT = 35000;
+        const CANONICAL_PRO_AMOUNT = 130000;
+
+        // Authoritative server-side package resolution
+        const targetGross = Number(targetPayment.gross_amount);
+        const resolvedPlan = (targetPayment as any).plan === "basic" || targetGross === CANONICAL_BASIC_AMOUNT
+          ? "basic"
+          : "pro";
+        const expectedMinAmount = resolvedPlan === "basic" ? CANONICAL_BASIC_AMOUNT : CANONICAL_PRO_AMOUNT;
+
+        const paidAmount = Number(statusData.gross_amount);
+
+        // Reject if paid amount is lower than package canonical price
+        if (isNaN(paidAmount) || paidAmount < expectedMinAmount) {
+          console.error(`[midtrans-subscription-snap] Gross amount invalid: ${statusData.gross_amount} for plan ${resolvedPlan}, expected minimum: ${expectedMinAmount}`);
           return errorResponse("Jumlah pembayaran tidak valid", 400);
+        }
+
+        // Reject if target payment in DB was forged (< expected price)
+        if (targetGross < expectedMinAmount) {
+          console.error(`[midtrans-subscription-snap] Recorded payment gross_amount ${targetGross} is less than canonical ${expectedMinAmount}`);
+          return errorResponse("Paket atau nominal pembayaran tidak valid", 400);
         }
 
         const settlementDate = statusData.settlement_time
@@ -304,21 +323,25 @@ Deno.serve(async (req) => {
           })
           .eq("id", targetPayment.id);
 
-        // 2. Activate subscription
+        // 2. Activate subscription with server-authoritative plan (Basic or Pro)
+        const activatedPlan = resolvedPlan;
         await supabaseAdmin
           .from("subscriptions")
           .update({
             status: "active",
-            plan: "pro",
+            plan: activatedPlan,
             started_at: period_start,
             expires_at: period_end,
+            is_cancelled: false,
+            cancelled_at: null,
+            cancelled_by: null,
             payment_provider: "midtrans",
             provider_transaction_id: targetOrderId,
             updated_at: new Date().toISOString(),
           })
           .eq("id", targetPayment.subscription_id || subscriptionId);
 
-        console.log(`[midtrans-subscription-snap] Subscription activated via verify_payment for sub ${subscriptionId}, expires_at: ${period_end}`);
+        console.log(`[midtrans-subscription-snap] Subscription activated (${activatedPlan}) via verify_payment for sub ${subscriptionId}, expires_at: ${period_end}`);
 
         return jsonResponse({
           status: "paid",
@@ -375,6 +398,7 @@ Deno.serve(async (req) => {
         .from("subscriptions")
         .update({
           status: "cancelled",
+          is_cancelled: true,
           cancelled_at: new Date().toISOString(),
           cancelled_by: profileId,
           updated_at: new Date().toISOString(),
@@ -413,8 +437,11 @@ Deno.serve(async (req) => {
     const customerName = profile?.full_name || userData.user.user_metadata?.full_name || "Pelanggan BisnisSehat";
     const customerEmail = profile?.email || userData.user.email || `${profileId}@bisnissehat.id`;
 
-    // Fixed price: Rp 130.000 strictly enforced on server
-    const amount = 130000;
+    // Support Basic (Rp 35.000) or Pro (Rp 130.000)
+    const selectedPlan = body.plan === "basic" ? "basic" : "pro";
+    const amount = selectedPlan === "basic" ? 35000 : 130000;
+    const planName = selectedPlan === "basic" ? "BisnisSehat Basic (1 Bulan)" : "BisnisSehat Pro (1 Bulan)";
+    const itemId = selectedPlan === "basic" ? "bisnissehat-basic-monthly" : "bisnissehat-pro-monthly";
 
     // Projected duration: 1 calendar month
     const { period_start, period_end } = calculateCalendarMonthPeriod(
@@ -433,8 +460,8 @@ Deno.serve(async (req) => {
       },
       item_details: [
         {
-          id: "bisnissehat-pro-monthly",
-          name: "BisnisSehat Pro (1 Bulan)",
+          id: itemId,
+          name: planName,
           price: amount,
           quantity: 1,
         },
@@ -483,6 +510,7 @@ Deno.serve(async (req) => {
         profile_id: profileId,
         midtrans_order_id: midtransOrderId,
         gross_amount: amount,
+        plan: selectedPlan,
         payment_method: "snap",
         transaction_status: "pending",
         payment_status: "pending",

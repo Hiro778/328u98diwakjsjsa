@@ -14,6 +14,7 @@
 // - Recorded to public.ai_usage with idempotency request_id
 
 import { verifyAuth } from "../_shared/auth.ts";
+import { isProUser } from "../_shared/entitlement.ts";
 import { supabaseAdmin } from "../_shared/supabase-admin.ts";
 import { jsonResponse, errorResponse, corsResponse } from "../_shared/response.ts";
 import { enforceAiFeatureFlag } from "../_shared/platform-settings.ts";
@@ -26,6 +27,12 @@ Deno.serve(async (req) => {
 
   try {
     const auth = await verifyAuth(req);
+
+    // Enforce Pro entitlement server-side (sec.md)
+    const hasPro = await isProUser(auth.userId);
+    if (!hasPro) {
+      return errorResponse("Fitur ini membutuhkan BisnisSehat Pro.", 403);
+    }
 
     // @ban.md item 6: enforce enable_ai_features platform flag BEFORE calling AI provider
     const aiBlocked = await enforceAiFeatureFlag();

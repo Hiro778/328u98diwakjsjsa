@@ -133,3 +133,180 @@ export async function fetchTargetUrlForSeo({ url, targetKeyword = '' }) {
     }
   }
 }
+
+/**
+ * Invoke external SEO engine for keyword research.
+ * Strictly requires businessId for tenant isolation and server-side IDOR defense.
+ *
+ * @param {Object} params
+ * @param {string} params.businessId - Current active business ID
+ * @param {string[]|string} params.keywords - Keyword or array of keywords to analyze
+ * @param {number} [params.locationCode=2360] - Country location code (default 2360 for ID)
+ * @param {string} [params.languageCode='id'] - Language code (default 'id')
+ */
+export async function fetchSeoKeywordResearch({ businessId, keywords, locationCode = 2360, languageCode = 'id' }) {
+  if (!businessId) {
+    return { ok: false, code: 'MISSING_BUSINESS_ID', error: 'ID Bisnis aktif diperlukan untuk riset kata kunci.' }
+  }
+
+  const keywordList = Array.isArray(keywords)
+    ? keywords.map(k => String(k).trim()).filter(Boolean)
+    : [String(keywords || '').trim()].filter(Boolean)
+
+  if (keywordList.length === 0) {
+    return { ok: false, code: 'EMPTY_KEYWORDS', error: 'Masukkan minimal satu kata kunci.' }
+  }
+
+  try {
+    const { data, error } = await supabase.functions.invoke('seo-engine', {
+      body: {
+        action: 'keyword-research',
+        business_id: businessId,
+        keywords: keywordList,
+        locationCode,
+        languageCode,
+      },
+    })
+
+    if (error) {
+      let parsed = null
+      try {
+        if (error.context && typeof error.context.json === 'function') {
+          parsed = await error.context.json()
+        }
+      } catch {}
+      return {
+        ok: false,
+        code: parsed?.code || 'FETCH_FAILED',
+        error: parsed?.error || error.message || 'Gagal memproses riset kata kunci.',
+      }
+    }
+
+    if (!data || data.ok === false) {
+      return {
+        ok: false,
+        code: data?.code || 'FETCH_FAILED',
+        error: data?.error || data?.message || 'Gagal memproses riset kata kunci.',
+      }
+    }
+
+    return data
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'CLIENT_ERROR',
+      error: err?.message || 'Terjadi kesalahan saat memanggil engine riset kata kunci.',
+    }
+  }
+}
+
+/**
+ * Invoke external SEO engine for SERP competitor insights.
+ *
+ * @param {Object} params
+ * @param {string} params.businessId - Current active business ID
+ * @param {string} params.targetDomain - Target domain or website
+ * @param {string[]} [params.keywords] - Optional keywords to probe
+ */
+export async function fetchSeoCompetitors({ businessId, targetDomain, keywords = [] }) {
+  if (!businessId) {
+    return { ok: false, code: 'MISSING_BUSINESS_ID', error: 'ID Bisnis aktif diperlukan.' }
+  }
+
+  const domain = String(targetDomain || '').trim()
+  if (!domain) {
+    return { ok: false, code: 'EMPTY_DOMAIN', error: 'Domain target tidak boleh kosong.' }
+  }
+
+  try {
+    const { data, error } = await supabase.functions.invoke('seo-engine', {
+      body: {
+        action: 'competitor-insights',
+        business_id: businessId,
+        targetDomain: domain,
+        keywords,
+      },
+    })
+
+    if (error) {
+      let parsed = null
+      try {
+        if (error.context && typeof error.context.json === 'function') {
+          parsed = await error.context.json()
+        }
+      } catch {}
+      return {
+        ok: false,
+        code: parsed?.code || 'FETCH_FAILED',
+        error: parsed?.error || error.message || 'Gagal mengambil wawasan kompetitor.',
+      }
+    }
+
+    if (!data || data.ok === false) {
+      return {
+        ok: false,
+        code: data?.code || 'FETCH_FAILED',
+        error: data?.error || data?.message || 'Gagal mengambil wawasan kompetitor.',
+      }
+    }
+
+    return data
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'CLIENT_ERROR',
+      error: err?.message || 'Terjadi kesalahan saat memanggil wawasan kompetitor.',
+    }
+  }
+}
+
+/**
+ * Invoke external SEO engine for backlinks summary.
+ *
+ * @param {Object} params
+ * @param {string} params.businessId - Current active business ID
+ * @param {string} params.targetDomain - Target domain
+ */
+export async function fetchSeoBacklinks({ businessId, targetDomain }) {
+  if (!businessId) {
+    return { ok: false, code: 'MISSING_BUSINESS_ID', error: 'ID Bisnis aktif diperlukan.' }
+  }
+
+  const domain = String(targetDomain || '').trim()
+  if (!domain) {
+    return { ok: false, code: 'EMPTY_DOMAIN', error: 'Domain target tidak boleh kosong.' }
+  }
+
+  try {
+    const { data, error } = await supabase.functions.invoke('seo-engine', {
+      body: {
+        action: 'backlinks-overview',
+        business_id: businessId,
+        targetDomain: domain,
+      },
+    })
+
+    if (error) {
+      let parsed = null
+      try {
+        if (error.context && typeof error.context.json === 'function') {
+          parsed = await error.context.json()
+        }
+      } catch {}
+      return {
+        ok: false,
+        code: parsed?.code || 'FETCH_FAILED',
+        error: parsed?.error || error.message || 'Gagal mengambil profil backlink.',
+      }
+    }
+
+    return data || { ok: false, code: 'EMPTY_RESPONSE', error: 'Tidak ada data backlink.' }
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'CLIENT_ERROR',
+      error: err?.message || 'Terjadi kesalahan saat memanggil ringkasan backlink.',
+    }
+  }
+}
+

@@ -1,15 +1,17 @@
 export const PLANS = {
-  FREE: 'free',
+  BASIC: 'basic',
   PRO: 'pro',
+  FREE: 'free', // Kept for legacy backward compatibility
 }
 
 export const PLAN_CONFIG = {
-  [PLANS.FREE]: {
-    label: 'Free',
-    displayName: 'BisnisSehat Free',
-    price: null,
-    priceLabel: null,
-    priceDetail: null,
+  [PLANS.BASIC]: {
+    label: 'Basic',
+    displayName: 'BisnisSehat Basic',
+    price: 35000,
+    priceLabel: 'Rp35K / bulan',
+    priceDetail: 'Rp35.000 / bulan',
+    description: 'Akses penuh ke kumpulan tools bisnis kalkulasi standalone.',
   },
   [PLANS.PRO]: {
     label: 'Pro',
@@ -17,6 +19,15 @@ export const PLAN_CONFIG = {
     price: 130000,
     priceLabel: 'Rp130K / bulan',
     priceDetail: 'Rp130.000 / bulan',
+    description: 'Semua fitur Basic plus POS, database bisnis, inventori, CRM, analitik, dan AI.',
+  },
+  [PLANS.FREE]: {
+    label: 'Free',
+    displayName: 'BisnisSehat Free (Legacy)',
+    price: null,
+    priceLabel: 'Legacy',
+    priceDetail: 'Paket Lama',
+    isLegacy: true,
   },
 }
 
@@ -35,15 +46,15 @@ export const CATEGORIES = {
     title: 'Keuangan',
     color: '#F5A623',
     tools: [
-      { name: 'HPP Calculator', path: '/dashboard/keuangan/hpp-calculator', requiresPro: false, isFree: true, availability: 'LIVE' },
-      { name: 'Margin Analysis', path: '/dashboard/keuangan/margin-analysis', requiresPro: true, availability: 'LIVE' },
-      { name: 'BEP Calculator', path: '/dashboard/keuangan/bep-calculator', requiresPro: false, isFree: true, availability: 'LIVE' },
-      { name: 'Cash Flow Forecast', path: '/dashboard/keuangan/cash-flow-forecast', requiresPro: true, availability: 'LIVE' },
-      { name: 'Tax Planning', path: '/dashboard/keuangan/tax-planning', requiresPro: true, availability: 'LIVE' },
-      { name: 'Financial Reports', path: '/dashboard/keuangan/financial-reports', requiresPro: true, availability: 'LIVE' },
-      { name: 'Anomaly Detection', path: '/dashboard/keuangan/anomaly-detection', requiresPro: true, availability: 'LIVE' },
-      { name: 'Financial Health Score', path: '/dashboard/keuangan/financial-health-score', requiresPro: true, availability: 'LIVE' },
-      { name: 'Loan Simulation', path: '/dashboard/keuangan/loan-simulation', requiresPro: true, availability: 'LIVE' },
+      { name: 'HPP Calculator', path: '/dashboard/keuangan/hpp-calculator', tier: 'basic', requiresPro: false, availability: 'LIVE' },
+      { name: 'Margin Analysis', path: '/dashboard/keuangan/margin-analysis', tier: 'pro', requiresPro: true, availability: 'LIVE' },
+      { name: 'BEP Calculator', path: '/dashboard/keuangan/bep-calculator', tier: 'basic', requiresPro: false, availability: 'LIVE' },
+      { name: 'Cash Flow Forecast', path: '/dashboard/keuangan/cash-flow-forecast', tier: 'pro', requiresPro: true, availability: 'LIVE' },
+      { name: 'Tax Planning', path: '/dashboard/keuangan/tax-planning', tier: 'pro', requiresPro: true, availability: 'LIVE' },
+      { name: 'Financial Reports', path: '/dashboard/keuangan/financial-reports', tier: 'pro', requiresPro: true, availability: 'LIVE' },
+      { name: 'Anomaly Detection', path: '/dashboard/keuangan/anomaly-detection', tier: 'pro', requiresPro: true, availability: 'LIVE' },
+      { name: 'Financial Health Score', path: '/dashboard/keuangan/financial-health-score', tier: 'pro', requiresPro: true, availability: 'LIVE' },
+      { name: 'Loan Simulation', path: '/dashboard/keuangan/loan-simulation', tier: 'basic', requiresPro: false, availability: 'LIVE' },
     ],
   },
   operations: {
@@ -51,12 +62,12 @@ export const CATEGORIES = {
     title: 'Operasional',
     color: '#F5A623',
     tools: [
-      { name: 'QR Menu & Pesanan', path: '/dashboard/pos/qr-menu' },
+      { name: 'QR Menu & Pesanan', path: '/dashboard/pos/qr-menu', tier: 'pro', requiresPro: true },
       { name: 'POS / Kasir', path: '/dashboard/pos' },
-      { name: 'Inventory Management', path: '/dashboard/operasional/inventory' },
-      { name: 'Supplier Database', path: '/dashboard/operasional/suppliers' },
-      { name: 'Production Capacity Planner', path: '/dashboard/operasional/production-capacity' },
-      { name: 'Excel Penjualan Otomatis', path: '/dashboard/operasional/excel-penjualan' },
+      { name: 'Inventory Management', path: '/dashboard/operasional/inventory', tier: 'pro', requiresPro: true },
+      { name: 'Supplier Database', path: '/dashboard/operasional/suppliers', tier: 'pro', requiresPro: true },
+      { name: 'Production Capacity Planner', path: '/dashboard/operasional/production-capacity', tier: 'pro', requiresPro: true },
+      { name: 'Excel Penjualan Otomatis', path: '/dashboard/operasional/excel-penjualan', tier: 'pro', requiresPro: true },
     ],
   },
   sales: {
@@ -64,10 +75,10 @@ export const CATEGORIES = {
     title: 'Penjualan & CRM',
     color: '#10B981',
     tools: [
-      { name: 'Customer CRM', path: '/dashboard/penjualan/customer-crm' },
-      { name: 'Invoice Follow-up', path: '/dashboard/penjualan/invoice-follow-up' },
-      { name: 'Loyalty Program', path: '/dashboard/penjualan/loyalty-program' },
-      { name: 'WhatsApp Sales Tracker', path: '/dashboard/penjualan/whatsapp-sales-tracker' },
+      { name: 'Customer CRM', path: '/dashboard/penjualan/customer-crm', tier: 'pro', requiresPro: true },
+      { name: 'Invoice Follow-up', path: '/dashboard/penjualan/invoice-follow-up', tier: 'pro', requiresPro: true },
+      { name: 'Loyalty Program', path: '/dashboard/penjualan/loyalty-program', tier: 'pro', requiresPro: true },
+      { name: 'WhatsApp Sales Tracker', path: '/dashboard/penjualan/whatsapp-sales-tracker', tier: 'pro', requiresPro: true },
     ],
   },
   marketing: {
@@ -75,13 +86,13 @@ export const CATEGORIES = {
     title: 'Marketing',
     color: '#818CF8',
     tools: [
-      { name: 'AI Creative Studio', path: '/dashboard/marketing/content-generator' },
+      { name: 'AI Creative Studio', path: '/dashboard/marketing/content-generator', tier: 'pro', requiresPro: true },
       { name: 'AI Video Generator', availability: 'COMING_SOON', status: 'coming_soon' },
-      { name: 'Competitor Analysis', path: '/dashboard/marketing/competitor-analysis' },
-      { name: 'Ads', path: '/dashboard/marketing/ads' },
-      { name: 'SEO Optimizer', path: '/dashboard/marketing/seo-optimizer' },
-      { name: 'Content Calendar', path: '/dashboard/marketing/content-calendar' },
-      { name: 'A/B Testing', path: '/dashboard/marketing/ab-testing' },
+      { name: 'Competitor Analysis', path: '/dashboard/marketing/competitor-analysis', tier: 'pro', requiresPro: true },
+      { name: 'Ads', path: '/dashboard/marketing/ads', tier: 'basic', requiresPro: false },
+      { name: 'SEO Optimizer', path: '/dashboard/marketing/seo-optimizer', tier: 'basic', requiresPro: false },
+      { name: 'Content Calendar', path: '/dashboard/marketing/content-calendar', tier: 'basic', requiresPro: false },
+      { name: 'A/B Testing', path: '/dashboard/marketing/ab-testing', tier: 'pro', requiresPro: true },
     ],
   },
   legal: {
@@ -89,7 +100,7 @@ export const CATEGORIES = {
     title: 'Legal & Compliance',
     color: '#10B981',
     tools: [
-      { name: 'Legalitas Checker', path: '/dashboard/legalitas', availability: 'LIVE' },
+      { name: 'Legalitas Checker', path: '/dashboard/legalitas', tier: 'pro', requiresPro: true, availability: 'LIVE' },
       { name: 'Logo Analyzer', path: '/dashboard/legalitas?tab=logo', availability: 'COMING_SOON', status: 'coming_soon' },
     ],
   },
@@ -114,9 +125,9 @@ export const CATEGORIES = {
     title: 'Analytics',
     color: '#818CF8',
     tools: [
-      { name: 'Real-time Dashboard', path: '/dashboard/analytics/realtime' },
-      { name: 'Benchmarking', path: '/dashboard/analytics/benchmarking' },
-      { name: 'Weekly Recap', path: '/dashboard/analytics/weekly-recap' },
+      { name: 'Real-time Dashboard', path: '/dashboard/analytics/realtime', tier: 'pro', requiresPro: true },
+      { name: 'Benchmarking', path: '/dashboard/analytics/benchmarking', tier: 'pro', requiresPro: true },
+      { name: 'Weekly Recap', path: '/dashboard/analytics/weekly-recap', tier: 'pro', requiresPro: true },
     ],
   },
 }

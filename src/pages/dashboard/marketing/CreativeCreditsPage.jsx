@@ -9,9 +9,11 @@ import {
   getTopupHistory,
 } from '../../../services/creativeCreditService';
 import { handleAiCreditWhatsAppPurchase } from '../../../services/aiCreditPurchaseService';
+import { usePlatformSettings } from '../../../hooks/usePlatformSettings';
 
 export default function CreativeCreditsPage() {
   const { user, business } = useAuth();
+  const { supportPhone } = usePlatformSettings();
   const [overview, setOverview] = useState({
     balance: { available: 0, reserved: 0, consumed: 0, total_earned: 0 },
     freeUsageAvailable: true,
@@ -100,12 +102,15 @@ export default function CreativeCreditsPage() {
     const result = handleAiCreditWhatsAppPurchase({
       packageData: pkg,
       userEmail: user?.email,
+      accountIdentifier: user?.email,
+      businessName: business?.name,
+      phoneOverride: supportPhone,
     });
 
     if (!result.success) {
       setErrorMsg(result.error);
     } else {
-      setSuccessMsg(`Membuka WhatsApp Admin untuk pemesanan paket ${pkg.name}...`);
+      setSuccessMsg(`Membuka WhatsApp Admin untuk pemesanan paket ${pkg.name}. Hubungi Admin untuk verifikasi pembayaran dan dapatkan link aktivasi.`);
     }
   }
 

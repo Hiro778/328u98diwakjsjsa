@@ -46,11 +46,16 @@ describe('Landing Page & Pricing Experience Integrity Tests', () => {
     assert.ok(content.includes('PLAN_CONFIG') && content.includes('PLANS'));
     assert.equal(PLAN_CONFIG[PLANS.PRO].price, 130000, 'Pro price must be 130000');
 
-    // Strictly 2 plans
-    assert.ok(content.includes("name: 'BisnisSehat Gratis'"));
-    assert.ok(content.includes("name: 'BisnisSehat Pro'"));
-    assert.ok(content.includes('Rp 130.000'));
-    assert.ok(content.includes('Rp 0'));
+    // Strictly 2 plans: Basic (Rp 35.000) and Pro (Rp 130.000)
+    assert.equal(PLAN_CONFIG[PLANS.BASIC].price, 35000, 'Basic price must be 35000');
+    assert.ok(content.includes("name: 'BisnisSehat Basic'"), 'Must include BisnisSehat Basic plan');
+    assert.ok(content.includes("name: 'BisnisSehat Pro'"), 'Must include BisnisSehat Pro plan');
+    assert.ok(content.includes('Rp 35.000'), 'Must display Rp 35.000 price label');
+    assert.ok(content.includes('Rp 130.000'), 'Must display Rp 130.000 price label');
+
+    // Free plan must NOT be offered as a new pricing tier
+    assert.ok(!content.includes("name: 'BisnisSehat Gratis'"), 'Free must not be offered as a pricing tier');
+    assert.ok(!content.includes("price: 'Rp 0'"), 'Free Rp 0 must not be offered as a pricing tier');
 
     // Strictly NO 3rd plan (Multi-Outlet, Enterprise, Consultation)
     assert.ok(!content.includes('Multi-Outlet'), 'Must not contain Multi-Outlet plan');
@@ -129,60 +134,45 @@ describe('Landing Page & Pricing Experience Integrity Tests', () => {
     assert.ok(priceContent.includes('href="#final-cta"'));
   });
 
-  test('Section 6: Entitlement accuracy and tier capability integrity per free.md', () => {
+  test('Section 6: Entitlement accuracy and tier capability integrity per gas.md', () => {
     const content = fs.readFileSync(pricingExpPath, 'utf8');
 
-    // 1. Tepat 2 plan
-    assert.ok(content.includes("id: 'free'"));
+    // 1. Tepat 2 plan: basic & pro
+    assert.ok(content.includes("id: 'basic'"));
     assert.ok(content.includes("id: 'pro'"));
 
-    // 2. Free = Rp0
-    assert.ok(content.includes("price: 'Rp 0'"));
+    // 2. Basic = Rp 35.000
+    assert.ok(content.includes('Rp 35.000'));
+    assert.equal(PLAN_CONFIG[PLANS.BASIC].price, 35000);
 
-    // 3. Pro = Rp130000
+    // 3. Pro = Rp 130.000
     assert.ok(content.includes('Rp 130.000'));
     assert.equal(PLAN_CONFIG[PLANS.PRO].price, 130000);
 
-    // 4. HPP Calculator & Break-even Point Calculator ada di Free (exact product name)
-    assert.ok(content.includes("'HPP Calculator'"));
-    assert.ok(content.includes("'Break-even Point Calculator'"));
-    assert.ok(!content.includes('Kalkulator HPP & margin dasar'), 'Must use official name HPP Calculator');
+    // 4. Standalone calculators ada di Basic
+    assert.ok(content.includes('HPP & Margin Calculator') || content.includes('HPP Calculator'));
+    assert.ok(content.includes('Break-even Point (BEP) Calculator') || content.includes('Break-even Point Calculator'));
 
-    // 5. SEO Optimizer & AI Creative Studio tidak diberi label Pro-only (included in Free)
-    assert.ok(content.includes('SEO Optimizer (Unlimited)'));
-    assert.ok(content.includes('AI Creative Studio (1 lifetime generation)'));
+    // 5. POS, CRM, Laporan Keuangan, AI Creative Studio = Pro
+    assert.ok(content.includes('Point of Sales (POS)'));
+    assert.ok(content.includes('Customer CRM & WhatsApp Integration'));
+    assert.ok(content.includes('AI Creative Studio'));
 
-    // 6. A/B Testing = Pro
-    assert.ok(content.includes("'A/B Testing'"));
+    // 6. Tidak ada fabricated feature list / tidak ada coret fitur (line-through)
+    assert.ok(!content.includes('line-through'), 'Cards must not show crossed out / strikethrough features');
 
-    // 7. Competitor Analysis = Pro
-    assert.ok(content.includes("'Competitor Analysis'"));
-
-    // 8. Content Calendar = Pro
-    assert.ok(content.includes("'Content Calendar'"));
-
-    // 8b. POS, CRM, Cash Flow = Pro
-    assert.ok(content.includes("'POS Kasir & QR Menu'"));
-    assert.ok(content.includes("'Customer CRM & WhatsApp Integration'"));
-    assert.ok(content.includes("'Cash Flow Forecast & Margin Analysis'"));
-
-    // 9. Tidak ada fabricated feature list / tidak ada coret fitur (line-through)
-    assert.ok(!content.includes('line-through'), 'Free card must not show crossed out / strikethrough features');
-    assert.ok(content.includes('Mulai dengan tools yang tersedia tanpa biaya.'));
-    assert.ok(content.includes('Unlock capability Pro yang memang dibatasi oleh entitlement.'));
-
-    // 10. Tidak ada hardcoded tool-count claim
+    // 7. Tidak ada hardcoded tool-count claim
     const forbiddenToolCounts = ['39+', '40+', '45+', '48 tools', '39 tools', '40 tools', '45 tools'];
     for (const count of forbiddenToolCounts) {
       assert.ok(!content.includes(count), `PricingExperience must not contain hardcoded count: "${count}"`);
     }
 
-    // 11. Tidak ada plan ketiga
+    // 8. Tidak ada plan ketiga
     assert.ok(!content.includes('Enterprise'));
     assert.ok(!content.includes('Multi-Outlet'));
     assert.ok(!content.includes('Konsultasi Cabang'));
 
-    // 12. Pricing handoff tetap berjalan
+    // 9. Pricing handoff tetap berjalan
     assert.ok(content.includes('href="#final-cta"'));
   });
 });

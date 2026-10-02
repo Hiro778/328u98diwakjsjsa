@@ -69,6 +69,8 @@ export async function verifyAuth(req: Request, explicitBusinessId?: string | nul
         businessId: targetBiz.id,
       };
     }
+
+    throw new Error("Access denied: You do not own or have access to the specified business");
   }
 
   // Priority 2: Safely query user's business without fragile .single()

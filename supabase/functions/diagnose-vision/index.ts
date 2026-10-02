@@ -12,6 +12,33 @@ Deno.serve(async (req) => {
     return new Response("ok", { status: 204, headers: { "Access-Control-Allow-Origin": "*" } });
   }
 
+  // Authorize: require service-role key or admin token
+  const authHeader = req.headers.get("Authorization") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const token = authHeader.replace("Bearer ", "").trim();
+
+  let isAuthorized = false;
+  if (serviceKey && token === serviceKey) {
+    isAuthorized = true;
+  } else if (token) {
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (user?.id) {
+      const { data: adminUser } = await supabase
+        .from("admin_users")
+        .select("user_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (adminUser?.user_id) isAuthorized = true;
+    }
+  }
+
+  if (!isAuthorized) {
+    return new Response(JSON.stringify({ error: "Unauthorized access" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+    });
+  }
+
   const apiKey = Deno.env.get("GOOGLE_CLOUD_VISION_API_KEY");
 
   // Step 1: Check if key exists

@@ -18,6 +18,7 @@
 // - Recorded to public.ai_usage
 
 import { verifyAuth } from "../_shared/auth.ts";
+import { isProUser } from "../_shared/entitlement.ts";
 import { supabaseAdmin } from "../_shared/supabase-admin.ts";
 import { jsonResponse, errorResponse, corsResponse } from "../_shared/response.ts";
 import { enforceAiFeatureFlag } from "../_shared/platform-settings.ts";
@@ -94,6 +95,14 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return corsResponse();
 
   try {
+    const auth = await verifyAuth(req);
+
+    // Enforce Pro entitlement server-side (sec.md)
+    const hasPro = await isProUser(auth.userId);
+    if (!hasPro) {
+      return errorResponse("Fitur ini membutuhkan BisnisSehat Pro.", 403);
+    }
+
     // @ban.md item 6: enforce enable_ai_features platform flag BEFORE calling AI provider
     const aiBlocked = await enforceAiFeatureFlag();
     if (aiBlocked) {
@@ -101,7 +110,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { brief_id, product_id, business_id } = body || {};
+    const { brief_id, product_id } = body || {};
     if (!brief_id) {
       return errorResponse("brief_id is required", 400);
     }
@@ -128,10 +137,6 @@ Deno.serve(async (req) => {
       return errorResponse("Campaign not found", 404);
     }
 
-    // Authoritative campaign business_id as source of truth
-    const authoritativeBusinessId = campaign.business_id || business_id;
-    const auth = await verifyAuth(req, authoritativeBusinessId);
-
     // Verify authenticated user owns this business
     const { data: userBusiness } = await supabaseAdmin
       .from("businesses")
@@ -143,6 +148,9 @@ Deno.serve(async (req) => {
     if (!userBusiness) {
       return errorResponse("Access denied: You do not own this campaign", 403);
     }
+
+    // Bind authoritative businessId
+    auth.businessId = campaign.business_id;
 
     // 3. Resolve product data if present
     const productIdToUse = product_id || brief.product_id;

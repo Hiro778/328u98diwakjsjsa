@@ -52,6 +52,22 @@ async function verifyAuth(req: Request): Promise<AuthContext> {
     .from("businesses").select("id").eq("owner_id", user.id).single();
 
   if (bizError || !business) throw new Error("No business found for this user");
+
+  // Server-side Pro entitlement enforcement (@gas.md)
+  const { data: sub, error: subError } = await supabaseAdmin
+    .from("subscriptions")
+    .select("id, status, plan, expires_at")
+    .eq("profile_id", user.id)
+    .eq("plan", "pro")
+    .eq("status", "active")
+    .gt("expires_at", new Date().toISOString())
+    .limit(1)
+    .maybeSingle();
+
+  if (subError || !sub) {
+    throw new Error("Fitur Legalitas Checker memerlukan langganan BisnisSehat Pro aktif");
+  }
+
   return { userId: user.id, businessId: business.id };
 }
 

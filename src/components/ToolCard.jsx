@@ -111,75 +111,30 @@ function getToolContextIcon(name) {
 
 export default function ToolCard({ tool }) {
   const navigate = useNavigate()
-  const { isPro, hasUsedFreeAi } = useAuth()
+  const { isPro, hasActiveSubscription } = useAuth()
 
   // 1. AVAILABILITY vs ENTITLEMENT separation (per soon.md)
   // Availability status takes precedence: COMING_SOON tools do NOT carry Free or Pro entitlement.
   const isComingSoon = tool.status === 'coming_soon' || tool.availability === 'COMING_SOON'
   const needsConnection = tool.status === 'needs_connection'
 
-  // Canonical Entitlement Determination per free.md & pro.md:
-  // Source-of-truth priority:
-  // 1. Explicit tool catalog configuration (tool.requiresPro, tool.isFree)
-  // 2. Designated free tool fallbacks (HPP, BEP, SEO, Legalitas, Transaksi Manual)
-  const isAiStudio = tool.name === 'AI Creative Studio' || tool.path?.includes('content-generator')
-  const isExplicitPro = tool.requiresPro === true
-  const isExplicitFree = tool.requiresPro === false || tool.isFree === true
-  const isHpp = tool.name === 'HPP Calculator' || tool.name?.toLowerCase().includes('hpp') || tool.path?.includes('hpp')
-  const isBep = tool.name === 'BEP Calculator' || tool.name === 'Break-even Point Calculator' || tool.name?.toLowerCase().includes('bep') || tool.name?.toLowerCase().includes('break-even') || tool.name?.toLowerCase().includes('break even') || tool.path?.includes('bep')
+  // Tier classification per 2-tier pricing model (@gas.md)
+  const isHpp = tool.name === 'HPP Calculator' || tool.path?.includes('hpp')
+  const isBep = tool.name === 'BEP Calculator' || tool.name?.includes('Break-even') || tool.path?.includes('bep')
+  const isLoan = tool.name === 'Loan Simulation' || tool.path?.includes('loan-simulation')
+  const isAds = tool.name === 'Ads' || tool.path?.includes('marketing/ads')
   const isSeo = tool.name === 'SEO Optimizer' || tool.path?.includes('seo')
-  const isLegal = tool.name === 'Legalitas Checker' || tool.path?.includes('legalitas')
-  const isManualTx = tool.name?.toLowerCase().includes('transaksi manual')
+  const isKurs = tool.name === 'Kurs & Valuta Asing' || tool.path?.includes('ekspor') || tool.path?.includes('kurs')
 
-  // Tool is free only if LIVE and marked/designated free
-  const isFreeTool = !isComingSoon && !isAiStudio && (isHpp || isBep || isExplicitFree || (!isExplicitPro && (isSeo || isLegal || isManualTx)))
+  const isBasicTier = tool.tier === 'basic' || (!tool.requiresPro && (isHpp || isBep || isLoan || isAds || isSeo || isKurs))
 
   // Entitlement determination
   let isLocked = false
   let showLockIcon = false
   let badgeConfig = null
 
-  if (isFreeTool) {
-    // 100% Free tool per free.md
-    isLocked = false
-    showLockIcon = false
-    badgeConfig = {
-      label: isSeo ? 'Gratis • Unlimited' : 'Gratis',
-      classes: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-      dot: 'bg-emerald-400',
-    }
-  } else if (isAiStudio) {
-    // Canonical Entitlement (pro.md & Context7 design.md):
-    // AI Creative Studio is NOT Pro-only.
-    // Free = 1x lifetime free generation, then requires purchased tokens.
-    // Never locked for Free users.
-    isLocked = false
-    showLockIcon = false
-    if (isPro) {
-      badgeConfig = {
-        label: 'Siap Digunakan',
-        classes: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30',
-        dot: 'bg-indigo-400',
-      }
-    } else if (!hasUsedFreeAi) {
-      badgeConfig = {
-        label: 'Gratis • 1x',
-        classes: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-        dot: 'bg-emerald-400',
-      }
-    } else {
-      badgeConfig = {
-        label: 'Token diperlukan',
-        classes: 'bg-slate-800 text-slate-400 border-slate-700',
-        dot: 'bg-slate-400',
-      }
-    }
-  } else if (isComingSoon) {
+  if (isComingSoon) {
     // COMING_SOON tools have NO Free or Pro entitlement (per soon.md)
-    // - No "Gratis" badge
-    // - No "Pro" badge
-    // - No lock icon
-    // - No paywall trigger
     isLocked = false
     showLockIcon = false
     badgeConfig = {
@@ -193,36 +148,56 @@ export default function ToolCard({ tool }) {
       classes: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
       dot: 'bg-amber-400',
     }
-  } else if (!isPro) {
-    // All other live tools are Pro-gated per free.md Section 3 & 5
-    isLocked = true
-    showLockIcon = true
-    badgeConfig = {
-      label: 'Pro',
-      classes: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
-      icon: '🔒',
-      dot: null,
-    }
-  } else if (tool.path) {
-    // Pro user has full unlocked access
-    badgeConfig = {
-      label: 'Siap Digunakan',
-      classes: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-      dot: 'bg-emerald-400',
+  } else if (isBasicTier) {
+    // Basic tier tools (Rp35K / standalone)
+    if (hasActiveSubscription) {
+      // User has active Basic or Pro subscription
+      isLocked = false
+      showLockIcon = false
+      badgeConfig = {
+        label: 'Siap Digunakan',
+        classes: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+        dot: 'bg-emerald-400',
+      }
+    } else {
+      // User has no active subscription -> gate to Basic
+      isLocked = true
+      showLockIcon = true
+      badgeConfig = {
+        label: 'Basic • Rp35K',
+        classes: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+        icon: '🔒',
+        dot: null,
+      }
     }
   } else {
-    badgeConfig = {
-      label: 'Info',
-      classes: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
-      dot: 'bg-blue-400',
+    // Pro tier tools (Rp130K / DB, POS, AI, Analytics)
+    if (isPro) {
+      isLocked = false
+      showLockIcon = false
+      badgeConfig = {
+        label: 'Siap Digunakan',
+        classes: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+        dot: 'bg-emerald-400',
+      }
+    } else {
+      // Basic user or un-subscribed user attempting Pro tool
+      isLocked = true
+      showLockIcon = true
+      badgeConfig = {
+        label: 'Pro • Rp130K',
+        classes: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+        icon: '🔒',
+        dot: null,
+      }
     }
   }
 
   function handleClick() {
     if (isComingSoon) return
     if (isLocked) {
-      // Pro tool locked for free user: direct to upgrade
-      navigate('/pricing')
+      const targetPlan = isBasicTier ? 'basic' : 'pro'
+      navigate(`/pricing?plan=${targetPlan}`)
       return
     }
     if (tool.path) {

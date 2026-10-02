@@ -7,6 +7,7 @@
 // Uses the existing adjust_stock() RPC pattern for atomic updates.
 
 import { verifyAuth, verifyConnectionOwnership } from "../_shared/auth.ts";
+import { isProUser } from "../_shared/entitlement.ts";
 import { supabaseAdmin } from "../_shared/supabase-admin.ts";
 import { decrypt } from "../_shared/crypto.ts";
 import { getProvider } from "../_shared/marketplace-provider.ts";
@@ -24,6 +25,12 @@ Deno.serve(async (req) => {
 
   try {
     const auth = await verifyAuth(req);
+
+    // Enforce Pro entitlement server-side (sec.md)
+    const hasPro = await isProUser(auth.userId);
+    if (!hasPro) {
+      return errorResponse("Fitur ini membutuhkan BisnisSehat Pro.", 403);
+    }
     const body = await req.json();
     const { connection_id, product_ids } = body;
 

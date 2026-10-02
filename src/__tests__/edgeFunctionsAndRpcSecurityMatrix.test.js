@@ -46,6 +46,15 @@ describe('Edge Functions & Database RPC Security Matrix Suite (41 Edge Functions
       assert.ok(topupSrc.includes('CREDIT_PACKAGES'), 'Must use predefined server CREDIT_PACKAGES');
       assert.ok(!topupSrc.includes('body.amount_idr'), 'Client cannot specify amount_idr directly');
     });
+
+    test('creative-generate-copy, prd, and revise enforce server-side Pro check', () => {
+      const endpoints = ['creative-generate-copy', 'creative-generate-prd', 'creative-revise-prd'];
+      for (const ep of endpoints) {
+        const src = fs.readFileSync(path.resolve(process.cwd(), `supabase/functions/${ep}/index.ts`), 'utf8');
+        assert.ok(src.includes('isProUser(auth.userId)'), `${ep} must enforce isProUser`);
+        assert.ok(src.includes('403'), `${ep} must return 403 on non-Pro access`);
+      }
+    });
   });
 
   describe('2. Google Business & Marketplace Edge Functions', () => {
@@ -71,6 +80,37 @@ describe('Edge Functions & Database RPC Security Matrix Suite (41 Edge Functions
           `${ep} must return HTTP 403 on non-Pro access`
         );
       }
+    });
+
+    test('marketplace functions enforce server-side Pro check', () => {
+      const endpoints = [
+        'marketplace-connect',
+        'marketplace-disconnect',
+        'marketplace-status',
+        'marketplace-sync-inventory',
+        'marketplace-sync-orders',
+        'marketplace-sync-products',
+        'marketplace-oauth/authorize',
+        'marketplace-oauth/status',
+      ];
+      for (const ep of endpoints) {
+        const filePath = path.resolve(process.cwd(), `supabase/functions/${ep}/index.ts`);
+        const src = fs.readFileSync(filePath, 'utf8');
+        assert.ok(
+          src.includes('isProUser(auth.userId)'),
+          `${ep} must enforce isProUser check server-side`
+        );
+        assert.ok(
+          src.includes('403'),
+          `${ep} must return HTTP 403 on non-Pro access`
+        );
+      }
+    });
+
+    test('marketplace-oauth/callback verifies authenticated user and unexpired state', () => {
+      const src = fs.readFileSync(path.resolve(process.cwd(), 'supabase/functions/marketplace-oauth/callback/index.ts'), 'utf8');
+      assert.ok(src.includes('verifyAuth'), 'Callback must verify user JWT');
+      assert.ok(src.includes('business_id: auth.businessId') || src.includes('.eq("business_id", auth.businessId)'), 'Callback must match state to auth.businessId');
     });
 
     test('marketplace-sync-* functions verify business connection ownership before execution', () => {

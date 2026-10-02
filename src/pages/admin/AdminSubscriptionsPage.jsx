@@ -175,8 +175,9 @@ export default function AdminSubscriptionsPage() {
               className="w-full bg-[#0B0F19] border border-[#1F2937] rounded-lg px-3 py-2 text-xs text-white focus:outline-hidden focus:border-emerald-500 cursor-pointer"
             >
               <option value="all">Semua Paket (All Plans)</option>
+              <option value="basic">Basic</option>
               <option value="pro">Pro</option>
-              <option value="free">Free</option>
+              <option value="free">Free (Legacy)</option>
             </select>
           </div>
 
@@ -257,7 +258,9 @@ export default function AdminSubscriptionsPage() {
               </thead>
               <tbody className="divide-y divide-[#1F2937] text-gray-300">
                 {subscriptions.map((sub) => {
-                  const isPro = sub.plan?.toLowerCase() === 'pro'
+                  const p = (sub.plan || '').toLowerCase()
+                  const isPro = p === 'pro'
+                  const isBasic = p === 'basic'
                   const isActive = sub.status === 'active'
                   const isExpired = sub.status === 'expired'
                   const isCancelled = sub.status === 'cancelled'
@@ -277,10 +280,12 @@ export default function AdminSubscriptionsPage() {
                           className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${
                             isPro
                               ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                              : isBasic
+                              ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
                               : 'bg-gray-500/10 text-gray-400 border-gray-500/30'
                           }`}
                         >
-                          {isPro ? 'PRO' : 'FREE'}
+                          {isPro ? 'PRO' : isBasic ? 'BASIC' : 'FREE (LEGACY)'}
                         </span>
                       </td>
 

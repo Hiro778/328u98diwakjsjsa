@@ -572,5 +572,139 @@ describe('Global Frontend MaintenanceGate Verification (@gl.md)', () => {
       assert.ok(gateCode.includes('<MaintenanceScreen />'), 'Must render MaintenanceScreen directly')
     })
   })
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // SETTINGSPROVIDER HIERARCHY REGRESSION SUITE (@fix.md Requirements A - H)
+  // ═════════════════════════════════════════════════════════════════════════
+  describe('SettingsProvider Hierarchy Regression Prevention (@fix.md)', () => {
+    it('A. All usePlatformSettings consumers are positioned under SettingsProvider', () => {
+      // 1. App.jsx root structure must wrap RouterProvider inside SettingsProvider
+      assert.ok(
+        appCode.includes('<SettingsProvider>'),
+        'App.jsx must render <SettingsProvider>'
+      )
+      assert.ok(
+        appCode.includes('</SettingsProvider>'),
+        'App.jsx must close </SettingsProvider>'
+      )
+      assert.ok(
+        appCode.indexOf('<SettingsProvider>') < appCode.indexOf('<RouterProvider router={router} />'),
+        'SettingsProvider must wrap RouterProvider'
+      )
+      assert.ok(
+        appCode.indexOf('</RouterProvider>') < appCode.indexOf('</SettingsProvider>') ||
+        appCode.indexOf('<RouterProvider router={router} />') < appCode.indexOf('</SettingsProvider>'),
+        'RouterProvider must be inside SettingsProvider'
+      )
+
+      // 2. Verified consumers: MaintenanceGate, DashboardLayout, AuthPage, PublicMenuPage, CustomerSupportWidget
+      const consumers = [
+        'src/components/MaintenanceGate.jsx',
+        'src/components/DashboardLayout.jsx',
+        'src/pages/AuthPage.jsx',
+        'src/pages/public/PublicMenuPage.jsx',
+        'src/components/CustomerSupportWidget.jsx',
+        'src/pages/dashboard/marketing/CreativeCreditsPage.jsx',
+      ]
+      for (const consumerPath of consumers) {
+        const content = fs.readFileSync(path.resolve(consumerPath), 'utf8')
+        assert.ok(
+          content.includes('usePlatformSettings'),
+          `${consumerPath} must consume usePlatformSettings inside provider tree`
+        )
+      }
+    })
+
+    it('B. MaintenanceGate renders without context error when mounted under SettingsProvider', () => {
+      assert.ok(
+        gateCode.includes('const { isMaintenance, loading: settingsLoading } = usePlatformSettings()'),
+        'MaintenanceGate must correctly consume settings without throwing'
+      )
+      assert.ok(
+        gateCode.includes('if (settingsLoading) {\n    return <LoadingScreen />\n  }'),
+        'MaintenanceGate must gracefully hold at LoadingScreen while settings load'
+      )
+    })
+
+    it('C. SettingsProvider + MaintenanceGate mount together in canonical hierarchy', () => {
+      // Hierarchy: ThemeProvider -> AuthProvider -> SettingsProvider -> RouterProvider -> MaintenanceGate
+      const themeIdx = appCode.indexOf('<ThemeProvider>')
+      const authIdx = appCode.indexOf('<AuthProvider>')
+      const settingsIdx = appCode.indexOf('<SettingsProvider>')
+      const routerIdx = appCode.indexOf('<RouterProvider')
+
+      assert.ok(themeIdx !== -1, 'ThemeProvider must exist')
+      assert.ok(authIdx !== -1, 'AuthProvider must exist')
+      assert.ok(settingsIdx !== -1, 'SettingsProvider must exist')
+      assert.ok(routerIdx !== -1, 'RouterProvider must exist')
+
+      assert.ok(themeIdx < authIdx, 'ThemeProvider must wrap AuthProvider')
+      assert.ok(authIdx < settingsIdx, 'AuthProvider must wrap SettingsProvider')
+      assert.ok(settingsIdx < routerIdx, 'SettingsProvider must wrap RouterProvider')
+    })
+
+    it('D. AuthProvider still works and provides authentication state', () => {
+      const authContextCode = fs.readFileSync(path.resolve('src/context/AuthContext.jsx'), 'utf8')
+      assert.ok(authContextCode.includes('export function AuthProvider'), 'AuthProvider component must be exported')
+      assert.ok(authContextCode.includes('useAuth'), 'useAuth hook must be exported')
+      assert.ok(authContextCode.includes('calculateSubscriptionEntitlement'), 'AuthProvider must compute entitlements')
+    })
+
+    it('E. Admin routes (/admin, /admin/settings) still work and bypass maintenance', () => {
+      const adminEval = evaluateMaintenanceGate({
+        pathname: '/admin',
+        isMaintenance: true,
+        isAdmin: true,
+        isSuperAdmin: false,
+      })
+      assert.strictEqual(adminEval.allowed, true, '/admin must bypass maintenance')
+
+      const adminSettingsEval = evaluateMaintenanceGate({
+        pathname: '/admin/settings',
+        isMaintenance: true,
+        isAdmin: true,
+        isSuperAdmin: true,
+      })
+      assert.strictEqual(adminSettingsEval.allowed, true, '/admin/settings must bypass maintenance')
+    })
+
+    it('F. Pricing route (/pricing) still works and bypasses maintenance for purchase funnel', () => {
+      const pricingEval = evaluateMaintenanceGate({
+        pathname: '/pricing',
+        isMaintenance: true,
+        isAdmin: false,
+        isSuperAdmin: false,
+      })
+      assert.strictEqual(pricingEval.allowed, true, '/pricing must remain accessible during maintenance')
+      assert.strictEqual(pricingEval.component, 'Outlet')
+    })
+
+    it('G. Maintenance ON behavior still blocks normal users from application routes', () => {
+      const blockedEval = evaluateMaintenanceGate({
+        pathname: '/dashboard',
+        isMaintenance: true,
+        isAdmin: false,
+        isSuperAdmin: false,
+        settingsLoading: false,
+        adminLoading: false,
+      })
+      assert.strictEqual(blockedEval.allowed, false, 'Normal user must be blocked when maintenance=true')
+      assert.strictEqual(blockedEval.component, 'MaintenanceScreen')
+    })
+
+    it('H. Maintenance OFF behavior still allows normal users to access application routes', () => {
+      const allowedEval = evaluateMaintenanceGate({
+        pathname: '/dashboard',
+        isMaintenance: false,
+        isAdmin: false,
+        isSuperAdmin: false,
+        settingsLoading: false,
+        adminLoading: false,
+      })
+      assert.strictEqual(allowedEval.allowed, true, 'Normal user must be allowed when maintenance=false')
+      assert.strictEqual(allowedEval.component, 'Outlet')
+    })
+  })
 })
+
 

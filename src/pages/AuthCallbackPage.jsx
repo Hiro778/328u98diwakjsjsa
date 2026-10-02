@@ -11,11 +11,14 @@ export default function AuthCallbackPage() {
 
   let redirectTo = '/dashboard'
   try {
-    const stored = localStorage.getItem('authReturnTo')
+    const sessionStored = sessionStorage.getItem('authReturnTo')
+    const localStored = localStorage.getItem('authReturnTo')
+    const stored = sessionStored || localStored
     if (isSafeReturnTo(stored)) {
       redirectTo = stored
-      localStorage.removeItem('authReturnTo')
     }
+    sessionStorage.removeItem('authReturnTo')
+    localStorage.removeItem('authReturnTo')
   } catch {}
 
   if (loading) return <LoadingScreen />

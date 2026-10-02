@@ -2,17 +2,26 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link, useSearchParams } from 'react-router'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import { TOTAL_TOOLS, PLANS, PLAN_CONFIG } from '../data/categories'
-import { cancelSubscription } from '../lib/subscriptionService'
+import { PLANS, PLAN_CONFIG } from '../data/categories'
+import { cancelSubscription, createSubscriptionSnap, openSnapPaymentModal } from '../lib/subscriptionService'
 import { redeemActivationCode } from '../lib/activationCodeService'
 
-const FEATURES = [
-  `${TOTAL_TOOLS}+ tools bisnis & operasional lengkap`,
-  'Financial intelligence & analisis margin lanjutan',
-  'Manajemen inventori & stok multi-lokasi',
-  'CRM pelanggan & integrasi WhatsApp gateway',
-  'Ekspor tools & riset pasar global',
-  'AI business insights & analisis kompetitor',
+const BASIC_FEATURES = [
+  '14+ Kalkulator Keuangan & Operasional (HPP, BEP, Gaji, Simulasi Pinjaman)',
+  'Generator Iklan & Copywriting Cepat',
+  'Tools Kurs, Bea Cukai & Valuta Ekspor Standalone',
+  'Perhitungan realtime instan langsung di browser',
+  'Tanpa komitmen jangka panjang, bayar bulanan',
+]
+
+const PRO_FEATURES = [
+  'Semua fitur & tools standalone paket Basic',
+  'Point of Sales (POS) Kasir & QR Menu Toko/Resto',
+  'Database Bisnis, Inventori & Stok Multi-Lokasi',
+  'CRM Pelanggan & Integrasi WhatsApp Gateway',
+  'Laporan Keuangan Komprehensif (Laba Rugi, Neraca, Arus Kas)',
+  'AI Creative Studio & 200 Kredit AI per bulan',
+  'Pemeriksaan Legalitas Usaha Resmi',
   'Dukungan prioritas tim BisnisSehat',
 ]
 
@@ -20,11 +29,15 @@ export default function PricingPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const activateParam = searchParams.get('activate') || ''
+  const selectedPlanParam = (searchParams.get('plan') || '').toLowerCase()
 
   const {
     user,
     business,
     subscription,
+    isBasic,
+    isPro,
+    plan: userPlan,
     hasActiveSubscription,
     hasExpiredSubscription,
     hasCancelledSubscription,
@@ -33,16 +46,28 @@ export default function PricingPage() {
     loading: authLoading,
   } = useAuth()
 
+  // Selected plan tab/focus: 'basic' or 'pro'
+  const [activeCard, setActiveCard] = useState(selectedPlanParam === 'basic' ? 'basic' : 'pro')
+
   // Activation code state
   const [activationCode, setActivationCode] = useState(activateParam)
   const [redeeming, setRedeeming] = useState(false)
   const [redeemSuccessMessage, setRedeemSuccessMessage] = useState(null)
   const [error, setError] = useState(null)
+  const [paymentSuccessMessage, setPaymentSuccessMessage] = useState(null)
+  const [payingPlan, setPayingPlan] = useState(null) // 'basic' | 'pro' | null
 
   // Subscription cancellation modal states
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [cancelSuccessMessage, setCancelSuccessMessage] = useState(null)
+
+  // Sync plan param if changed
+  useEffect(() => {
+    if (selectedPlanParam === 'basic' || selectedPlanParam === 'pro') {
+      setActiveCard(selectedPlanParam)
+    }
+  }, [selectedPlanParam])
 
   // RULE @act.md: PREFILL ONLY. Do NOT auto-redeem on mount!
   useEffect(() => {
@@ -68,12 +93,12 @@ export default function PricingPage() {
     refreshSubscription()
   }, [user, authLoading, refreshSubscription])
 
-  // Handle explicit manual redemption
+  // Handle explicit manual redemption of PRO voucher
   async function handleRedeem(e) {
     if (e) e.preventDefault()
 
     if (!user) {
-      const returnUrl = `/pricing${activationCode ? `?activate=${encodeURIComponent(activationCode.trim())}` : ''}`
+      const returnUrl = `/pricing?plan=pro${activationCode ? `&activate=${encodeURIComponent(activationCode.trim())}` : ''}`
       navigate(`/auth?returnTo=${encodeURIComponent(returnUrl)}`)
       return
     }
@@ -86,6 +111,7 @@ export default function PricingPage() {
     setRedeeming(true)
     setError(null)
     setRedeemSuccessMessage(null)
+    setPaymentSuccessMessage(null)
     setCancelSuccessMessage(null)
 
     try {
@@ -103,6 +129,52 @@ export default function PricingPage() {
     }
   }
 
+  // Handle Midtrans Snap online payment
+  async function handlePayOnline(planToPay) {
+    if (!user) {
+      const returnUrl = `/pricing?plan=${planToPay}`
+      navigate(`/auth?returnTo=${encodeURIComponent(returnUrl)}`)
+      return
+    }
+
+    setPayingPlan(planToPay)
+    setError(null)
+    setRedeemSuccessMessage(null)
+    setPaymentSuccessMessage(null)
+    setCancelSuccessMessage(null)
+
+    try {
+      const snapData = await createSubscriptionSnap(planToPay)
+      if (!snapData?.snap_token) {
+        throw new Error(snapData?.error || 'Gagal membuat sesi pembayaran Midtrans.')
+      }
+
+      await openSnapPaymentModal(snapData.snap_token, {
+        onSuccess: async () => {
+          await refreshSubscription()
+          setPaymentSuccessMessage(
+            `Pembayaran berhasil! Paket BisnisSehat ${planToPay === 'basic' ? 'Basic' : 'Pro'} Anda telah aktif.`
+          )
+        },
+        onPending: async () => {
+          await refreshSubscription()
+          setPaymentSuccessMessage('Menunggu penyelesaian pembayaran. Status akan diperbarui secara otomatis.')
+        },
+        onError: () => {
+          setError('Pembayaran gagal atau dibatalkan. Silakan coba kembali.')
+        },
+        onClose: () => {
+          refreshSubscription()
+        },
+      })
+    } catch (err) {
+      console.error('[PricingPage] Online payment error:', err)
+      setError(err.message || 'Gagal memproses pembayaran online. Silakan coba lagi.')
+    } finally {
+      setPayingPlan(null)
+    }
+  }
+
   // Handle cancellation confirmation
   async function handleConfirmCancel() {
     if (!subscription?.id) return
@@ -112,7 +184,7 @@ export default function PricingPage() {
       await cancelSubscription(subscription.id, business?.id)
       await refreshSubscription()
       setShowCancelModal(false)
-      setCancelSuccessMessage('Langganan Pro telah berhasil dihentikan. Riwayat transaksi tersimpan dengan aman.')
+      setCancelSuccessMessage('Langganan telah berhasil dihentikan. Riwayat transaksi tersimpan dengan aman.')
     } catch (err) {
       console.error('[PricingPage] Cancel subscription error:', err)
       setError(err.message || 'Gagal menghentikan langganan')
@@ -130,12 +202,12 @@ export default function PricingPage() {
       })
     : null
 
-  const loginReturnUrl = `/pricing${activationCode ? `?activate=${encodeURIComponent(activationCode.trim())}` : ''}`
+  const loginReturnUrl = `/pricing?plan=${activeCard}${activationCode ? `&activate=${encodeURIComponent(activationCode.trim())}` : ''}`
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-text-primary px-3 py-6 sm:px-6 sm:py-8 min-w-0 w-full">
       {/* Top Navigation Bar */}
-      <div className="mx-auto flex w-full max-w-lg items-center justify-between pb-6 gap-2">
+      <div className="mx-auto flex w-full max-w-4xl items-center justify-between pb-6 gap-2">
         <Link
           to={user ? '/dashboard' : '/'}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-secondary transition-colors hover:text-text-primary shrink-0"
@@ -147,29 +219,45 @@ export default function PricingPage() {
         </Link>
 
         {user && (
-          <span className="text-xs text-text-muted truncate max-w-[140px] sm:max-w-[180px]">
-            {user.email}
-          </span>
+          <div className="flex items-center gap-2">
+            {isPro ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 border border-primary/25 px-2.5 py-0.5 text-[11px] font-bold text-primary">
+                PRO AKTIF
+              </span>
+            ) : isBasic ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/25 px-2.5 py-0.5 text-[11px] font-bold text-emerald-500">
+                BASIC AKTIF
+              </span>
+            ) : null}
+            <span className="text-xs text-text-muted truncate max-w-[140px] sm:max-w-[180px]">
+              {user.email}
+            </span>
+          </div>
         )}
       </div>
 
-      {/* Main Container */}
+      {/* Main Content Area */}
       <div className="my-auto flex flex-col items-center justify-center">
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          className="w-full max-w-md"
+          className="w-full max-w-4xl"
         >
           {/* Brand Header */}
-          <div className="mb-6 text-center">
+          <div className="mb-8 text-center">
             <Link to="/" className="inline-flex items-center justify-center gap-2.5">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/20 border border-primary/30 shadow-sm text-primary">
                 <span className="text-base font-extrabold text-primary">BS</span>
               </div>
               <span className="text-xl font-black text-text-primary tracking-tight">BisnisSehat</span>
             </Link>
-            <p className="mt-2 text-xs text-text-muted">Aktivasi Akses Bisnis & Keuangan Tanpa Batas</p>
+            <h1 className="mt-3 text-2xl sm:text-3xl font-extrabold text-text-primary tracking-tight">
+              Pilihan Paket Langganan UMKM
+            </h1>
+            <p className="mt-1 text-xs sm:text-sm text-text-muted max-w-md mx-auto">
+              Tingkatkan produktivitas bisnis Anda dengan kalkulator standalone atau ekosistem operasional lengkap & AI.
+            </p>
           </div>
 
           {/* Feedback Banners */}
@@ -195,7 +283,7 @@ export default function PricingPage() {
               </motion.div>
             )}
 
-            {redeemSuccessMessage && (
+            {(redeemSuccessMessage || paymentSuccessMessage) && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
@@ -206,7 +294,7 @@ export default function PricingPage() {
                   <span className="text-base">🎉</span>
                   <div>
                     <p className="font-bold text-sm">Aktivasi Berhasil!</p>
-                    <p className="mt-0.5 text-text-primary">{redeemSuccessMessage}</p>
+                    <p className="mt-0.5 text-text-primary">{redeemSuccessMessage || paymentSuccessMessage}</p>
                     {formattedExpiry && (
                       <p className="mt-1 font-semibold text-profit-600">
                         Aktif sampai: {formattedExpiry}
@@ -216,7 +304,10 @@ export default function PricingPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setRedeemSuccessMessage(null)}
+                  onClick={() => {
+                    setRedeemSuccessMessage(null)
+                    setPaymentSuccessMessage(null)
+                  }}
                   className="text-profit-500/70 hover:text-profit-500 font-bold p-0.5 cursor-pointer"
                 >
                   ✕
@@ -234,7 +325,7 @@ export default function PricingPage() {
                 <div className="flex items-start gap-2">
                   <span className="text-sm">⚠️</span>
                   <div>
-                    <p className="font-bold">Aktivasi Belum Berhasil</p>
+                    <p className="font-bold">Terjadi Kendala</p>
                     <p className="mt-0.5">{error}</p>
                   </div>
                 </div>
@@ -249,70 +340,111 @@ export default function PricingPage() {
             )}
           </AnimatePresence>
 
-          {/* Pricing Card */}
-          <div className="rounded-2xl border border-border bg-surface p-4 sm:p-7 shadow-xl shadow-black/20">
-            {authLoading ? (
-              <div className="space-y-4 py-6 text-center">
-                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
-                <p className="text-xs font-medium text-text-muted">Memeriksa status akun...</p>
+          {/* Active Subscription Status Banner */}
+          {hasActiveSubscription && (
+            <div className="mb-6 rounded-2xl border border-profit-500/25 bg-profit-500/10 p-4 text-left">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="text-[11px] font-bold text-profit-500 uppercase tracking-wider">Status Langganan Anda</span>
+                  <h3 className="text-base font-extrabold text-text-primary">
+                    Paket {isPro ? 'BisnisSehat PRO' : 'BisnisSehat BASIC'} Aktif
+                  </h3>
+                  <p className="text-xs text-text-secondary mt-0.5">
+                    Masa aktif berlaku sampai: <span className="font-bold text-profit-600 tabular-nums">{formattedExpiry}</span>
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link
+                    to="/dashboard"
+                    className="rounded-xl bg-profit-500 hover:bg-profit-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-all"
+                  >
+                    Buka Dashboard &rarr;
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setShowCancelModal(true)}
+                    className="text-text-muted hover:text-danger text-xs font-medium px-2 py-1 transition-colors cursor-pointer"
+                  >
+                    Hentikan langganan
+                  </button>
+                </div>
               </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-primary uppercase tracking-wider">
-                    {PLAN_CONFIG[PLANS.PRO].displayName}
-                  </span>
-                  {hasActiveSubscription ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-profit-500/15 border border-profit-500/25 px-3 py-0.5 text-xs font-bold text-profit-500">
-                      <span className="h-1.5 w-1.5 rounded-full bg-profit-500 animate-pulse" />
-                      Pro Aktif
-                    </span>
-                  ) : hasCancelledSubscription ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/15 border border-warning/25 px-3 py-0.5 text-xs font-bold text-warning">
-                      Langganan Dihentikan
-                    </span>
-                  ) : hasExpiredSubscription ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-elevated border border-border px-3 py-0.5 text-xs font-bold text-text-muted">
-                      Pro Sudah Berakhir
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-elevated border border-border px-3 py-0.5 text-xs font-semibold text-text-secondary">
-                      Paket Fleksibel
-                    </span>
+            </div>
+          )}
+
+          {/* Cancelled Subscription Banner */}
+          {hasCancelledSubscription && (
+            <div className="mb-6 rounded-2xl border border-warning/25 bg-warning/10 p-4 text-left">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="text-[11px] font-bold text-warning uppercase tracking-wider">Langganan Dihentikan</span>
+                  <h3 className="text-base font-extrabold text-text-primary">
+                    Langganan Pro Anda telah dihentikan
+                  </h3>
+                  {formattedExpiry && (
+                    <p className="text-xs text-text-secondary mt-0.5">
+                      Masa aktif Anda saat ini tetap berlaku hingga: <span className="font-bold text-warning tabular-nums">{formattedExpiry}</span>
+                    </p>
                   )}
                 </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link
+                    to="/dashboard"
+                    className="rounded-xl bg-surface-elevated border border-border px-4 py-2 text-xs font-bold text-text-primary shadow-sm hover:bg-surface transition-all"
+                  >
+                    Buka Dashboard &rarr;
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
 
-                <h1 className="mt-3 text-2xl font-extrabold text-text-primary">
-                  {hasCancelledSubscription
-                    ? 'Langganan Pro Anda telah dihentikan'
-                    : hasExpiredSubscription
-                    ? 'BisnisSehat Pro Anda telah berakhir'
-                    : hasActiveSubscription
-                    ? 'BisnisSehat Pro'
-                    : 'Mulai BisnisSehat Pro'}
-                </h1>
+          {/* Dual-Card Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+            {/* 1. BASIC CARD */}
+            <div
+              className={`relative rounded-2xl border transition-all flex flex-col justify-between p-6 ${
+                activeCard === 'basic'
+                  ? 'border-emerald-500 bg-surface shadow-lg shadow-emerald-500/5 ring-1 ring-emerald-500'
+                  : 'border-border bg-surface shadow-md'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-emerald-500 uppercase tracking-wider">
+                    {PLAN_CONFIG[PLANS.BASIC].displayName}
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-emerald-500/15 border border-emerald-500/25 px-2.5 py-0.5 text-[11px] font-bold text-emerald-500">
+                    Standalone Tools
+                  </span>
+                </div>
 
-                <p className="mt-1.5 text-xs text-text-secondary leading-relaxed">
-                  Akses tak terbatas ke seluruh modul operasional, keuangan, AI, dan ekspor UMKM.
+                <h2 className="mt-3 text-xl font-extrabold text-text-primary">
+                  Kalkulator & Tools Mandiri
+                </h2>
+                <p className="mt-1 text-xs text-text-secondary leading-relaxed">
+                  Akses instan ke seluruh kalkulator keuangan & operasional mandiri berbasis input tanpa koneksi database.
                 </p>
 
                 {/* Price Display */}
-                <div className="mt-5 border-y border-border py-4">
+                <div className="mt-4 border-y border-border py-3.5">
                   <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black tracking-tight text-text-primary tabular-nums">Rp 130.000</span>
-                    <span className="text-xs font-medium text-text-muted">/ bulan kalender</span>
+                    <span className="text-3xl font-black tracking-tight text-text-primary tabular-nums">
+                      {PLAN_CONFIG[PLANS.BASIC].priceDetail.split(' / ')[0]}
+                    </span>
+                    <span className="text-xs font-medium text-text-muted">/ bulan</span>
                   </div>
                   <p className="mt-1 text-[11px] text-text-muted">
-                    Aktivasi mudah menggunakan Voucher / QR Aktivasi resmi dari BisnisSehat.
+                    Pembayaran online instan via Midtrans (QRIS, E-Wallet, Transfer Bank).
                   </p>
                 </div>
 
-                {/* Features List */}
-                <ul className="mt-5 space-y-2.5">
-                  {FEATURES.map((f) => (
-                    <li key={f} className="flex items-center gap-2.5 text-xs text-text-primary">
+                {/* Features */}
+                <ul className="mt-4 space-y-2.5">
+                  {BASIC_FEATURES.map((f) => (
+                    <li key={f} className="flex items-start gap-2.5 text-xs text-text-primary">
                       <svg
-                        className="h-4 w-4 shrink-0 text-profit-500"
+                        className="h-4 w-4 shrink-0 text-emerald-500 mt-0.5"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -324,108 +456,202 @@ export default function PricingPage() {
                     </li>
                   ))}
                 </ul>
+              </div>
 
-                {/* Active Subscription Status Banner */}
-                {hasActiveSubscription && (
-                  <div className="mt-6 rounded-xl border border-profit-500/25 bg-profit-500/10 p-3.5 text-left">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-profit-500 uppercase">Status Langganan</span>
-                      <span className="text-xs font-extrabold text-profit-500 tabular-nums">
-                        Pro aktif sampai {formattedExpiry}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] text-text-secondary">
-                      Masukkan kode aktivasi baru di bawah untuk menambah masa aktif langganan Anda secara otomatis.
-                    </p>
+              {/* Action Button */}
+              <div className="mt-6 pt-4 border-t border-border">
+                {isPro ? (
+                  <div className="w-full rounded-xl bg-surface-elevated border border-border py-3 text-center text-xs font-semibold text-text-muted">
+                    Sudah Termasuk dalam Pro Anda
                   </div>
-                )}
-
-                {/* Activation Form Section */}
-                <div className="mt-6 pt-5 border-t border-border">
-                  <div className="mb-3">
-                    <label className="block text-xs font-bold text-text-primary uppercase tracking-wider mb-1">
-                      Punya Kode Aktivasi PRO?
-                    </label>
-                    <p className="text-[11px] text-text-muted">
-                      Masukkan kode aktivasi yang Anda terima atau dari scan QR.
-                    </p>
-                  </div>
-
-                  <form onSubmit={handleRedeem} className="space-y-3">
-                    <div className="relative">
-                      <input
-                        type="text"
-                        placeholder="Contoh: BS-PRO-9F8A-7B2C-..."
-                        value={activationCode}
-                        onChange={(e) => {
-                          setActivationCode(e.target.value.toUpperCase())
-                          if (error) setError(null)
-                        }}
-                        disabled={redeeming}
-                        className="w-full px-3.5 py-3 rounded-xl bg-surface-elevated border border-border text-text-primary font-mono text-xs tracking-wider placeholder:font-sans placeholder:tracking-normal placeholder:text-text-muted focus:outline-hidden focus:border-primary focus:ring-1 focus:ring-primary transition-all disabled:opacity-50"
-                      />
-                      {activationCode && (
-                        <button
-                          type="button"
-                          onClick={() => setActivationCode('')}
-                          className="absolute right-3 top-3 text-text-muted hover:text-text-primary text-xs cursor-pointer p-0.5"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-
-                    {!user ? (
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/auth?returnTo=${encodeURIComponent(loginReturnUrl)}`)}
-                        className="w-full rounded-xl bg-primary hover:bg-primary-hover px-6 py-3.5 text-sm font-bold text-white shadow-md shadow-primary/20 transition-all active:scale-[0.98] cursor-pointer text-center"
-                      >
-                        Masuk untuk Aktivasi PRO &rarr;
-                      </button>
+                ) : isBasic ? (
+                  <button
+                    type="button"
+                    onClick={() => handlePayOnline('basic')}
+                    disabled={payingPlan === 'basic'}
+                    className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 py-3 text-xs font-bold text-white shadow-sm transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    {payingPlan === 'basic' ? (
+                      <>
+                        <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Menghubungkan Midtrans...</span>
+                      </>
                     ) : (
-                      <button
-                        type="submit"
-                        disabled={redeeming || !activationCode.trim()}
-                        className="w-full rounded-xl bg-primary hover:bg-primary-hover px-6 py-3.5 text-sm font-bold text-white shadow-md shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        {redeeming ? (
-                          <>
-                            <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            <span>Memvalidasi Kode...</span>
-                          </>
-                        ) : hasActiveSubscription ? (
-                          'Perpanjang Pro'
-                        ) : hasCancelledSubscription ? (
-                          'Berlangganan Pro Kembali'
-                        ) : (
-                          'Aktivasi PRO Sekarang'
-                        )}
-                      </button>
+                      'Perpanjang Paket Basic'
                     )}
-                  </form>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handlePayOnline('basic')}
+                    disabled={payingPlan === 'basic'}
+                    className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 py-3 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition-all active:scale-[0.98] disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    {payingPlan === 'basic' ? (
+                      <>
+                        <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Menghubungkan Midtrans...</span>
+                      </>
+                    ) : (
+                      'Pilih Basic &bull; Rp 35.000 / bln'
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
 
-                  {/* Secondary Actions for Active Subscribers */}
-                  {user && hasActiveSubscription && (
-                    <div className="mt-4 pt-3 flex items-center justify-between text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setShowCancelModal(true)}
-                        className="text-text-muted hover:text-danger text-[11px] font-medium transition-colors cursor-pointer"
-                      >
-                        Hentikan langganan
-                      </button>
-                      <Link
-                        to="/dashboard"
-                        className="text-primary hover:underline text-[11px] font-semibold"
-                      >
-                        Buka Dashboard &rarr;
-                      </Link>
-                    </div>
+            {/* 2. PRO CARD */}
+            <div
+              className={`relative rounded-2xl border transition-all flex flex-col justify-between p-6 ${
+                activeCard === 'pro'
+                  ? 'border-primary bg-surface shadow-xl shadow-primary/10 ring-1 ring-primary'
+                  : 'border-border bg-surface shadow-md'
+              }`}
+            >
+              {/* Highlight ribbon */}
+              <div className="absolute -top-3 right-5">
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-0.5 text-[11px] font-extrabold text-white shadow-sm">
+                  ★ Paling Lengkap
+                </span>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-primary uppercase tracking-wider">
+                    {PLAN_CONFIG[PLANS.PRO].displayName}
+                  </span>
+                  {isPro && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-profit-500/15 border border-profit-500/25 px-2.5 py-0.5 text-[11px] font-bold text-profit-500">
+                      <span className="h-1.5 w-1.5 rounded-full bg-profit-500 animate-pulse" />
+                      Aktif
+                    </span>
                   )}
                 </div>
-              </>
-            )}
+
+                <h2 className="mt-3 text-xl font-extrabold text-text-primary">
+                  Ekosistem Operasional & AI
+                </h2>
+                <p className="mt-1 text-xs text-text-secondary leading-relaxed">
+                  Solusi terintegrasi lengkap: database bisnis, POS kasir, CRM, laporan keuangan, dan AI Creative Studio.
+                </p>
+
+                {/* Price Display */}
+                <div className="mt-4 border-y border-border py-3.5">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-black tracking-tight text-text-primary tabular-nums">
+                      {PLAN_CONFIG[PLANS.PRO].priceDetail.split(' / ')[0]}
+                    </span>
+                    <span className="text-xs font-medium text-text-muted">/ bulan</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-text-muted">
+                    Dapat dibayar via Online Payment (Midtrans) atau Kode Voucher Aktivasi resmi.
+                  </p>
+                </div>
+
+                {/* Features */}
+                <ul className="mt-4 space-y-2.5">
+                  {PRO_FEATURES.map((f) => (
+                    <li key={f} className="flex items-start gap-2.5 text-xs text-text-primary">
+                      <svg
+                        className="h-4 w-4 shrink-0 text-primary mt-0.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2.5}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Action Button */}
+              <div className="mt-6 pt-4 border-t border-border space-y-2">
+                <button
+                  type="button"
+                  onClick={() => handlePayOnline('pro')}
+                  disabled={payingPlan === 'pro'}
+                  className="w-full rounded-xl bg-primary hover:bg-primary-hover py-3 text-xs font-bold text-white shadow-md shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  {payingPlan === 'pro' ? (
+                    <>
+                      <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Menghubungkan Midtrans...</span>
+                    </>
+                  ) : isPro ? (
+                    'Perpanjang Pro'
+                  ) : hasCancelledSubscription ? (
+                    'Berlangganan Pro Kembali'
+                  ) : isBasic ? (
+                    'Upgrade ke PRO • Rp 130.000 / bln'
+                  ) : (
+                    'Pilih PRO • Rp 130.000 / bln'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* PRO Activation Voucher Section */}
+          <div className="mt-8 rounded-2xl border border-border bg-surface p-5 sm:p-7 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">
+                  Punya Kode Aktivasi / Voucher PRO?
+                </h3>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Masukkan voucher resmi dari tim BisnisSehat untuk aktivasi akun Pro secara instan.
+                </p>
+              </div>
+              <span className="text-[11px] font-mono text-primary bg-primary/10 border border-primary/20 px-2.5 py-1 rounded-lg shrink-0">
+                Format: BS-PRO-XXXX
+              </span>
+            </div>
+
+            <form onSubmit={handleRedeem} className="flex flex-col sm:flex-row gap-2.5">
+              <input
+                type="text"
+                placeholder="Contoh: BS-PRO-9F8A-7B2C-..."
+                value={activationCode}
+                onChange={(e) => {
+                  setActivationCode(e.target.value.toUpperCase())
+                  if (error) setError(null)
+                }}
+                disabled={redeeming}
+                className="flex-1 px-3.5 py-3 rounded-xl bg-surface-elevated border border-border text-text-primary font-mono text-xs tracking-wider placeholder:font-sans placeholder:tracking-normal placeholder:text-text-muted focus:outline-hidden focus:border-primary focus:ring-1 focus:ring-primary transition-all disabled:opacity-50"
+              />
+
+              {!user ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/auth?returnTo=${encodeURIComponent(loginReturnUrl)}`)}
+                  className="rounded-xl bg-primary hover:bg-primary-hover px-5 py-3 text-xs font-bold text-white shadow-md shadow-primary/20 transition-all active:scale-[0.98] cursor-pointer text-center whitespace-nowrap"
+                >
+                  Masuk untuk Aktivasi &rarr;
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={redeeming || !activationCode.trim()}
+                  className="rounded-xl bg-primary hover:bg-primary-hover px-6 py-3 text-xs font-bold text-white shadow-md shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap"
+                >
+                  {redeeming ? (
+                    <>
+                      <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Memvalidasi...</span>
+                    </>
+                  ) : hasCancelledSubscription ? (
+                    'Berlangganan Pro Kembali'
+                  ) : hasActiveSubscription ? (
+                    'Perpanjang Pro'
+                  ) : (
+                    'Aktivasi PRO Sekarang'
+                  )}
+                </button>
+              )}
+            </form>
           </div>
         </motion.div>
       </div>
@@ -460,10 +686,10 @@ export default function PricingPage() {
                 </div>
                 <div>
                   <h3 id="cancel-dialog-title" className="text-base font-bold text-text-primary">
-                    Hentikan Langganan Pro?
+                    Hentikan Langganan?
                   </h3>
                   <p id="cancel-dialog-desc" className="text-xs text-text-muted mt-0.5">
-                    Konfirmasi pembatalan akses BisnisSehat Pro
+                    Konfirmasi pembatalan perpanjangan otomatis
                   </p>
                 </div>
               </div>
@@ -471,7 +697,7 @@ export default function PricingPage() {
               {/* Explanatory Body */}
               <div className="my-4 rounded-xl border border-border bg-surface p-3.5 text-xs text-text-secondary space-y-2 leading-relaxed">
                 <p>
-                  Dengan menghentikan langganan, Anda tidak akan lagi memiliki akses ke fitur Pro setelah masa aktif berakhir.
+                  Dengan menghentikan langganan, Anda tidak akan lagi diperpanjang secara otomatis setelah masa aktif berakhir.
                 </p>
                 {formattedExpiry && (
                   <p className="font-semibold text-text-primary">
@@ -479,7 +705,7 @@ export default function PricingPage() {
                   </p>
                 )}
                 <p className="text-[11px] text-text-muted">
-                  Riwayat transaksi dan data bisnis Anda tersimpan dengan aman di sistem.
+                  Riwayat transaksi dan data bisnis Anda tetap tersimpan dengan aman di sistem.
                 </p>
               </div>
 

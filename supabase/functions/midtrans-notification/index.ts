@@ -237,12 +237,15 @@ Deno.serve(async (req) => {
           })
           .eq("id", subPayment.id);
 
+        // Determine plan from payment record or amount
+        const activatedPlan = (subPayment.plan === "basic" || Number(subPayment.gross_amount) <= 35000) ? "basic" : "pro";
+
         // 2. Activate subscription
         await supabaseAdmin
           .from("subscriptions")
           .update({
             status: "active",
-            plan: "pro",
+            plan: activatedPlan,
             started_at: period_start.toISOString(),
             expires_at: period_end.toISOString(),
             payment_provider: "midtrans",
@@ -251,26 +254,28 @@ Deno.serve(async (req) => {
           })
           .eq("id", subPayment.subscription_id);
 
-        console.log(`[midtrans-notification] Pro activated for sub: ${subPayment.subscription_id}, period: ${period_start.toISOString()} -> ${period_end.toISOString()}`);
+        console.log(`[midtrans-notification] ${activatedPlan} activated for sub: ${subPayment.subscription_id}, period: ${period_start.toISOString()} -> ${period_end.toISOString()}`);
 
-        // 3. Atomically grant Pro 200 monthly token allowance for this period (ai.md specification)
-        const { data: businessRec } = await supabaseAdmin
-          .from("businesses")
-          .select("id")
-          .eq("owner_id", subPayment.profile_id)
-          .maybeSingle();
+        // 3. Atomically grant Pro 200 monthly token allowance for this period ONLY for Pro plan (ai.md specification)
+        if (activatedPlan === "pro") {
+          const { data: businessRec } = await supabaseAdmin
+            .from("businesses")
+            .select("id")
+            .eq("owner_id", subPayment.profile_id)
+            .maybeSingle();
 
-        if (businessRec?.id) {
-          const { data: grantResult, error: grantErr } = await supabaseAdmin.rpc("grant_pro_monthly_allowance_atomic", {
-            p_business_id: businessRec.id,
-            p_subscription_id: subPayment.subscription_id,
-            p_period_start: period_start.toISOString(),
-          });
+          if (businessRec?.id) {
+            const { data: grantResult, error: grantErr } = await supabaseAdmin.rpc("grant_pro_monthly_allowance_atomic", {
+              p_business_id: businessRec.id,
+              p_subscription_id: subPayment.subscription_id,
+              p_period_start: period_start.toISOString(),
+            });
 
-          if (grantErr) {
-            console.error(`[midtrans-notification] Error granting monthly Pro allowance: ${grantErr.message}`);
-          } else {
-            console.log(`[midtrans-notification] Monthly Pro allowance result:`, grantResult);
+            if (grantErr) {
+              console.error(`[midtrans-notification] Error granting monthly Pro allowance: ${grantErr.message}`);
+            } else {
+              console.log(`[midtrans-notification] Monthly Pro allowance result:`, grantResult);
+            }
           }
         }
       } else {

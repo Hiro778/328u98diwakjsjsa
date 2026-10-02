@@ -156,6 +156,14 @@ export async function getSetting(key) {
   }
 }
 
+export function invalidatePublicSettingsCache() {
+  cachedPublicSettings = null
+  cacheTimestamp = 0
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('platform-settings-invalidated'))
+  }
+}
+
 /**
  * Update a single platform setting by key.
  *
@@ -177,6 +185,9 @@ export async function updateSetting(key, value, reason = '') {
     if (rpcErr) {
       throw normalizeSettingsError(rpcErr)
     }
+
+    // Invalidate cached public settings immediately so gates & UI reflect change instantly
+    invalidatePublicSettingsCache()
 
     return sanitizeSettingRow(rpcData)
   } catch (err) {
@@ -209,6 +220,8 @@ export async function updateSettings(settingsMap, reason = '') {
     results.push(res)
   }
 
+  invalidatePublicSettingsCache()
+
   return results
 }
 
@@ -233,7 +246,7 @@ let cacheTimestamp = 0
 const CACHE_TTL_MS = 30000
 
 /**
- * Safely fetches public non-sensitive platform settings (@ban.md).
+ * Safely fetches public non-sensitive platform settings (@ban.md & @gas.md).
  * Accessible by anonymous visitors, normal users, and admins.
  */
 export async function fetchPublicPlatformSettings(forceRefresh = false) {
@@ -245,7 +258,8 @@ export async function fetchPublicPlatformSettings(forceRefresh = false) {
   try {
     const { data, error } = await supabase.rpc('get_public_platform_settings')
     if (error) {
-      console.warn('[adminSettingsService] Could not fetch public settings, using defaults:', error.message)
+      console.warn('[adminSettingsService] Could not fetch public settings, using defaults/cached:', error.message)
+      if (cachedPublicSettings) return cachedPublicSettings
       return DEFAULT_PUBLIC_SETTINGS
     }
     const merged = { ...DEFAULT_PUBLIC_SETTINGS, ...(data || {}) }
@@ -253,8 +267,10 @@ export async function fetchPublicPlatformSettings(forceRefresh = false) {
     cacheTimestamp = now
     return merged
   } catch (err) {
-    console.warn('[adminSettingsService] Error loading public settings, using defaults:', err)
+    console.warn('[adminSettingsService] Error loading public settings, using defaults/cached:', err)
+    if (cachedPublicSettings) return cachedPublicSettings
     return DEFAULT_PUBLIC_SETTINGS
   }
 }
+
 

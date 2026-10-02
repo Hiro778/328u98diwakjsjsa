@@ -16,6 +16,7 @@ import { verifyAuth } from "../_shared/auth.ts";
 import { isProUser } from "../_shared/entitlement.ts";
 import { supabaseAdmin } from "../_shared/supabase-admin.ts";
 import { jsonResponse, errorResponse, corsResponse } from "../_shared/response.ts";
+import { validateSafeUrl } from "../_shared/ssrf.ts";
 
 // API Keys - optional, research works without them (returns limited data)
 const SERPER_API_KEY = Deno.env.get("SERPER_API_KEY");
@@ -162,7 +163,11 @@ Deno.serve(async (req) => {
     // 4. Try to fetch website content (if SERPAPI_KEY available)
     let websiteContent: string | null = null;
     if (website && (SERPAPI_KEY || BROWSER_API_KEY)) {
-      try {
+      const urlCheck = validateSafeUrl(website);
+      if (!urlCheck.safe) {
+        console.warn("[competitor-research] Blocked potentially dangerous URL:", website, urlCheck.error);
+      } else {
+        try {
         const cleanWebsite = website.replace(/^https?:\/\//, "").replace(/\/$/, "");
         const domain = cleanWebsite.split("/")[0];
 
@@ -234,6 +239,7 @@ Deno.serve(async (req) => {
         }
       } catch (err) {
         console.error("[competitor-research] Website fetch error:", err);
+      }
       }
     }
 

@@ -1,10 +1,10 @@
 /**
  * src/services/aiCreditPurchaseService.js
  * AI Credit Purchase via WhatsApp Admin Flow.
- * Strictly conforms to credit.md and credit1.md specifications:
+ * Strictly conforms to load.md and credit.md specifications:
  * - Directs user to WhatsApp Admin for manual/secure top up coordination.
  * - No auto-credit mutation on frontend click.
- * - Centralized config for WhatsApp destination (VITE_AI_CREDIT_WHATSAPP_NUMBER).
+ * - Reuses existing platform settings WhatsApp (support_phone) or centralized config.
  * - Proper Indonesian E.164 phone normalization without plus sign for wa.me.
  * - Standardized message format with encodeURIComponent.
  * - Clear error handling when WhatsApp number is unconfigured (no invalid wa.me URLs).
@@ -56,20 +56,45 @@ export function getAiCreditWhatsAppNumber() {
 }
 
 /**
- * Formats the AI credit purchase message according to credit.md Part B section 12.
+ * Formats the AI credit purchase message according to load.md Section 2 / credit.md Part B.
  *
  * @param {Object} params
- * @param {string} params.packageName - e.g. "Starter Pack"
+ * @param {string} params.packageName - e.g. "Starter" or "Starter Pack"
  * @param {number|string} params.credits - e.g. 100
- * @param {number|string} params.priceIdr - e.g. 49000
+ * @param {number|string} params.priceIdr - e.g. 25000
  * @param {string} [params.userEmail] - Authenticated user email
+ * @param {string} [params.businessName] - User's business name
+ * @param {string} [params.accountIdentifier] - User email or ID
  * @returns {string} Plaintext message before URL encoding
  */
-export function generateAiCreditWhatsAppMessage({ packageName, credits, priceIdr, userEmail }) {
+export function generateAiCreditWhatsAppMessage({
+  packageName,
+  credits,
+  priceIdr,
+  userEmail,
+  businessName,
+  accountIdentifier,
+}) {
   const formattedPrice = Number(priceIdr || 0).toLocaleString('id-ID')
-  const emailText = userEmail && userEmail.trim() ? userEmail.trim() : '-'
+  const emailText = accountIdentifier || (userEmail && userEmail.trim() ? userEmail.trim() : '-')
+  const bizText = businessName && businessName.trim() ? businessName.trim() : '-'
   const pkgLabel = packageName ? `${packageName} (${credits} AI Credits)` : `${credits} AI Credits`
 
+  // Format per load.md Section 2 when businessName or accountIdentifier is specified
+  if (businessName !== undefined || accountIdentifier !== undefined) {
+    return (
+      `Halo Admin BisnisSehat,\n\n` +
+      `Saya ingin membeli AI Credit:\n\n` +
+      `Paket: ${packageName || pkgLabel}\n` +
+      `Credit: ${credits}\n` +
+      `Harga: Rp${formattedPrice}\n\n` +
+      `Akun: ${emailText}\n` +
+      `Business: ${bizText}\n\n` +
+      `Mohon konfirmasi pembayaran.`
+    )
+  }
+
+  // Legacy fallback format per credit.md Part B
   return (
     `Halo Admin BisnisSehat,\n\n` +
     `Saya ingin membeli AI Credit.\n\n` +
@@ -90,10 +115,20 @@ export function generateAiCreditWhatsAppMessage({ packageName, credits, priceIdr
  * @param {number|string} params.credits
  * @param {number|string} params.priceIdr
  * @param {string} [params.userEmail]
+ * @param {string} [params.businessName]
+ * @param {string} [params.accountIdentifier]
  * @param {string} [params.phoneOverride]
  * @returns {string|null}
  */
-export function buildAiCreditWhatsAppUrl({ packageName, credits, priceIdr, userEmail, phoneOverride }) {
+export function buildAiCreditWhatsAppUrl({
+  packageName,
+  credits,
+  priceIdr,
+  userEmail,
+  businessName,
+  accountIdentifier,
+  phoneOverride,
+}) {
   const targetNumber = phoneOverride ? normalizeWhatsAppNumber(phoneOverride) : getAiCreditWhatsAppNumber()
 
   if (!targetNumber) {
@@ -105,6 +140,8 @@ export function buildAiCreditWhatsAppUrl({ packageName, credits, priceIdr, userE
     credits,
     priceIdr,
     userEmail,
+    businessName,
+    accountIdentifier,
   })
 
   return `https://wa.me/${targetNumber}?text=${encodeURIComponent(message)}`
@@ -117,10 +154,18 @@ export function buildAiCreditWhatsAppUrl({ packageName, credits, priceIdr, userE
  * @param {Object} params
  * @param {Object} params.packageData - The package object from CREDIT_PACKAGES
  * @param {string} [params.userEmail]
+ * @param {string} [params.businessName]
+ * @param {string} [params.accountIdentifier]
  * @param {string} [params.phoneOverride]
  * @returns {{ success: boolean, url?: string, error?: string }}
  */
-export function handleAiCreditWhatsAppPurchase({ packageData, userEmail, phoneOverride }) {
+export function handleAiCreditWhatsAppPurchase({
+  packageData,
+  userEmail,
+  businessName,
+  accountIdentifier,
+  phoneOverride,
+}) {
   if (!packageData) {
     return { success: false, error: 'Paket kredit tidak ditemukan.' }
   }
@@ -130,6 +175,8 @@ export function handleAiCreditWhatsAppPurchase({ packageData, userEmail, phoneOv
     credits: packageData.credits,
     priceIdr: packageData.priceIdr,
     userEmail,
+    businessName,
+    accountIdentifier,
     phoneOverride,
   })
 
@@ -137,7 +184,7 @@ export function handleAiCreditWhatsAppPurchase({ packageData, userEmail, phoneOv
     return {
       success: false,
       error:
-        'Nomor WhatsApp admin belum dikonfigurasi. Harap tentukan VITE_AI_CREDIT_WHATSAPP_NUMBER pada file lingkungan.',
+        'Nomor WhatsApp admin belum dikonfigurasi. Harap tentukan VITE_AI_CREDIT_WHATSAPP_NUMBER atau atur nomor WhatsApp di pengaturan platform.',
     }
   }
 

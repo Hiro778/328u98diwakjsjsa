@@ -9,6 +9,8 @@ import {
   generatePRD,
   revisePRD,
   listPRDs,
+  generateOpenGenerativeVideo,
+  pollOpenGenerativeVideo,
 } from '../../../services/creativeStudioService';
 import { getCreditOverview } from '../../../services/creativeCreditService';
 import { supabase } from '../../../lib/supabase';
@@ -24,7 +26,7 @@ const CREDIT_COSTS = {
 };
 
 export default function CreativeStudioPage() {
-  const { user, business, refreshFreeAiUsage } = useAuth();
+  const { user, business, isPro, refreshFreeAiUsage } = useAuth();
   const navigate = useNavigate();
 
   // State
@@ -38,6 +40,11 @@ export default function CreativeStudioPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [step, setStep] = useState('campaign'); // campaign | brief | prd (PRD is terminal)
+
+  // AI Video generator state (Phase 12 Integration)
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoResult, setVideoResult] = useState(null);
+  const [videoError, setVideoError] = useState(null);
 
   // Brief form state
   const [briefForm, setBriefForm] = useState({
@@ -258,6 +265,54 @@ export default function CreativeStudioPage() {
       await loadCredits(selectedCampaign?.business_id || business?.id);
     } finally {
       setLoading(false);
+    }
+  }
+
+  // ============================================================
+  // AI VIDEO GENERATION (PHASE 12 - OPEN-GENERATIVE-AI)
+  // ============================================================
+
+  async function handleGenerateVideo() {
+    setVideoError(null);
+    setVideoResult(null);
+
+    if (!isPro) {
+      setVideoError('PRO_REQUIRED: Fitur AI Video Generator membutuhkan langganan BisnisSehat Pro.');
+      return;
+    }
+
+    const available = credits?.available ?? 0;
+    if (available < 20) {
+      setVideoError('INSUFFICIENT_CREDITS: Saldo Creative Credits tidak mencukupi (dibutuhkan 20 kredit).');
+      return;
+    }
+
+    setVideoLoading(true);
+    try {
+      const targetBizId = selectedCampaign?.business_id || business?.id;
+      const prompt =
+        prd?.prd_content?.video_script ||
+        prd?.prd_content?.video_concept ||
+        prd?.prd_content?.headline ||
+        'Video promosi produk UMKM';
+
+      const genRes = await generateOpenGenerativeVideo({
+        prdId: prd?.id,
+        prompt,
+        businessId: targetBizId,
+      });
+
+      if (genRes?.taskId) {
+        const pollRes = await pollOpenGenerativeVideo(genRes.taskId, genRes.generationId, genRes.assetId, targetBizId);
+        setVideoResult(pollRes?.videoUrl || pollRes);
+      } else {
+        setVideoResult(genRes);
+      }
+      await loadCredits(targetBizId);
+    } catch (err) {
+      setVideoError(err.message || 'PROVIDER_ERROR: Terjadi kendala saat generate video.');
+    } finally {
+      setVideoLoading(false);
     }
   }
 
@@ -858,23 +913,102 @@ export default function CreativeStudioPage() {
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  Buat video promosi otomatis berdurasi 8 detik berdasarkan naskah PRD Anda menggunakan backend Atlas Cloud.
+                  Buat video promosi otomatis berdurasi 8 detik berdasarkan naskah PRD Anda menggunakan backend Atlas Cloud & Open-Generative-AI.
                 </p>
               </div>
             </div>
 
-            <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="text-xs text-gray-600">
-                <p className="font-medium text-gray-700">Integrasi backend Atlas Cloud aktif & terverifikasi.</p>
-                <p className="text-gray-500 mt-0.5">Fitur antarmuka publik sedang dalam tahap finalisasi dan segera dibuka untuk seluruh pengguna.</p>
+            <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-4 flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="text-xs text-gray-600">
+                  <p className="font-medium text-gray-700">Integrasi backend Atlas Cloud & Open-Generative-AI aktif & terverifikasi.</p>
+                  <p className="text-gray-500 mt-0.5">
+                    Fitur antarmuka publik sedang dalam tahap finalisasi dan segera dibuka untuk seluruh pengguna.
+                  </p>
+                </div>
+                {!isPro ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="px-4 py-2 bg-gray-200 text-gray-400 text-xs font-semibold rounded-lg cursor-not-allowed shrink-0"
+                  >
+                    Coming Soon
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={videoLoading || (credits?.available ?? 0) < 20}
+                    onClick={handleGenerateVideo}
+                    className={`px-4 py-2 text-xs font-semibold rounded-lg shrink-0 ${
+                      videoLoading || (credits?.available ?? 0) < 20
+                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer'
+                    }`}
+                  >
+                    {videoLoading ? 'Memproses Video...' : 'Generate Video (20 Kredit)'}
+                  </button>
+                )}
               </div>
-              <button
-                type="button"
-                disabled
-                className="px-4 py-2 bg-gray-200 text-gray-400 text-xs font-semibold rounded-lg cursor-not-allowed shrink-0"
-              >
-                Coming Soon
-              </button>
+
+              {/* State: Pro-required state reminder */}
+              {!isPro && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800 flex items-center justify-between">
+                  <span>AI Video Generator eksklusif untuk pelanggan BisnisSehat Pro.</span>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/pricing')}
+                    className="underline font-semibold hover:text-blue-900 cursor-pointer ml-2"
+                  >
+                    Upgrade ke Pro
+                  </button>
+                </div>
+              )}
+
+              {/* State: Insufficient credit state */}
+              {isPro && (credits?.available ?? 0) < 20 && !videoLoading && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center justify-between">
+                  <span>Saldo tidak cukup (tersedia: {credits?.available ?? 0} kredit, dibutuhkan 20).</span>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/dashboard/marketing/creative-credits')}
+                    className="underline font-semibold hover:text-amber-900 cursor-pointer ml-2"
+                  >
+                    Top Up Kredit
+                  </button>
+                </div>
+              )}
+
+              {/* State: Provider error state */}
+              {videoError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                  {videoError}
+                </div>
+              )}
+
+              {/* State: Loading state */}
+              {videoLoading && (
+                <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-700 flex items-center gap-3">
+                  <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                  <span>Sedang memproses video melalui AI engine... Mohon tunggu beberapa saat.</span>
+                </div>
+              )}
+
+              {/* State: Success state */}
+              {videoResult && (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800">
+                  <p className="font-semibold mb-2">Video Berhasil Dibuat!</p>
+                  {typeof videoResult === 'string' && videoResult.startsWith('http') ? (
+                    <div className="space-y-2">
+                      <video controls className="w-full max-w-xs rounded-lg shadow-sm" src={videoResult} />
+                      <a href={videoResult} target="_blank" rel="noopener noreferrer" className="inline-block text-indigo-600 underline font-medium">
+                        Unduh Video
+                      </a>
+                    </div>
+                  ) : (
+                    <p className="text-gray-600">Task video selesai diproses oleh AI video engine.</p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -60,18 +60,21 @@ export function loadSnapScript() {
 
 /**
  * Create subscription Snap transaction via Edge Function.
- * Strictly sends no amount from frontend — amount is Rp 130.000 determined by server.
+ * Strictly sends no custom amount from frontend — amount is Rp 35.000 for Basic or Rp 130.000 for Pro determined by server.
+ *
+ * @param {'pro'|'basic'} [plan='pro']
  */
-export async function createSubscriptionSnap() {
+export async function createSubscriptionSnap(plan = 'pro') {
   // 1. Verify active Supabase session before invoking
   const { data: { session }, error: sessionError } = await supabase.auth.getSession()
   if (sessionError || !session?.access_token) {
     throw new Error('Sesi login tidak ditemukan atau telah berakhir. Silakan login kembali.')
   }
 
-  console.log('[subscriptionService] Invoking midtrans-subscription-snap...')
+  const normalizedPlan = plan?.toLowerCase() === 'basic' ? 'basic' : 'pro'
+  console.log(`[subscriptionService] Invoking midtrans-subscription-snap for plan ${normalizedPlan}...`)
   const { data, error } = await supabase.functions.invoke('midtrans-subscription-snap', {
-    body: {},
+    body: { plan: normalizedPlan },
   })
 
   if (error) {

@@ -38,6 +38,8 @@ export function calculateSubscriptionEntitlement({
       hasActiveSubscription: false,
       hasExpiredSubscription: false,
       isPro: false,
+      isBasic: false,
+      plan: null,
       expiresAt: null,
       hasProofOfPriorPro: false,
       error: null,
@@ -50,6 +52,8 @@ export function calculateSubscriptionEntitlement({
       hasActiveSubscription: false,
       hasExpiredSubscription: false,
       isPro: false,
+      isBasic: false,
+      plan: null,
       expiresAt: null,
       hasProofOfPriorPro: false,
       error: error?.message || (typeof error === 'string' ? error : 'Terjadi kendala saat memeriksa status langganan.'),
@@ -62,6 +66,8 @@ export function calculateSubscriptionEntitlement({
       hasActiveSubscription: false,
       hasExpiredSubscription: false,
       isPro: false,
+      isBasic: false,
+      plan: null,
       expiresAt: null,
       hasProofOfPriorPro: false,
     }
@@ -80,17 +86,29 @@ export function calculateSubscriptionEntitlement({
   // Legitimate proof that user ever had an active/paid Pro subscription:
   // 1. A verified paid/settlement transaction in subscription_payments, OR
   // 2. An activated subscription with plan 'pro', valid started_at and expires_at timestamps
-  // (Rows with null started_at/expires_at, pending status, or free plan do NOT qualify as prior Pro)
+  const isPlanPro = subscription?.plan?.toLowerCase() === 'pro'
+  const isPlanBasic = subscription?.plan?.toLowerCase() === 'basic'
+
   const hasProofOfPriorPro = Boolean(
     hasPaidHistory ||
-    (subscription?.plan === 'pro' && hasValidStartedAt && hasValidExpiresAt) ||
-    (subscription?.plan === 'pro' && subscription?.status === 'expired' && hasValidExpiresAt)
+    (isPlanPro && hasValidStartedAt && hasValidExpiresAt) ||
+    (isPlanPro && subscription?.status === 'expired' && hasValidExpiresAt)
   )
 
-  // 1. ACTIVE: Pro plan, status active, and expires_at is strictly in the future
+  const hasProofOfPriorBasic = Boolean(
+    (isPlanBasic && hasValidStartedAt && hasValidExpiresAt) ||
+    (isPlanBasic && subscription?.status === 'expired' && hasValidExpiresAt)
+  )
+
+  const isCancelled =
+    subscription?.status === 'cancelled' ||
+    subscription?.is_cancelled === true
+
+  // 1. ACTIVE: Pro or Basic plan, status active, not cancelled, and expires_at is strictly in the future
   if (
     subscription?.status === 'active' &&
-    subscription?.plan === 'pro' &&
+    !isCancelled &&
+    (isPlanPro || isPlanBasic) &&
     isFuture
   ) {
     return {
@@ -98,28 +116,34 @@ export function calculateSubscriptionEntitlement({
       hasActiveSubscription: true,
       hasExpiredSubscription: false,
       hasCancelledSubscription: false,
-      isPro: true,
+      isPro: isPlanPro,
+      isBasic: isPlanBasic,
+      plan: isPlanPro ? 'pro' : 'basic',
       expiresAt: subscription.expires_at,
-      hasProofOfPriorPro: true,
+      hasProofOfPriorPro: isPlanPro ? true : hasProofOfPriorPro,
+      hasProofOfPriorBasic: isPlanBasic ? true : hasProofOfPriorBasic,
     }
   }
 
-  // 1.b CANCELLED: User explicitly cancelled active Pro subscription (plan.md specification)
-  if (subscription?.status === 'cancelled') {
+  // 1.b CANCELLED: User explicitly cancelled active subscription
+  if (isCancelled) {
     return {
       subscriptionState: 'cancelled',
       hasActiveSubscription: false,
       hasExpiredSubscription: false,
       hasCancelledSubscription: true,
       isPro: false,
+      isBasic: false,
+      plan: subscription?.plan || null,
       expiresAt: subscription?.expires_at || null,
-      hasProofOfPriorPro: true,
+      hasProofOfPriorPro,
+      hasProofOfPriorBasic,
     }
   }
 
-  // 2. EXPIRED: User legitimately HAD Pro, and expires_at has passed
+  // 2. EXPIRED: User legitimately HAD Pro or Basic, and expires_at has passed
   if (
-    hasProofOfPriorPro &&
+    (hasProofOfPriorPro || hasProofOfPriorBasic) &&
     isPast
   ) {
     return {
@@ -128,19 +152,26 @@ export function calculateSubscriptionEntitlement({
       hasExpiredSubscription: true,
       hasCancelledSubscription: false,
       isPro: false,
+      isBasic: false,
+      plan: subscription?.plan || null,
       expiresAt: subscription?.expires_at || null,
-      hasProofOfPriorPro: true,
+      hasProofOfPriorPro,
+      hasProofOfPriorBasic,
     }
   }
 
-  // 3. FREE: Brand new user, pending payment, inactive checkout draft, or free plan
+  // 3. FREE / UN-SUBSCRIBED: Brand new user, pending payment, inactive checkout draft, or legacy free plan
   return {
     subscriptionState: 'free',
     hasActiveSubscription: false,
     hasExpiredSubscription: false,
+    hasCancelledSubscription: false,
     isPro: false,
+    isBasic: false,
+    plan: subscription?.plan || 'free',
     expiresAt: subscription?.expires_at || null,
     hasProofOfPriorPro,
+    hasProofOfPriorBasic,
   }
 }
 

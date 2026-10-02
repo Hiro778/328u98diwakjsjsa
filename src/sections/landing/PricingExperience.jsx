@@ -4,59 +4,57 @@ import { Link } from 'react-router';
 import { PLAN_CONFIG, PLANS } from '../../data/categories';
 
 // Strictly 2 plans from BisnisSehat source of truth
+const BASIC_PRICE_NUM = PLAN_CONFIG[PLANS.BASIC]?.price || 35000;
+const BASIC_PRICE_LABEL = 'Rp 35.000';
 const PRO_PRICE_NUM = PLAN_CONFIG[PLANS.PRO].price; // 130000
 const PRO_PRICE_LABEL = 'Rp 130.000';
 
 const PLANS_DATA = [
   {
-    id: 'free',
-    name: 'BisnisSehat Gratis',
-    badge: 'Akses Mandiri',
-    price: 'Rp 0',
+    id: 'basic',
+    name: 'BisnisSehat Basic',
+    badge: 'Kalkulator Mandiri',
+    price: BASIC_PRICE_LABEL,
     period: '/ bulan',
-    desc: 'Mulai dengan tools yang tersedia tanpa biaya.',
+    desc: 'Seluruh kalkulator operasional & keuangan standalone.',
     isPro: false,
     bg: 'bg-[#151D2C]',
     border: 'border-[#222C3E]',
-    ctaText: 'Mulai Gratis',
-    ctaLink: '/auth',
+    ctaText: 'Pilih Basic',
+    ctaLink: '/pricing?plan=basic',
     ctaVariant: 'secondary',
     features: [
-      { text: 'HPP Calculator', highlight: true },
-      { text: 'Break-even Point Calculator', highlight: true },
-      { text: 'SEO Optimizer (Unlimited)', highlight: true },
-      { text: 'AI Creative Studio (1 lifetime generation)' },
-      { text: 'Legalitas Checker' },
+      { text: 'HPP & Margin Calculator', highlight: true },
+      { text: 'Break-even Point (BEP) Calculator', highlight: true },
+      { text: 'Simulasi Pinjaman & Angsuran', highlight: true },
+      { text: 'Kalkulator Gaji Karyawan', highlight: true },
+      { text: 'Generator Iklan & Copywriting' },
       { text: 'Kurs & Bea Cukai Calculator' },
-      { text: 'Pencatatan transaksi manual' },
+      { text: 'Analisis Valuta & Ekspor Standalone' },
     ],
   },
   {
     id: 'pro',
     name: 'BisnisSehat Pro',
-    badge: 'Akses Lengkap',
+    badge: 'Akses Lengkap & AI',
     price: PRO_PRICE_LABEL,
     period: '/ bulan',
-    desc: 'Unlock capability Pro yang memang dibatasi oleh entitlement.',
+    desc: 'Semua tools Basic plus database bisnis, POS kasir, CRM, dan AI Studio.',
     isPro: true,
     accent: '#818CF8',
     bg: 'bg-[#1E293B]',
     border: 'border-indigo-500/70',
     ctaText: 'Aktivasi Pro Sekarang',
-    ctaLink: '/auth?returnTo=/pricing',
+    ctaLink: '/pricing?plan=pro',
     ctaVariant: 'primary',
     features: [
-      { text: 'Ads Calculator & Meta Attribution', highlight: true },
-      { text: 'Google Business Profile Integration' },
-      { text: 'A/B Testing', highlight: true },
-      { text: 'Competitor Analysis', highlight: true },
-      { text: 'Content Calendar', highlight: true },
-      { text: 'POS Kasir & QR Menu' },
-      { text: 'Inventori Otomatis' },
-      { text: 'Customer CRM & WhatsApp Integration' },
-      { text: 'Cash Flow Forecast & Margin Analysis' },
-      { text: 'Business Analytics & AI Insights' },
-      { text: 'Export laporan keuangan' },
+      { text: 'Termasuk Seluruh Tools Basic', highlight: true },
+      { text: 'Point of Sales (POS) Kasir & QR Menu', highlight: true },
+      { text: 'Database Bisnis & Inventori Otomatis' },
+      { text: 'Customer CRM & WhatsApp Integration', highlight: true },
+      { text: 'Laporan Laba Rugi, Neraca & Arus Kas' },
+      { text: 'AI Creative Studio & 200 Kredit AI / Bulan', highlight: true },
+      { text: 'Verifikasi Legalitas Usaha Resmi' },
     ],
   },
 ];
@@ -140,7 +138,7 @@ export default function PricingExperience() {
           </h2>
 
           <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto font-normal">
-            Gunakan paket gratis untuk memulai atau tingkatkan ke Pro untuk seluruh kapabilitas operasional dan finansial.
+            Pilih paket Basic untuk kalkulator standalone atau tingkatkan ke Pro untuk seluruh kapabilitas operasional, database bisnis, dan AI.
           </p>
         </motion.div>
 

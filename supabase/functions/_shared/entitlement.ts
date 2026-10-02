@@ -14,7 +14,7 @@ export async function isProUser(userId: string): Promise<boolean> {
   try {
     const { data: sub, error } = await supabaseAdmin
       .from("subscriptions")
-      .select("id, status, plan, expires_at")
+      .select("id, status, plan, expires_at, is_cancelled")
       .eq("profile_id", userId)
       .eq("plan", "pro")
       .eq("status", "active")
@@ -22,7 +22,7 @@ export async function isProUser(userId: string): Promise<boolean> {
       .limit(1)
       .maybeSingle();
 
-    if (error || !sub) {
+    if (error || !sub || (sub as any).is_cancelled === true) {
       return false;
     }
     return true;

@@ -89,20 +89,8 @@ Deno.serve(async (req) => {
     }
 
     if (!connection) {
-      // Try to find by matching any connection for this marketplace
-      const { data } = await supabaseAdmin
-        .from("marketplace_connections")
-        .select("id, business_id, credentials_encrypted")
-        .eq("marketplace", marketplace)
-        .eq("status", "connected")
-        .limit(1)
-        .single();
-      connection = data;
-    }
-
-    if (!connection) {
-      console.error("[marketplace-webhook] No connection found for", marketplace, shopId);
-      return jsonResponse({ data: { received: true, processed: false, reason: "no_connection" } });
+      console.error("[marketplace-webhook] No verified connection found for", marketplace, shopId);
+      return errorResponse("Verified marketplace connection not found", 404);
     }
 
     // Process based on webhook type

@@ -314,7 +314,7 @@ export async function pollGeneration(generationId, maxAttempts = 60) {
 }
 
 // ============================================================
-// VIDEO GENERATOR (ATLAS CLOUD)
+// VIDEO GENERATOR (ATLAS CLOUD & OPEN-GENERATIVE-AI)
 // ============================================================
 
 /**
@@ -356,4 +356,48 @@ export async function pollVideoGeneration(taskId, generationId = null, assetId =
   }
   throw new Error('Video generation timed out');
 }
+
+/**
+ * Generate video using Open-Generative-AI engine (Phase 12)
+ * Backend edge function: creative-video-generate
+ */
+export async function generateOpenGenerativeVideo({ prdId = null, prompt = '', imageUrl = null, duration = 8, businessId = null, model = null } = {}) {
+  return callEdgeFunction('creative-video-generate', {
+    action: 'generate',
+    prd_id: prdId,
+    prompt,
+    image_url: imageUrl,
+    duration,
+    model,
+    business_id: businessId,
+  }, businessId);
+}
+
+/**
+ * Check Open-Generative-AI video generation status
+ */
+export async function getOpenGenerativeVideoStatus(taskId, generationId = null, assetId = null, businessId = null) {
+  return callEdgeFunction('creative-video-generate', {
+    action: 'status',
+    task_id: taskId,
+    generation_id: generationId,
+    asset_id: assetId,
+    business_id: businessId,
+  }, businessId);
+}
+
+/**
+ * Poll Open-Generative-AI video generation until completion
+ */
+export async function pollOpenGenerativeVideo(taskId, generationId = null, assetId = null, businessId = null, maxAttempts = 60) {
+  for (let i = 0; i < maxAttempts; i++) {
+    const res = await getOpenGenerativeVideoStatus(taskId, generationId, assetId, businessId);
+    if (res.status === 'completed' || res.status === 'failed') {
+      return res;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+  throw new Error('Video generation timed out');
+}
+
 

@@ -3,10 +3,14 @@ import { useAuth } from '../context/AuthContext'
 import LoadingScreen from './LoadingScreen'
 import SubscriptionGate from './SubscriptionGate'
 
-export default function RequireSubscription({ featureName = 'Fitur ini' }) {
+export default function RequireSubscription({
+  featureName = 'Fitur ini',
+  requiredPlan = 'basic', // 'basic' | 'pro'
+}) {
   const {
     subscriptionState,
     hasActiveSubscription,
+    isPro,
     loading,
     refreshSubscription,
   } = useAuth()
@@ -16,7 +20,7 @@ export default function RequireSubscription({ featureName = 'Fitur ini' }) {
     return <LoadingScreen />
   }
 
-  // 2. Error state — show friendly error, never degrade Pro user to Free
+  // 2. Error state — show friendly error, never degrade user
   if (subscriptionState === 'error') {
     return (
       <div className="flex min-h-[70vh] flex-col items-center justify-center px-4 text-center">
@@ -46,11 +50,19 @@ export default function RequireSubscription({ featureName = 'Fitur ini' }) {
     )
   }
 
-  // 3. Active state — grant access
+  // 3. Active state — check required plan
   if (hasActiveSubscription || subscriptionState === 'active') {
+    if (requiredPlan === 'pro') {
+      if (isPro) {
+        return <Outlet />
+      }
+      // Active Basic user trying to access Pro-only tool -> show gate to upgrade to Pro
+      return <SubscriptionGate featureName={featureName} requiredPlan="pro" />
+    }
+    // requiredPlan is 'basic': both Basic and Pro active subscribers can access
     return <Outlet />
   }
 
-  // 4. Free or Expired state — render gate
-  return <SubscriptionGate featureName={featureName} />
+  // 4. Inactive / Free / Expired state — render gate with requiredPlan
+  return <SubscriptionGate featureName={featureName} requiredPlan={requiredPlan} />
 }

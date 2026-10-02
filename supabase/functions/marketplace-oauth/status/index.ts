@@ -4,6 +4,7 @@
 // GET: Returns which marketplaces have credentials configured and are ready for OAuth.
 
 import { verifyAuth } from "../../_shared/auth.ts";
+import { isProUser } from "../../_shared/entitlement.ts";
 import { getProvider, getSupportedMarketplaces } from "../../_shared/marketplace-provider.ts";
 import {
   jsonResponse,
@@ -17,7 +18,13 @@ Deno.serve(async (req) => {
 
   try {
     // 1. Verify authentication
-    await verifyAuth(req);
+    const auth = await verifyAuth(req);
+
+    // Enforce Pro entitlement server-side (sec.md)
+    const hasPro = await isProUser(auth.userId);
+    if (!hasPro) {
+      return errorResponse("Fitur ini membutuhkan BisnisSehat Pro.", 403);
+    }
 
     // 2. Check each marketplace's configuration status
     const marketplaces = getSupportedMarketplaces();
