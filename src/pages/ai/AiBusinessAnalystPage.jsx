@@ -146,7 +146,13 @@ export default function AiBusinessAnalystPage({ isStandalone = false }) {
       let result = null
       try {
         const { data, error } = await supabase.functions.invoke('ai-business-analyst', {
-          body: { message: query },
+          body: {
+            message: query,
+            history: messages.slice(-4).map((m) => ({
+              role: m.sender === 'user' ? 'user' : 'assistant',
+              content: m.text,
+            })),
+          },
         })
         if (!error && data && data.text) {
           result = data

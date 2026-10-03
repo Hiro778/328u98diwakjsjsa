@@ -47,6 +47,9 @@ export const BUSINESS_TOOLS = Object.freeze({
   UPDATE_PRODUCT: 'update_product',
   DELETE_PRODUCT: 'delete_product',
   UPDATE_INVENTORY: 'update_inventory',
+
+  // GENERAL
+  GENERAL_CONVERSATION: 'general_conversation',
 })
 
 const NOISE_WORDS = ['dong', 'ya', 'deh', 'bang', 'pls', 'please', 'tolong', 'min']
@@ -217,6 +220,7 @@ export function parseBusinessIntent(query) {
     lower.includes('stok menipis') ||
     lower.includes('stok habis') ||
     lower.includes('stok kritis') ||
+    lower.includes('stok rendah') ||
     lower.includes('low stock') ||
     lower.includes('kapan harus restock') ||
     lower.includes('kapan restock')
@@ -231,6 +235,7 @@ export function parseBusinessIntent(query) {
     lower.includes('persediaan') ||
     lower.includes('cek stok') ||
     lower.includes('total stok') ||
+    lower.includes('stok saya') ||
     lower.includes('status inventori')
   ) {
     return { tool: BUSINESS_TOOLS.ANALYZE_INVENTORY, type: 'READ', entity: {} }
@@ -345,5 +350,10 @@ export function parseBusinessIntent(query) {
     return { tool: BUSINESS_TOOLS.ANALYZE_SALES, type: 'READ', entity: {} }
   }
 
-  return { tool: null, type: 'UNKNOWN', entity: {} }
+  return {
+    tool: null,
+    type: 'UNKNOWN',
+    intent: BUSINESS_TOOLS.GENERAL_CONVERSATION,
+    entity: {},
+  }
 }
