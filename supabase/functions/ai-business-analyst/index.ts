@@ -140,7 +140,7 @@ export function getGeneralConversationResponse({
 
   // 1. Translation / English inquiries
   if (
-    /^(?:bahasa\s+inggris(?:nya)?\s+hai|translate\s+hai\s+ke\s+english|what\s+is\s+hai\s+in\s+english|english\s+of\s+hai)[?!.]*$/i.test(clean)
+    /^(?:(?:apa\s+)?bahasa\s+inggris(?:nya)?\s+hai|translate\s+hai\s+ke\s+english|what\s+is\s+hai\s+in\s+english|english\s+of\s+hai)[?!.]*$/i.test(clean)
   ) {
     return {
       text: "Hi!",
@@ -149,11 +149,26 @@ export function getGeneralConversationResponse({
   }
 
   if (
-    /^(?:bahasa\s+inggris(?:nya)?\s+halo|translate\s+halo\s+ke\s+english)[?!.]*$/i.test(clean)
+    /^(?:(?:apa\s+)?bahasa\s+inggris(?:nya)?\s+halo|translate\s+halo\s+ke\s+english|what\s+is\s+halo\s+in\s+english|english\s+of\s+halo)[?!.]*$/i.test(clean)
   ) {
     return {
       text: "Hello!",
       suggestions: ["Translate hai ke english", "Apa yang bisa kamu lakukan?"],
+    };
+  }
+
+  // 1.1 Tech & platform questions
+  if (/^(?:apa\s+itu\s+supabase\??|jelaskan\s+supabase\??)$/i.test(clean)) {
+    return {
+      text: "Supabase adalah platform backend open-source alternatif Firebase yang menyediakan database PostgreSQL, autentikasi, storage, dan Edge Functions.",
+      suggestions: ["Apa yang bisa kamu lakukan?", "Berapa omzet saya bulan ini?"],
+    };
+  }
+
+  if (/^(?:bisa\s+bantu\s+coding\??|bisa\s+ngoding\??)$/i.test(clean)) {
+    return {
+      text: "Fokus utama saya adalah asisten analisis bisnis UMKM BisnisSehat (omzet, laba, stok, supplier). Namun saya juga dapat berdiskusi santai seputar operasional teknis.",
+      suggestions: ["Berapa omzet saya bulan ini?", "Apa yang bisa kamu lakukan?"],
     };
   }
 
@@ -471,6 +486,480 @@ const pendingConfirmations = new Map<string, {
   expiresAt: number;
 }>();
 
+// In-memory short-term conversation memory and metrics cache (TTL governed, no DB schema)
+export interface MemoryObject {
+  conversationId: string;
+  userId: string;
+  businessId: string;
+  language: string;
+  recentTopic: string | null;
+  lastIntent: string | null;
+  recentEntities: {
+    supplier?: { id?: string; name: string } | null;
+    product?: { id?: string; name: string; marginPct?: number; sold?: number } | null;
+    [key: string]: any;
+  };
+  recentToolSummary: any;
+  recentTurns: Array<{ role: string; content: string; timestamp: number }>;
+  expiresAt: number;
+}
+
+export const conversationMemoryStore = new Map<string, MemoryObject>();
+
+export const shortTermMetricCache = new Map<string, {
+  data: any;
+  expiresAt: number;
+}>();
+
+export const DEFAULT_MEMORY_TTL_MS = 15 * 60 * 1000; // 15 minutes
+export const DEFAULT_METRIC_TTL_MS = 60 * 1000; // 60 seconds
+export const MAX_MEMORY_TURNS = 20;
+
+const SENSITIVE_PATTERNS = [
+  /CANARY_[A-Z0-9_]+/gi,
+  /TOKENKODING_[A-Z0-9_]+/gi,
+  /service[_\s-]?role/gi,
+  /eyJhbGciOi[A-Za-z0-9-_.]+/g,
+  /p@ssw0rd/gi,
+  /Bearer\s+[A-Za-z0-9-_.]+/gi,
+];
+
+export function sanitizeMemoryValue(val: any): any {
+  if (!val) return val;
+  if (typeof val === "string") {
+    let clean = val;
+    for (const pat of SENSITIVE_PATTERNS) {
+      clean = clean.replace(pat, "[REDACTED]");
+    }
+    return clean;
+  }
+  if (Array.isArray(val)) {
+    return val.map((item) => sanitizeMemoryValue(item));
+  }
+  if (typeof val === "object") {
+    const res: Record<string, any> = {};
+    for (const [k, v] of Object.entries(val)) {
+      if (/key|secret|token|password|auth|bearer|jwt/i.test(k)) {
+        continue;
+      }
+      res[k] = sanitizeMemoryValue(v);
+    }
+    return res;
+  }
+  return val;
+}
+
+export function buildMemoryKey(businessId: string, userId: string, sessionId = "default"): string | null {
+  if (!businessId || !userId) return null;
+  return `${businessId}:${userId}:${sessionId || "default"}`;
+}
+
+export function getConversationMemory({
+  businessId,
+  userId,
+  sessionId = "default",
+}: {
+  businessId: string;
+  userId: string;
+  sessionId?: string;
+}): MemoryObject | null {
+  const key = buildMemoryKey(businessId, userId, sessionId);
+  if (!key) return null;
+  const entry = conversationMemoryStore.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    conversationMemoryStore.delete(key);
+    return null;
+  }
+  return entry;
+}
+
+export function updateConversationMemory({
+  businessId,
+  userId,
+  sessionId = "default",
+  language = "id",
+  recentTopic = null,
+  lastIntent = null,
+  recentEntities = null,
+  recentToolSummary = null,
+  ttlMs = DEFAULT_MEMORY_TTL_MS,
+}: {
+  businessId: string;
+  userId: string;
+  sessionId?: string;
+  language?: string;
+  recentTopic?: string | null;
+  lastIntent?: string | null;
+  recentEntities?: any;
+  recentToolSummary?: any;
+  ttlMs?: number;
+}): MemoryObject | null {
+  const key = buildMemoryKey(businessId, userId, sessionId);
+  if (!key) return null;
+  const now = Date.now();
+
+  let entry = conversationMemoryStore.get(key);
+  if (!entry || now > entry.expiresAt) {
+    entry = {
+      conversationId: sessionId || "default",
+      userId,
+      businessId,
+      language: language || "id",
+      recentTopic: null,
+      lastIntent: null,
+      recentEntities: {
+        supplier: null,
+        product: null,
+      },
+      recentToolSummary: null,
+      recentTurns: [],
+      expiresAt: now + ttlMs,
+    };
+  } else {
+    entry.expiresAt = now + ttlMs;
+  }
+
+  if (language) entry.language = language;
+  if (recentTopic) entry.recentTopic = sanitizeMemoryValue(recentTopic);
+  if (lastIntent) entry.lastIntent = sanitizeMemoryValue(lastIntent);
+  if (recentEntities) {
+    entry.recentEntities = {
+      ...entry.recentEntities,
+      ...sanitizeMemoryValue(recentEntities),
+    };
+  }
+  if (recentToolSummary) {
+    entry.recentToolSummary = sanitizeMemoryValue(recentToolSummary);
+  }
+
+  conversationMemoryStore.set(key, entry);
+  return entry;
+}
+
+export function getConversationHistory(businessId: string, userId: string, sessionId = "default") {
+  const memory = getConversationMemory({ businessId, userId, sessionId });
+  if (!memory || !Array.isArray(memory.recentTurns)) return [];
+  return [...memory.recentTurns];
+}
+
+export function recordConversationTurn(
+  businessId: string,
+  userId: string,
+  sessionId = "default",
+  userMessage?: string,
+  assistantReply?: string,
+  ttlMs = DEFAULT_MEMORY_TTL_MS
+) {
+  const key = buildMemoryKey(businessId, userId, sessionId);
+  if (!key) return [];
+  const now = Date.now();
+
+  let entry = conversationMemoryStore.get(key);
+  if (!entry || now > entry.expiresAt) {
+    entry = {
+      conversationId: sessionId || "default",
+      userId,
+      businessId,
+      language: "id",
+      recentTopic: null,
+      lastIntent: null,
+      recentEntities: { supplier: null, product: null },
+      recentToolSummary: null,
+      recentTurns: [],
+      expiresAt: now + ttlMs,
+    };
+  } else {
+    entry.expiresAt = now + ttlMs;
+  }
+
+  if (userMessage && typeof userMessage === "string" && userMessage.trim()) {
+    entry.recentTurns.push({
+      role: "user",
+      content: sanitizeMemoryValue(userMessage.trim().slice(0, 1000)),
+      timestamp: now,
+    });
+  }
+
+  if (assistantReply && typeof assistantReply === "string" && assistantReply.trim()) {
+    entry.recentTurns.push({
+      role: "assistant",
+      content: sanitizeMemoryValue(assistantReply.trim().slice(0, 2000)),
+      timestamp: now,
+    });
+  }
+
+  if (entry.recentTurns.length > MAX_MEMORY_TURNS) {
+    entry.recentTurns = entry.recentTurns.slice(-MAX_MEMORY_TURNS);
+  }
+
+  conversationMemoryStore.set(key, entry);
+  return [...entry.recentTurns];
+}
+
+export function getCachedMetric(businessId: string, metricType: string) {
+  if (!businessId || !metricType) return null;
+  const key = `${businessId}:${metricType}`;
+  const entry = shortTermMetricCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    shortTermMetricCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+export function setCachedMetric(businessId: string, metricType: string, data: any, ttlMs = DEFAULT_METRIC_TTL_MS) {
+  if (!businessId || !metricType || data === undefined) return;
+  const key = `${businessId}:${metricType}`;
+  shortTermMetricCache.set(key, {
+    data: sanitizeMemoryValue(data),
+    expiresAt: Date.now() + ttlMs,
+  });
+}
+
+export function invalidateBusinessCache(businessId: string) {
+  if (!businessId) return;
+  const prefix = `${businessId}:`;
+  for (const key of shortTermMetricCache.keys()) {
+    if (key.startsWith(prefix)) {
+      shortTermMetricCache.delete(key);
+    }
+  }
+}
+
+export function clearAllEdgeMemoryCaches() {
+  conversationMemoryStore.clear();
+  shortTermMetricCache.clear();
+}
+
+// ── TYPO & NATURAL LANGUAGE NORMALIZATION ──
+
+const TYPO_MAP: Record<string, string> = {
+  sipaa: "siapa",
+  sipa: "siapa",
+  sp: "siapa",
+  namnay: "namanya",
+  namny: "namanya",
+  namanyaa: "namanya",
+  nma: "nama",
+  mneurut: "menurut",
+  mnurut: "menurut",
+  bsia: "bisa",
+  suplier: "supplier",
+  suplayer: "supplier",
+  suplaier: "supplier",
+  omset: "omzet",
+  plg: "paling",
+};
+
+export function normalizeCasualInput(raw = ""): string {
+  if (!raw || typeof raw !== "string") return "";
+  const words = raw.trim().split(/\s+/);
+  const normalized = words.map((w) => {
+    const cleanWord = w.toLowerCase().replace(/[?!.,;:]+$/g, "");
+    const punct = w.slice(cleanWord.length);
+    if (Object.prototype.hasOwnProperty.call(TYPO_MAP, cleanWord)) {
+      return TYPO_MAP[cleanWord] + punct;
+    }
+    return w;
+  });
+  return normalized.join(" ");
+}
+
+// ── CONTEXT FOLLOW-UP RESOLVER ──
+
+export function resolveContextualFollowUp({
+  message = "",
+  memory = null,
+  userId,
+  businessId,
+  setPendingConfirmation,
+}: {
+  message?: string;
+  memory?: MemoryObject | null;
+  userId?: string;
+  businessId?: string;
+  setPendingConfirmation?: (params: any) => void;
+}) {
+  if (!message || !memory) return { resolved: false } as any;
+
+  const norm = normalizeCasualInput(message).toLowerCase().replace(/[?!.,;:]+$/g, "").trim();
+
+  // 1. Supplier Name Follow-up
+  if (
+    /^(?:siapa\s+namanya|namanya\s+siapa|siapa\s+nama\s+supplier(?:nya)?|siapa\s+aja|siapa\s+saja|siapa\s+supplier(?:nya)?|nama\s+supplier(?:nya)?\s+apa|siapa)$/i.test(
+      norm
+    )
+  ) {
+    if (memory.recentTopic === "supplier" || memory.recentToolSummary?.type === "supplier_list") {
+      const summary = memory.recentToolSummary;
+      const names = summary?.names || [];
+      const single = memory.recentEntities?.supplier?.name;
+
+      if (names.length === 1 || (names.length === 0 && single)) {
+        const name = names[0] || single;
+        return {
+          resolved: true,
+          text: `Namanya ${name}.`,
+          suggestions: [`Lihat detail ${name}`, "Tambah supplier baru", "Produk paling laku bulan ini"],
+        };
+      }
+
+      if (names.length > 1) {
+        return {
+          resolved: true,
+          text: `Supplier yang terdaftar antara lain: ${names.join(", ")}.`,
+          suggestions: ["Lihat supplier", "Tambah supplier baru"],
+        };
+      }
+
+      if (summary?.count === 0) {
+        return {
+          resolved: true,
+          text: "Belum ada supplier yang terdaftar di database bisnis Anda.",
+          suggestions: ["Tambah supplier baru", "Katalog produk"],
+        };
+      }
+    }
+  }
+
+  // 2. Product Margin Follow-up
+  if (
+    /^(?:berapa\s+margin(?:nya)?|margin(?:nya)?\s+berapa|berapa\s+profit(?:nya)?|margin\s+produk\s+(?:itu|tadi))$/i.test(
+      norm
+    )
+  ) {
+    if (memory.recentTopic === "product" || memory.recentEntities?.product?.name) {
+      const prod = memory.recentEntities?.product;
+      if (prod && prod.marginPct !== undefined) {
+        return {
+          resolved: true,
+          text: `Margin keuntungan untuk produk "${prod.name}" adalah ${prod.marginPct}%.`,
+          suggestions: ["Produk paling laku bulan ini", "Berapa omzet saya?"],
+        };
+      }
+      if (prod) {
+        return {
+          resolved: true,
+          text: `Produk "${prod.name}" memiliki performa margin yang tercatat dalam katalog produk.`,
+          suggestions: ["Berapa margin saya?", "Katalog produk"],
+        };
+      }
+    }
+  }
+
+  // 3. Product Sales Follow-up
+  if (/^(?:berapa\s+terjual|terjual\s+berapa|berapa\s+yang\s+laku|laku\s+berapa)$/i.test(norm)) {
+    if (memory.recentTopic === "product" || memory.recentEntities?.product?.name) {
+      const prod = memory.recentEntities?.product;
+      if (prod) {
+        const sold = prod.sold || prod.orderCount || memory.recentToolSummary?.orderCount;
+        if (sold !== undefined) {
+          return {
+            resolved: true,
+            text: `Produk "${prod.name}" tercatat terjual sebanyak ${sold} kali.`,
+            suggestions: ["Berapa margin saya?", "Katalog produk"],
+          };
+        }
+        return {
+          resolved: true,
+          text: `Produk "${prod.name}" aktif terjual pada transaksi kasir POS Anda.`,
+          suggestions: ["Berapa omzet saya bulan ini?", "Produk paling laku bulan ini"],
+        };
+      }
+    }
+  }
+
+  // 4. Reference Follow-up
+  if (/^(?:yang\s+tadi|yang\s+barusan|maksudnya\s+yang\s+tadi)$/i.test(norm)) {
+    if (memory.recentEntities?.supplier?.name) {
+      return {
+        resolved: true,
+        text: `Yang tadi kita bahas adalah supplier "${memory.recentEntities.supplier.name}". Ada yang ingin Anda lakukan terkait supplier ini?`,
+        suggestions: ["Lihat supplier", `Hapus supplier ${memory.recentEntities.supplier.name}`],
+      };
+    }
+    if (memory.recentEntities?.product?.name) {
+      return {
+        resolved: true,
+        text: `Yang tadi kita bahas adalah produk "${memory.recentEntities.product.name}".`,
+        suggestions: ["Berapa margin saya?", "Katalog produk"],
+      };
+    }
+    if (memory.recentTopic) {
+      return {
+        resolved: true,
+        text: `Yang tadi kita bahas adalah seputar topik ${memory.recentTopic}. Ada yang ingin dicek lebih lanjut?`,
+        suggestions: ["Berapa omzet saya bulan ini?", "Kapan harus restock?"],
+      };
+    }
+  }
+
+  // 5. Destructive Follow-up Safety
+  if (/^(?:hapus\s+(?:yang\s+tadi|yang\s+barusan|supplier\s+yang\s+tadi|produk\s+yang\s+tadi))$/i.test(norm)) {
+    if (
+      (memory.recentTopic === "supplier" || memory.recentEntities?.supplier) &&
+      memory.recentEntities?.supplier?.name
+    ) {
+      const target = memory.recentEntities.supplier;
+      const newConfId = `conf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      if (typeof setPendingConfirmation === "function") {
+        setPendingConfirmation({
+          confirmationId: newConfId,
+          userId,
+          businessId,
+          action: "delete_supplier",
+          targetId: target.id || target.name,
+          targetName: target.name,
+        });
+      }
+      return {
+        resolved: true,
+        confirmationRequired: true,
+        confirmationId: newConfId,
+        action: "delete_supplier",
+        target: { id: target.id, name: target.name },
+        text: `Kalau maksud kamu supplier "${target.name}", saya bisa menghapusnya. Apakah kamu yakin ingin menghapus supplier "${target.name}"?`,
+      };
+    }
+
+    if (
+      (memory.recentTopic === "product" || memory.recentEntities?.product) &&
+      memory.recentEntities?.product?.name
+    ) {
+      const target = memory.recentEntities.product;
+      const newConfId = `conf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      if (typeof setPendingConfirmation === "function") {
+        setPendingConfirmation({
+          confirmationId: newConfId,
+          userId,
+          businessId,
+          action: "delete_product",
+          targetId: target.id || target.name,
+          targetName: target.name,
+        });
+      }
+      return {
+        resolved: true,
+        confirmationRequired: true,
+        confirmationId: newConfId,
+        action: "delete_product",
+        target: { id: target.id, name: target.name },
+        text: `Kalau maksud kamu produk "${target.name}", saya bisa menghapusnya. Apakah kamu yakin ingin menghapus produk "${target.name}"?`,
+      };
+    }
+
+    return {
+      resolved: true,
+      text: "Tidak ada entitas supplier atau produk dari percakapan sebelumnya yang dapat dihapus. Silakan sebutkan nama entitas yang ingin dihapus.",
+      suggestions: ["Lihat supplier", "Katalog produk"],
+    };
+  }
+
+  return { resolved: false } as any;
+}
+
 const NOISE_WORDS = ["dong", "ya", "deh", "bang", "pls", "please", "tolong", "min"];
 
 function cleanEntityName(raw: string | undefined | null): string | null {
@@ -734,6 +1223,23 @@ Deno.serve(async (req: Request) => {
     const confirmationId = body.confirmationId;
     const confirmed = body.confirmed;
     const history = Array.isArray(body.history) ? body.history : [];
+    const sessionId = typeof body.sessionId === "string" && body.sessionId.trim() ? body.sessionId.trim() : "default";
+
+    const sessionHistory = getConversationHistory(auth.businessId, auth.userId, sessionId);
+    const effectiveHistory = history.length > 0 ? history : sessionHistory;
+
+    const recordAndRespond = (payload: any) => {
+      if (payload && payload.status === 200 && payload.text) {
+        recordConversationTurn(
+          auth.businessId,
+          auth.userId,
+          sessionId,
+          message,
+          payload.text
+        );
+      }
+      return jsonResponse({ ...payload, sessionId });
+    };
 
     // 3. Security / Abuse Gate (BEFORE any tool execution or LLM call)
     if (message && isAbuseThreat(message)) {
@@ -770,7 +1276,7 @@ Deno.serve(async (req: Request) => {
       if (confirmed === false) {
         pendingConfirmations.delete(confirmationId);
         const entityLabel = pending.action === "delete_product" ? "produk" : "supplier";
-        return jsonResponse({
+        return recordAndRespond({
           status: 200,
           text: `Tindakan penghapusan ${entityLabel} "${pending.targetName}" dibatalkan. Data tetap aman.`,
         });
@@ -788,7 +1294,7 @@ Deno.serve(async (req: Request) => {
             .limit(1);
 
           if (invs && invs.length > 0) {
-            return jsonResponse({
+            return recordAndRespond({
               status: 200,
               text: `⚠️ **Gagal Menghapus:** Supplier "${pending.targetName}" tidak dapat dihapus karena masih digunakan oleh data pembelian/produk tertentu.`,
             });
@@ -805,7 +1311,18 @@ Deno.serve(async (req: Request) => {
             return errorResponse("Gagal menghapus supplier dari database.", 500);
           }
 
-          return jsonResponse({
+          invalidateBusinessCache(auth.businessId);
+
+          updateConversationMemory({
+            businessId: auth.businessId,
+            userId: auth.userId,
+            sessionId,
+            recentTopic: "supplier",
+            lastIntent: "delete_supplier",
+            recentEntities: { supplier: null },
+          });
+
+          return recordAndRespond({
             status: 200,
             text: `✅ **Berhasil:** Supplier ${pending.targetName} berhasil dihapus.`,
           });
@@ -820,7 +1337,7 @@ Deno.serve(async (req: Request) => {
             .limit(1);
 
           if (items && items.length > 0) {
-            return jsonResponse({
+            return recordAndRespond({
               status: 200,
               text: `⚠️ **Gagal Menghapus:** Produk "${pending.targetName}" tidak dapat dihapus karena masih digunakan dalam riwayat pesanan aktif.`,
             });
@@ -836,7 +1353,9 @@ Deno.serve(async (req: Request) => {
             return errorResponse("Gagal menghapus produk dari database.", 500);
           }
 
-          return jsonResponse({
+          invalidateBusinessCache(auth.businessId);
+
+          return recordAndRespond({
             status: 200,
             text: `✅ **Berhasil:** Produk ${pending.targetName} berhasil dihapus.`,
           });
@@ -844,14 +1363,54 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // 4.5 Context Follow-Up Resolution (BEFORE final intent fallback)
+    const memory = getConversationMemory({ businessId: auth.businessId, userId: auth.userId, sessionId });
+    const followUp = resolveContextualFollowUp({
+      message,
+      memory,
+      userId: auth.userId,
+      businessId: auth.businessId,
+      setPendingConfirmation: (entry: any) => {
+        pendingConfirmations.set(entry.confirmationId, {
+          userId: entry.userId,
+          businessId: entry.businessId,
+          action: entry.action,
+          targetId: entry.targetId,
+          targetName: entry.targetName,
+          expiresAt: Date.now() + 60000,
+        });
+      },
+    });
+
+    if (followUp.resolved) {
+      if (followUp.confirmationRequired) {
+        return recordAndRespond({
+          status: 200,
+          confirmationRequired: true,
+          confirmationId: followUp.confirmationId,
+          action: followUp.action,
+          target: followUp.target,
+          text: followUp.text,
+        });
+      }
+      return recordAndRespond({
+        status: 200,
+        text: followUp.text,
+        suggestions: followUp.suggestions,
+      });
+    }
+
     // 5. Intent Planning & Dispatching
-    const parsed = parseBusinessIntent(message);
+    let parsed = parseBusinessIntent(message);
+    if (!parsed.tool) {
+      parsed = parseBusinessIntent(normalizeCasualInput(message));
+    }
 
     // 5.1 CREATE_SUPPLIER
     if (parsed.tool === "create_supplier") {
       const targetName = parsed.entity?.name;
       if (!targetName) {
-        return jsonResponse({
+        return recordAndRespond({
           status: 200,
           text: "Siap. Nama supplier yang mau ditambahkan siapa?",
           suggestions: ["Tambah supplier Yanto", "Daftar supplier aktif", "Analisis supplier"],
@@ -866,7 +1425,7 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
 
       if (existing) {
-        return jsonResponse({
+        return recordAndRespond({
           status: 200,
           text: `Supplier "${targetName}" sudah terdaftar di database bisnis Anda.`,
           suggestions: ["Daftar supplier aktif", "Analisis supplier"],
@@ -889,7 +1448,18 @@ Deno.serve(async (req: Request) => {
         });
       }
 
-      return jsonResponse({
+      invalidateBusinessCache(auth.businessId);
+
+      updateConversationMemory({
+        businessId: auth.businessId,
+        userId: auth.userId,
+        sessionId,
+        recentTopic: "supplier",
+        lastIntent: "create_supplier",
+        recentEntities: { supplier: { id: inserted.id, name: inserted.name } },
+      });
+
+      return recordAndRespond({
         status: 200,
         text: `✅ Supplier "${targetName}" berhasil ditambahkan ke database bisnis Anda.`,
         data: inserted,
@@ -901,7 +1471,7 @@ Deno.serve(async (req: Request) => {
     if (parsed.tool === "delete_supplier") {
       const targetQuery = parsed.entity?.name;
       if (!targetQuery) {
-        return jsonResponse({
+        return recordAndRespond({
           status: 200,
           text: `Sebutkan nama supplier yang ingin dihapus (contoh: *"hapus supplier ABC"*).`,
           suggestions: ["Analisis supplier", "Produk paling laku bulan ini"],
@@ -918,7 +1488,7 @@ Deno.serve(async (req: Request) => {
       );
 
       if (!found) {
-        return jsonResponse({
+        return recordAndRespond({
           status: 200,
           text: `Supplier "${targetQuery}" tidak ditemukan di database bisnis Anda.`,
           suggestions: ["Analisis supplier", "Produk paling laku bulan ini"],
@@ -934,7 +1504,7 @@ Deno.serve(async (req: Request) => {
         .limit(1);
 
       if (depInvs && depInvs.length > 0) {
-        return jsonResponse({
+        return recordAndRespond({
           status: 200,
           text: "Supplier tidak dapat dihapus karena masih digunakan oleh data pembelian/produk tertentu.",
           suggestions: ["Analisis supplier", "Daftar supplier aktif"],
@@ -951,7 +1521,7 @@ Deno.serve(async (req: Request) => {
         expiresAt: Date.now() + 60 * 1000,
       });
 
-      return jsonResponse({
+      return recordAndRespond({
         status: 200,
         confirmationRequired: true,
         confirmationId: newConfId,
@@ -964,7 +1534,7 @@ Deno.serve(async (req: Request) => {
     // 5.3 UPDATE_SUPPLIER
     if (parsed.tool === "update_supplier") {
       const targetName = parsed.entity?.name;
-      return jsonResponse({
+      return recordAndRespond({
         status: 200,
         text: `Supplier ${targetName ? `"${targetName}" ` : ""}ditemukan. Silakan sebutkan informasi yang ingin diperbarui (kontak, nomor telepon, atau alamat) atau buka menu Database Supplier.`,
         suggestions: ["Daftar supplier aktif", "Analisis supplier"],
@@ -975,13 +1545,13 @@ Deno.serve(async (req: Request) => {
     if (parsed.tool === "create_product") {
       const targetName = parsed.entity?.name;
       if (!targetName) {
-        return jsonResponse({
+        return recordAndRespond({
           status: 200,
           text: `Tentu! Silakan sebutkan nama produk baru yang ingin ditambahkan (contoh: *"tambah produk Kopi Susu Aren"*).`,
           suggestions: ["Katalog produk", "Produk paling laku bulan ini"],
         });
       }
-      return jsonResponse({
+      return recordAndRespond({
         status: 200,
         text: `Untuk mendaftarkan produk baru "${targetName}", silakan tentukan harga jual & modal HPP melalui menu Manajemen Produk & Kasir POS.`,
         suggestions: ["Katalog produk", "Buka Kasir POS"],
@@ -991,7 +1561,7 @@ Deno.serve(async (req: Request) => {
     // 5.5 UPDATE_PRODUCT
     if (parsed.tool === "update_product") {
       const targetName = parsed.entity?.name;
-      return jsonResponse({
+      return recordAndRespond({
         status: 200,
         text: `Pembaruan data produk ${targetName ? `"${targetName}" ` : ""}dapat dilakukan secara instan melalui modul Produk & Kasir POS.`,
         suggestions: ["Katalog produk", "Berapa margin saya?"],
@@ -1002,7 +1572,7 @@ Deno.serve(async (req: Request) => {
     if (parsed.tool === "delete_product") {
       const targetQuery = parsed.entity?.name;
       if (!targetQuery) {
-        return jsonResponse({
+        return recordAndRespond({
           status: 200,
           text: `Sebutkan nama produk yang ingin dihapus (contoh: *"hapus produk Espresso"*).`,
           suggestions: ["Katalog produk", "Produk paling laku bulan ini"],
@@ -1019,7 +1589,7 @@ Deno.serve(async (req: Request) => {
       );
 
       if (!found) {
-        return jsonResponse({
+        return recordAndRespond({
           status: 200,
           text: `Produk "${targetQuery}" tidak ditemukan di database bisnis Anda.`,
           suggestions: ["Katalog produk", "Produk paling laku bulan ini"],
@@ -1034,7 +1604,7 @@ Deno.serve(async (req: Request) => {
         .limit(1);
 
       if (items && items.length > 0) {
-        return jsonResponse({
+        return recordAndRespond({
           status: 200,
           text: `⚠️ **Gagal Menghapus:** Produk "${found.name}" tidak dapat dihapus karena masih digunakan dalam riwayat pesanan aktif.`,
           suggestions: ["Katalog produk", "Berapa margin saya?"],
@@ -1051,7 +1621,7 @@ Deno.serve(async (req: Request) => {
         expiresAt: Date.now() + 60 * 1000,
       });
 
-      return jsonResponse({
+      return recordAndRespond({
         status: 200,
         confirmationRequired: true,
         confirmationId: newConfId,
@@ -1067,7 +1637,7 @@ Deno.serve(async (req: Request) => {
     // 5.7 UPDATE_INVENTORY
     if (parsed.tool === "update_inventory") {
       const target = parsed.entity?.target;
-      return jsonResponse({
+      return recordAndRespond({
         status: 200,
         text: `Penyesuaian stok inventori ${target ? `(${target}) ` : ""}dapat dicatat melalui modul Operasional & Inventori untuk menjaga rekam jejak kartu stok.`,
         suggestions: ["Kapan saya harus restock?", "Status inventori"],
@@ -1079,30 +1649,53 @@ Deno.serve(async (req: Request) => {
 
     // 5.8 READ TOOL: Sales & Top Products
     if (parsed.tool === "analyze_sales") {
-      const [{ data: orders }, { data: prods }] = await Promise.all([
-        supabaseAdmin
-          .from("orders")
-          .select("total_amount, status, created_at")
-          .eq("business_id", auth.businessId),
-        supabaseAdmin
-          .from("products")
-          .select("id, name, unit_price")
-          .eq("business_id", auth.businessId)
-          .limit(10),
-      ]);
+      let sanitizedMetrics = getCachedMetric(auth.businessId, "analyze_sales");
+      let fromCache = false;
 
-      const validOrders = (orders || []).filter((o) =>
-        ["completed", "settlement", "paid"].includes(o.status)
-      );
-      const totalRev = validOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
-      const aov = validOrders.length > 0 ? Math.round(totalRev / validOrders.length) : 0;
+      if (sanitizedMetrics) {
+        fromCache = true;
+      } else {
+        const [{ data: orders }, { data: prods }] = await Promise.all([
+          supabaseAdmin
+            .from("orders")
+            .select("total_amount, status, created_at")
+            .eq("business_id", auth.businessId),
+          supabaseAdmin
+            .from("products")
+            .select("id, name, unit_price")
+            .eq("business_id", auth.businessId)
+            .limit(10),
+        ]);
 
-      const sanitizedMetrics = {
-        totalRevenue: totalRev,
-        orderCount: validOrders.length,
-        aov,
-        topProductsCatalog: (prods || []).map((p: any) => ({ name: p.name, price: p.unit_price })),
-      };
+        const validOrders = (orders || []).filter((o) =>
+          ["completed", "settlement", "paid"].includes(o.status)
+        );
+        const totalRev = validOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+        const aov = validOrders.length > 0 ? Math.round(totalRev / validOrders.length) : 0;
+
+        sanitizedMetrics = {
+          totalRevenue: totalRev,
+          orderCount: validOrders.length,
+          aov,
+          topProductsCatalog: (prods || []).map((p: any) => ({ name: p.name, price: p.unit_price })),
+        };
+        setCachedMetric(auth.businessId, "analyze_sales", sanitizedMetrics);
+      }
+
+      const firstProduct = (sanitizedMetrics.topProductsCatalog && sanitizedMetrics.topProductsCatalog[0]) || null;
+      updateConversationMemory({
+        businessId: auth.businessId,
+        userId: auth.userId,
+        sessionId,
+        recentTopic: "product",
+        lastIntent: "analyze_sales",
+        recentEntities: firstProduct ? { product: { name: firstProduct.name, sold: sanitizedMetrics.orderCount || 1 } } : {},
+        recentToolSummary: {
+          type: "top_product",
+          name: firstProduct?.name || null,
+          orderCount: sanitizedMetrics.orderCount,
+        },
+      });
 
       const lingResult = await callTokenKodingLing({
         userMessage: message,
@@ -1111,31 +1704,40 @@ Deno.serve(async (req: Request) => {
         apiKey: tokenKodingApiKey,
       });
 
-      return jsonResponse({
+      return recordAndRespond({
         status: 200,
         text: lingResult.text,
         data: sanitizedMetrics,
+        cached: fromCache,
       });
     }
 
     // 5.9 READ TOOL: Revenue
     if (parsed.tool === "analyze_revenue") {
-      const { data: orders } = await supabaseAdmin
-        .from("orders")
-        .select("total_amount, status, created_at")
-        .eq("business_id", auth.businessId);
+      let sanitizedMetrics = getCachedMetric(auth.businessId, "analyze_revenue");
+      let fromCache = false;
 
-      const validOrders = (orders || []).filter((o) =>
-        ["completed", "settlement", "paid"].includes(o.status)
-      );
-      const totalRev = validOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
-      const aov = validOrders.length > 0 ? Math.round(totalRev / validOrders.length) : 0;
+      if (sanitizedMetrics) {
+        fromCache = true;
+      } else {
+        const { data: orders } = await supabaseAdmin
+          .from("orders")
+          .select("total_amount, status, created_at")
+          .eq("business_id", auth.businessId);
 
-      const sanitizedMetrics = {
-        totalRevenue: totalRev,
-        orderCount: validOrders.length,
-        aov,
-      };
+        const validOrders = (orders || []).filter((o) =>
+          ["completed", "settlement", "paid"].includes(o.status)
+        );
+        const totalRev = validOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+        const aov = validOrders.length > 0 ? Math.round(totalRev / validOrders.length) : 0;
+
+        sanitizedMetrics = {
+          totalRevenue: totalRev,
+          orderCount: validOrders.length,
+          aov,
+        };
+        setCachedMetric(auth.businessId, "analyze_revenue", sanitizedMetrics);
+      }
 
       const lingResult = await callTokenKodingLing({
         userMessage: message,
@@ -1144,47 +1746,78 @@ Deno.serve(async (req: Request) => {
         apiKey: tokenKodingApiKey,
       });
 
-      return jsonResponse({
+      return recordAndRespond({
         status: 200,
         text: lingResult.text,
         data: sanitizedMetrics,
+        cached: fromCache,
       });
     }
 
     // 5.10 READ TOOL: Profit / Margin
     if (parsed.tool === "analyze_profit") {
-      const { data: prods } = await supabaseAdmin
-        .from("products")
-        .select("name, unit_price, purchase_price")
-        .eq("business_id", auth.businessId);
+      let sanitizedMetrics = getCachedMetric(auth.businessId, "analyze_profit");
+      let fromCache = false;
 
-      const margins = (prods || [])
-        .filter((p: any) => Number(p.unit_price) > 0)
-        .map((p: any) => {
-          const sell = Number(p.unit_price);
-          const buy = Number(p.purchase_price || 0);
-          const marginPct = buy > 0 ? Math.round(((sell - buy) / sell) * 100) : 100;
-          return { name: p.name, sell, buy, marginPct };
-        })
-        .sort((a: any, b: any) => b.marginPct - a.marginPct);
+      if (sanitizedMetrics) {
+        fromCache = true;
+      } else {
+        const { data: prods } = await supabaseAdmin
+          .from("products")
+          .select("name, unit_price, purchase_price")
+          .eq("business_id", auth.businessId);
 
-      if (margins.length === 0) {
-        return jsonResponse({
-          status: 200,
-          text: "Belum ada produk aktif yang memiliki harga jual valid untuk dihitung margin keuntungannya.",
-        });
+        const margins = (prods || [])
+          .filter((p: any) => Number(p.unit_price) > 0)
+          .map((p: any) => {
+            const sell = Number(p.unit_price);
+            const buy = Number(p.purchase_price || 0);
+            const marginPct = buy > 0 ? Math.round(((sell - buy) / sell) * 100) : 100;
+            return { name: p.name, sell, buy, marginPct };
+          })
+          .sort((a: any, b: any) => b.marginPct - a.marginPct);
+
+        if (margins.length === 0) {
+          return recordAndRespond({
+            status: 200,
+            text: "Belum ada produk aktif yang memiliki harga jual valid untuk dihitung margin keuntungannya.",
+          });
+        }
+
+        const avgMargin = Math.round(
+          margins.reduce((acc: number, m: any) => acc + m.marginPct, 0) / margins.length
+        );
+        const lowest = margins[margins.length - 1];
+
+        sanitizedMetrics = {
+          avgMargin,
+          highestMarginProduct: margins[0],
+          lowestMarginProduct: lowest,
+        };
+        setCachedMetric(auth.businessId, "analyze_profit", sanitizedMetrics);
       }
 
-      const avgMargin = Math.round(
-        margins.reduce((acc: number, m: any) => acc + m.marginPct, 0) / margins.length
-      );
-      const lowest = margins[margins.length - 1];
-
-      const sanitizedMetrics = {
-        avgMargin,
-        highestMarginProduct: margins[0],
-        lowestMarginProduct: lowest,
-      };
+      updateConversationMemory({
+        businessId: auth.businessId,
+        userId: auth.userId,
+        sessionId,
+        recentTopic: "product",
+        lastIntent: "analyze_profit",
+        recentEntities: {
+          product: sanitizedMetrics.highestMarginProduct
+            ? {
+                name: sanitizedMetrics.highestMarginProduct.name,
+                marginPct: sanitizedMetrics.highestMarginProduct.marginPct,
+              }
+            : null,
+        },
+        recentToolSummary: {
+          type: "profit_margin",
+          avgMargin: sanitizedMetrics.avgMargin,
+          highestProduct: sanitizedMetrics.highestMarginProduct?.name || null,
+          highestMarginPct: sanitizedMetrics.highestMarginProduct?.marginPct || null,
+        },
+      });
 
       const lingResult = await callTokenKodingLing({
         userMessage: message,
@@ -1193,33 +1826,42 @@ Deno.serve(async (req: Request) => {
         apiKey: tokenKodingApiKey,
       });
 
-      return jsonResponse({
+      return recordAndRespond({
         status: 200,
         text: lingResult.text,
         data: sanitizedMetrics,
+        cached: fromCache,
       });
     }
 
     // 5.11 READ TOOL: Stock / Low Stock / Restock
     if (parsed.tool === "analyze_low_stock" || parsed.tool === "analyze_inventory") {
-      const { data: invs } = await supabaseAdmin
-        .from("inventory")
-        .select("quantity, min_stock, products(name)")
-        .eq("business_id", auth.businessId);
+      let sanitizedMetrics = getCachedMetric(auth.businessId, "analyze_inventory");
+      let fromCache = false;
 
-      const lowStock = (invs || []).filter(
-        (i: any) => Number(i.quantity || 0) <= Number(i.min_stock || 0)
-      );
+      if (sanitizedMetrics) {
+        fromCache = true;
+      } else {
+        const { data: invs } = await supabaseAdmin
+          .from("inventory")
+          .select("quantity, min_stock, products(name)")
+          .eq("business_id", auth.businessId);
 
-      const sanitizedMetrics = {
-        totalInventoryItems: (invs || []).length,
-        lowStockCount: lowStock.length,
-        itemsRequiringRestock: lowStock.slice(0, 5).map((i: any) => ({
-          name: i.products?.name || "Item Produk",
-          quantity: i.quantity,
-          min_stock: i.min_stock,
-        })),
-      };
+        const lowStock = (invs || []).filter(
+          (i: any) => Number(i.quantity || 0) <= Number(i.min_stock || 0)
+        );
+
+        sanitizedMetrics = {
+          totalInventoryItems: (invs || []).length,
+          lowStockCount: lowStock.length,
+          itemsRequiringRestock: lowStock.slice(0, 5).map((i: any) => ({
+            name: i.products?.name || "Item Produk",
+            quantity: i.quantity,
+            min_stock: i.min_stock,
+          })),
+        };
+        setCachedMetric(auth.businessId, "analyze_inventory", sanitizedMetrics);
+      }
 
       const lingResult = await callTokenKodingLing({
         userMessage: message,
@@ -1228,25 +1870,49 @@ Deno.serve(async (req: Request) => {
         apiKey: tokenKodingApiKey,
       });
 
-      return jsonResponse({
+      return recordAndRespond({
         status: 200,
         text: lingResult.text,
         data: sanitizedMetrics,
+        cached: fromCache,
       });
     }
 
     // 5.12 READ TOOL: Suppliers
     if (parsed.tool === "analyze_suppliers") {
-      const { data: sups } = await supabaseAdmin
-        .from("suppliers")
-        .select("name, contact, phone, is_active")
-        .eq("business_id", auth.businessId);
+      let sanitizedMetrics = getCachedMetric(auth.businessId, "analyze_suppliers");
+      let fromCache = false;
 
-      const sanitizedMetrics = {
-        totalSuppliers: (sups || []).length,
-        activeSuppliers: (sups || []).filter((s: any) => s.is_active !== false).length,
-        suppliers: (sups || []).slice(0, 5).map((s: any) => ({ name: s.name, contact: s.contact || s.phone })),
-      };
+      if (sanitizedMetrics) {
+        fromCache = true;
+      } else {
+        const { data: sups } = await supabaseAdmin
+          .from("suppliers")
+          .select("name, contact, phone, is_active")
+          .eq("business_id", auth.businessId);
+
+        sanitizedMetrics = {
+          totalSuppliers: (sups || []).length,
+          activeSuppliers: (sups || []).filter((s: any) => s.is_active !== false).length,
+          suppliers: (sups || []).slice(0, 5).map((s: any) => ({ name: s.name, contact: s.contact || s.phone })),
+        };
+        setCachedMetric(auth.businessId, "analyze_suppliers", sanitizedMetrics);
+      }
+
+      const firstSup = sanitizedMetrics.suppliers && sanitizedMetrics.suppliers[0];
+      updateConversationMemory({
+        businessId: auth.businessId,
+        userId: auth.userId,
+        sessionId,
+        recentTopic: "supplier",
+        lastIntent: "analyze_suppliers",
+        recentEntities: { supplier: firstSup ? { name: firstSup.name } : null },
+        recentToolSummary: {
+          type: "supplier_list",
+          count: sanitizedMetrics.totalSuppliers,
+          names: (sanitizedMetrics.suppliers || []).map((s: any) => s.name),
+        },
+      });
 
       const lingResult = await callTokenKodingLing({
         userMessage: message,
@@ -1255,10 +1921,11 @@ Deno.serve(async (req: Request) => {
         apiKey: tokenKodingApiKey,
       });
 
-      return jsonResponse({
+      return recordAndRespond({
         status: 200,
         text: lingResult.text,
         data: sanitizedMetrics,
+        cached: fromCache,
       });
     }
 
@@ -1276,7 +1943,7 @@ Deno.serve(async (req: Request) => {
         apiKey: tokenKodingApiKey,
       });
 
-      return jsonResponse({
+      return recordAndRespond({
         status: 200,
         text: lingResult.text,
         data: sanitizedMetrics,
@@ -1309,7 +1976,7 @@ Deno.serve(async (req: Request) => {
         apiKey: tokenKodingApiKey,
       });
 
-      return jsonResponse({
+      return recordAndRespond({
         status: 200,
         text: lingResult.text,
         data: sanitizedMetrics,
@@ -1318,7 +1985,7 @@ Deno.serve(async (req: Request) => {
 
     // Default Guidance if empty message
     if (!message || !message.trim()) {
-      return jsonResponse({
+      return recordAndRespond({
         status: 200,
         text: `Halo! Saya AI Business Analyst BisnisSehat.\n\n` +
           `"Tanya atau minta saya melakukan sesuatu untuk bisnis kamu."\n\n` +
@@ -1340,15 +2007,15 @@ Deno.serve(async (req: Request) => {
     }
 
     // 5.15 GENERAL / CASUAL CONVERSATION (Zero DB context, natural responses)
-    const conv = getGeneralConversationResponse({ message, history });
+    const conv = getGeneralConversationResponse({ message, _history: effectiveHistory });
     const lingRes = await callTokenKodingLingGeneral({
       userMessage: message,
       apiKey: tokenKodingApiKey,
-      history,
+      history: effectiveHistory,
       fallbackText: conv.text,
     });
 
-    return jsonResponse({
+    return recordAndRespond({
       status: 200,
       text: lingRes.text,
       suggestions: conv.suggestions,

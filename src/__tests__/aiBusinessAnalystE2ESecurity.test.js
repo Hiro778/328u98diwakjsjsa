@@ -2,7 +2,7 @@
 // Comprehensive End-to-End Security Hardening Test Suite for AI Business Analyst
 // Strictly fulfills all 8 security specifications with zero real production secrets.
 
-import { describe, it } from 'node:test'
+import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -17,10 +17,20 @@ import {
   SECURITY_BLOCK_MESSAGE,
   setPendingConfirmation,
   getPendingConfirmation,
+  getConversationHistory,
+  recordConversationTurn,
+  clearConversationHistory,
+  getCachedMetric,
+  setCachedMetric,
+  clearAllMemoryCaches,
+  MAX_MEMORY_TURNS,
 } from '../services/aiBusinessAnalyst.server.js'
 import { parseBusinessIntent, BUSINESS_TOOLS } from '../services/aiIntentRouter.js'
 
 describe('AI Business Analyst — Comprehensive E2E Security Hardening Suite', () => {
+  beforeEach(() => {
+    clearAllMemoryCaches()
+  })
   // Synthetic Canary Identifiers (Never real secrets)
   const CANARIES = Object.freeze({
     SUPABASE_SERVICE_ROLE: 'CANARY_SUPABASE_SERVICE_ROLE_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9_SECRET_VAL',
@@ -1125,6 +1135,202 @@ describe('AI Business Analyst — Comprehensive E2E Security Hardening Suite', (
         assert.equal(res.blocked, true)
         assert.equal(llmCalled, false, `LLM was called for threat "${t}"`)
       }
+    })
+  })
+
+  // ════════════════════════════════════════════════════════════════
+  // 16. IN-MEMORY CONVERSATION MEMORY & SHORT-TERM METRIC CACHE
+  // ════════════════════════════════════════════════════════════════
+  describe('16. In-Memory Conversation Memory & Short-Term Metric Cache', () => {
+    it('stores conversational turns in memory across multiple requests in the same session', async () => {
+      const db = createSecureIsolatedMockDb()
+      const sessionId = 'session_test_memory_001'
+
+      // First turn
+      const res1 = await handleAiBusinessAnalystRequest({
+        user: { id: tenantA.userId },
+        businessId: tenantA.businessId,
+        businessName: tenantA.businessName,
+        sessionId,
+        message: 'hai',
+        db,
+      })
+      assert.equal(res1.status, 200)
+      assert.equal(res1.sessionId, sessionId)
+
+      // Verify turn in memory
+      let history = getConversationHistory({ businessId: tenantA.businessId, userId: tenantA.userId, sessionId })
+      assert.equal(history.length, 2) // 1 user + 1 assistant
+      assert.equal(history[0].role, 'user')
+      assert.equal(history[0].content, 'hai')
+      assert.equal(history[1].role, 'assistant')
+
+      // Second turn
+      const res2 = await handleAiBusinessAnalystRequest({
+        user: { id: tenantA.userId },
+        businessId: tenantA.businessId,
+        businessName: tenantA.businessName,
+        sessionId,
+        message: 'siapa kamu',
+      })
+      assert.equal(res2.status, 200)
+
+      history = getConversationHistory({ businessId: tenantA.businessId, userId: tenantA.userId, sessionId })
+      assert.equal(history.length, 4) // 2 user + 2 assistant
+      assert.equal(history[2].content, 'siapa kamu')
+    })
+
+    it('enforces sliding window max memory turns (caps at MAX_MEMORY_TURNS)', async () => {
+      const sessionId = 'session_test_sliding_window'
+
+      // Record 30 messages (15 user + 15 assistant)
+      for (let i = 1; i <= 15; i++) {
+        recordConversationTurn({
+          businessId: tenantA.businessId,
+          userId: tenantA.userId,
+          sessionId,
+          userMessage: `Turn user ${i}`,
+          assistantReply: `Turn assistant ${i}`,
+        })
+      }
+
+      const history = getConversationHistory({ businessId: tenantA.businessId, userId: tenantA.userId, sessionId })
+      assert.equal(history.length, MAX_MEMORY_TURNS)
+      assert.equal(history[history.length - 1].content, 'Turn assistant 15')
+    })
+
+    it('caches read metrics in memory and returns cached: true on consecutive calls', async () => {
+      let queryCount = 0
+      const db = createSecureIsolatedMockDb()
+      const originalOrders = [...db.orders]
+
+      // Wrap getCanonicalOrders or db.orders getter
+      const spiedDb = {
+        ...db,
+        get orders() {
+          queryCount++
+          return originalOrders
+        },
+      }
+
+      // First read: cache miss
+      const res1 = await handleAiBusinessAnalystRequest({
+        user: { id: tenantA.userId },
+        businessId: tenantA.businessId,
+        businessName: tenantA.businessName,
+        message: 'Berapa omzet saya bulan ini?',
+        db: spiedDb,
+      })
+      assert.equal(res1.status, 200)
+      assert.equal(res1.cached, false)
+      const initialCount = queryCount
+      assert.ok(initialCount > 0, 'Database was queried on cache miss')
+
+      // Second read: cache hit (no extra db read)
+      const res2 = await handleAiBusinessAnalystRequest({
+        user: { id: tenantA.userId },
+        businessId: tenantA.businessId,
+        businessName: tenantA.businessName,
+        message: 'Berapa omzet saya bulan ini?',
+        db: spiedDb,
+      })
+      assert.equal(res2.status, 200)
+      assert.equal(res2.cached, true)
+      assert.equal(queryCount, initialCount, 'Cache hit must not re-query database')
+      assert.equal(res2.data.totalRevenue, res1.data.totalRevenue)
+    })
+
+    it('invalidates business metric cache immediately when a mutation occurs', async () => {
+      const db = createSecureIsolatedMockDb()
+
+      // 1. Prime cache with read
+      const read1 = await handleAiBusinessAnalystRequest({
+        user: { id: tenantA.userId },
+        businessId: tenantA.businessId,
+        businessName: tenantA.businessName,
+        message: 'Berapa omzet saya bulan ini?',
+        db,
+      })
+      assert.equal(read1.cached, false)
+      assert.ok(getCachedMetric(tenantA.businessId, 'analyze_sales') !== null)
+
+      // 2. Perform authorized mutation (create_supplier)
+      const createRes = await handleAiBusinessAnalystRequest({
+        user: { id: tenantA.userId },
+        businessId: tenantA.businessId,
+        businessName: tenantA.businessName,
+        message: 'tambah supplier PT Cahaya Makmur',
+        db,
+      })
+      assert.equal(createRes.status, 200)
+
+      // 3. Cache must be invalidated
+      assert.equal(getCachedMetric(tenantA.businessId, 'analyze_sales'), null)
+
+      // 4. Next read must be a cache miss
+      const read2 = await handleAiBusinessAnalystRequest({
+        user: { id: tenantA.userId },
+        businessId: tenantA.businessId,
+        businessName: tenantA.businessName,
+        message: 'Berapa omzet saya bulan ini?',
+        db,
+      })
+      assert.equal(read2.cached, false)
+    })
+
+    it('strictly maintains multi-tenant isolation in conversation memory and metric cache', async () => {
+      const sessionId = 'shared_session_name'
+
+      // Tenant A records conversation and metric
+      recordConversationTurn({
+        businessId: tenantA.businessId,
+        userId: tenantA.userId,
+        sessionId,
+        userMessage: 'Pesan rahasia tenant A',
+        assistantReply: 'Balasan rahasia tenant A',
+      })
+      setCachedMetric(tenantA.businessId, 'analyze_sales', { totalRevenue: 999999 })
+
+      // Tenant B tries to read conversation with same sessionId
+      const historyB = getConversationHistory({
+        businessId: tenantB.businessId,
+        userId: tenantB.userId,
+        sessionId,
+      })
+      assert.deepEqual(historyB, [], 'Tenant B must see empty history')
+
+      // Tenant B tries to read cached metric of Tenant A
+      const metricB = getCachedMetric(tenantB.businessId, 'analyze_sales')
+      assert.equal(metricB, null, 'Tenant B must not see Tenant A metric')
+
+      // Clear Tenant A history does not affect Tenant B
+      clearConversationHistory({ businessId: tenantA.businessId, userId: tenantA.userId, sessionId })
+      const historyA = getConversationHistory({ businessId: tenantA.businessId, userId: tenantA.userId, sessionId })
+      assert.deepEqual(historyA, [])
+    })
+
+    it('contains ZERO credentials, keys, or canary secrets in memory store or cache objects', async () => {
+      // Seed memory with ordinary conversation
+      recordConversationTurn({
+        businessId: tenantA.businessId,
+        userId: tenantA.userId,
+        sessionId: 'audit_session',
+        userMessage: 'cek performa toko',
+        assistantReply: 'Berikut analisis performa toko Anda...',
+      })
+      setCachedMetric(tenantA.businessId, 'analyze_sales', { totalRevenue: 100000, orderCount: 2 })
+
+      const history = getConversationHistory({ businessId: tenantA.businessId, userId: tenantA.userId, sessionId: 'audit_session' })
+      const cached = getCachedMetric(tenantA.businessId, 'analyze_sales')
+
+      const serialized = JSON.stringify({ history, cached })
+
+      for (const [key, canary] of Object.entries(CANARIES)) {
+        assert.ok(!serialized.includes(canary), `Canary ${key} found in serialized memory/cache store!`)
+      }
+      assert.ok(!serialized.includes('TOKENKODING_API_KEY'))
+      assert.ok(!serialized.includes('service_role'))
+      assert.ok(!serialized.includes('eyJhbGciOi'))
     })
   })
 })
