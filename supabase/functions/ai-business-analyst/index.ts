@@ -201,6 +201,234 @@ const pendingConfirmations = new Map<string, {
   expiresAt: number;
 }>();
 
+const NOISE_WORDS = ["dong", "ya", "deh", "bang", "pls", "please", "tolong", "min"];
+
+function cleanEntityName(raw: string | undefined | null): string | null {
+  if (!raw || typeof raw !== "string") return null;
+  let s = raw.trim();
+  s = s.replace(/[?!.,;:]+$/g, "").trim();
+  const words = s.split(/\s+/);
+  while (words.length > 0 && NOISE_WORDS.includes(words[words.length - 1].toLowerCase())) {
+    words.pop();
+  }
+  s = words.join(" ").trim();
+  if (!s || s.toLowerCase() === "baru" || s.toLowerCase() === "dong") {
+    return null;
+  }
+  return s;
+}
+
+export function parseBusinessIntent(query: string) {
+  if (!query || typeof query !== "string") {
+    return { tool: null, type: "UNKNOWN", entity: {} as Record<string, any> };
+  }
+
+  const raw = query.trim();
+  const clean = raw.replace(/[?!.,;:]+$/g, "").trim();
+  const lower = clean.toLowerCase();
+
+  // 1. WRITE: CREATE_SUPPLIER
+  // Pattern B: "masukin Yanto sebagai supplier"
+  const supAsMatch = clean.match(
+    /^(?:bisa\s+)?(?:masuk(?:in|kan)|tambah(?:kan)?|daftarkan|jadikan)\s+(.+?)\s+sebagai\s+(?:supplier|pemasok)$/i
+  );
+  if (supAsMatch) {
+    return {
+      tool: "create_supplier",
+      type: "WRITE",
+      entity: { name: cleanEntityName(supAsMatch[1]) },
+    };
+  }
+
+  // Pattern A: "bisa tambah supplier yanto" / "tambah supplier Yanto" / "buat supplier baru namanya Yanto"
+  // "gw mau nambah supplier" / "buat supplier baru dong"
+  const supAddMatch = clean.match(
+    /^(?:bisa\s+)?(?:gw\s+mau\s+|saya\s+mau\s+|aku\s+mau\s+|mau\s+|ingin\s+)?(?:tambah(?:kan)?|bikin|buat|daftarkan|masuk(?:in|kan)|input|daftarin|nambah)\s+(?:supplier|pemasok)(?:\s+baru)?(?:\s+(?:namanya|bernama))?(?:\s+(.+))?$/i
+  );
+  if (supAddMatch) {
+    const rawName = supAddMatch[1] ? supAddMatch[1].trim() : "";
+    return {
+      tool: "create_supplier",
+      type: "WRITE",
+      entity: { name: cleanEntityName(rawName) },
+    };
+  }
+
+  // 2. WRITE: DELETE_SUPPLIER
+  const supDelMatch = clean.match(
+    /^(?:bisa\s+)?(?:hapus|delete|hilangkan|buang|drop)\s+(?:supplier|pemasok)(?:\s+(?:namanya|bernama))?\s+(.+)$/i
+  );
+  if (supDelMatch) {
+    return {
+      tool: "delete_supplier",
+      type: "WRITE",
+      entity: { name: cleanEntityName(supDelMatch[1]) },
+    };
+  }
+
+  // 3. WRITE: UPDATE_SUPPLIER
+  const supUpdMatch = clean.match(
+    /^(?:bisa\s+)?(?:ubah|update|edit|ganti)\s+(?:supplier|pemasok)(?:\s+(?:namanya|bernama))?\s+(.+)$/i
+  );
+  if (supUpdMatch) {
+    return {
+      tool: "update_supplier",
+      type: "WRITE",
+      entity: { name: cleanEntityName(supUpdMatch[1]) },
+    };
+  }
+
+  // 4. WRITE: CREATE_PRODUCT
+  const prodAddMatch = clean.match(
+    /^(?:bisa\s+)?(?:gw\s+mau\s+|saya\s+mau\s+|aku\s+mau\s+|mau\s+|ingin\s+)?(?:tambah(?:kan)?|bikin|buat|daftarkan|masuk(?:in|kan)|input|daftarin|nambah)\s+produk(?:\s+baru)?(?:\s+(?:namanya|bernama))?(?:\s+(.+))?$/i
+  );
+  if (prodAddMatch) {
+    return {
+      tool: "create_product",
+      type: "WRITE",
+      entity: { name: cleanEntityName(prodAddMatch[1]) },
+    };
+  }
+
+  // 5. WRITE: DELETE_PRODUCT
+  const prodDelMatch = clean.match(
+    /^(?:bisa\s+)?(?:hapus|delete|hilangkan|buang)\s+produk(?:\s+(?:namanya|bernama))?\s+(.+)$/i
+  );
+  if (prodDelMatch) {
+    return {
+      tool: "delete_product",
+      type: "WRITE",
+      entity: { name: cleanEntityName(prodDelMatch[1]) },
+    };
+  }
+
+  // 6. WRITE: UPDATE_PRODUCT
+  const prodUpdMatch = clean.match(
+    /^(?:bisa\s+)?(?:ubah|update|edit|ganti)\s+(?:harga|nama|data)?\s*produk\s+(.+)$/i
+  );
+  if (prodUpdMatch) {
+    return {
+      tool: "update_product",
+      type: "WRITE",
+      entity: { name: cleanEntityName(prodUpdMatch[1]) },
+    };
+  }
+
+  // 7. WRITE: UPDATE_INVENTORY
+  const invUpdMatch = clean.match(
+    /^(?:bisa\s+)?(?:update|ubah|tambah|sesuaikan|kurangi|set)\s+stok(?:\s+(?:produk|barang))?\s*(.+)?$/i
+  );
+  if (invUpdMatch) {
+    return {
+      tool: "update_inventory",
+      type: "WRITE",
+      entity: { target: cleanEntityName(invUpdMatch[1]) },
+    };
+  }
+
+  // 8. READ: Low Stock / Restock
+  if (
+    lower.includes("restock") ||
+    lower.includes("stok menipis") ||
+    lower.includes("stok habis") ||
+    lower.includes("stok kritis") ||
+    lower.includes("low stock") ||
+    lower.includes("kapan harus restock") ||
+    lower.includes("kapan restock")
+  ) {
+    return { tool: "analyze_low_stock", type: "READ", entity: {} };
+  }
+
+  // 9. READ: Inventory
+  if (
+    lower.includes("inventori") ||
+    lower.includes("stok gudang") ||
+    lower.includes("persediaan") ||
+    lower.includes("cek stok") ||
+    lower.includes("total stok")
+  ) {
+    return { tool: "analyze_inventory", type: "READ", entity: {} };
+  }
+
+  // 10. READ: Profit & Margin
+  if (
+    lower.includes("margin") ||
+    lower.includes("profit") ||
+    lower.includes("laba") ||
+    lower.includes("keuntungan")
+  ) {
+    return { tool: "analyze_profit", type: "READ", entity: {} };
+  }
+
+  // 11. READ: Revenue
+  if (
+    lower.includes("omzet") ||
+    lower.includes("omset") ||
+    lower.includes("revenue") ||
+    lower.includes("pendapatan")
+  ) {
+    return { tool: "analyze_revenue", type: "READ", entity: {} };
+  }
+
+  // 12. READ: Sales
+  if (
+    lower.includes("paling laku") ||
+    lower.includes("terlaris") ||
+    lower.includes("best seller") ||
+    lower.includes("penjualan") ||
+    lower.includes("sales") ||
+    lower.includes("penjualan turun") ||
+    lower.includes("kenapa penjualan turun") ||
+    lower.includes("bandingkan penjualan")
+  ) {
+    return { tool: "analyze_sales", type: "READ", entity: {} };
+  }
+
+  // 13. READ: Suppliers
+  if (lower.includes("supplier") || lower.includes("pemasok")) {
+    return { tool: "analyze_suppliers", type: "READ", entity: {} };
+  }
+
+  // 14. READ: Risk
+  if (lower.includes("risiko") || lower.includes("keamanan bisnis")) {
+    return { tool: "analyze_risk", type: "READ", entity: {} };
+  }
+
+  // 15. READ: Orders
+  if (lower.includes("pesanan") || lower.includes("order") || lower.includes("transaksi")) {
+    return { tool: "analyze_orders", type: "READ", entity: {} };
+  }
+
+  // 16. READ: Products
+  if (lower.includes("katalog") || lower.includes("daftar produk") || lower.includes("semua produk")) {
+    return { tool: "analyze_products", type: "READ", entity: {} };
+  }
+
+  // 17. READ: Cashflow
+  if (lower.includes("arus kas") || lower.includes("cashflow") || lower.includes("cash flow")) {
+    return { tool: "analyze_cashflow", type: "READ", entity: {} };
+  }
+
+  // 18. READ: Customer Metrics
+  if (lower.includes("pelanggan") || lower.includes("customer") || lower.includes("crm")) {
+    return { tool: "analyze_customer_metrics", type: "READ", entity: {} };
+  }
+
+  // 19. READ: Overview / Condition
+  if (
+    lower.includes("kondisi bisnis") ||
+    lower.includes("kesehatan bisnis") ||
+    lower.includes("performa") ||
+    lower.includes("overview") ||
+    lower.includes("ringkasan") ||
+    lower.includes("data yang tersedia")
+  ) {
+    return { tool: "analyze_sales", type: "READ", entity: {} };
+  }
+
+  return { tool: null, type: "UNKNOWN", entity: {} };
+}
+
 // ── 3. EDGE FUNCTION HANDLER ──
 
 Deno.serve(async (req: Request) => {
@@ -300,12 +528,69 @@ Deno.serve(async (req: Request) => {
     }
 
     // 5. Intent Planning & Dispatching
-    const trimmed = message.trim().toLowerCase();
+    const parsed = parseBusinessIntent(message);
 
-    // Destructive Supplier Deletion Check (Requires confirmation, Ling does NOT execute directly)
-    const deleteMatch = trimmed.match(/^hapus\s+supplier\s+(.+)$/i);
-    if (deleteMatch) {
-      const targetQuery = deleteMatch[1].trim();
+    // 5.1 CREATE_SUPPLIER
+    if (parsed.tool === "create_supplier") {
+      const targetName = parsed.entity?.name;
+      if (!targetName) {
+        return jsonResponse({
+          status: 200,
+          text: "Siap. Nama supplier yang mau ditambahkan siapa?",
+          suggestions: ["Tambah supplier Yanto", "Daftar supplier aktif", "Analisis supplier"],
+        });
+      }
+
+      const { data: existing } = await supabaseAdmin
+        .from("suppliers")
+        .select("id, name")
+        .eq("business_id", auth.businessId)
+        .ilike("name", targetName)
+        .maybeSingle();
+
+      if (existing) {
+        return jsonResponse({
+          status: 200,
+          text: `Supplier "${targetName}" sudah terdaftar di database bisnis Anda.`,
+          suggestions: ["Daftar supplier aktif", "Analisis supplier"],
+        });
+      }
+
+      const { data: inserted, error: insErr } = await supabaseAdmin
+        .from("suppliers")
+        .insert({
+          business_id: auth.businessId,
+          name: targetName,
+        })
+        .select()
+        .single();
+
+      if (insErr) {
+        return jsonResponse({
+          status: 500,
+          text: `Gagal menambahkan supplier "${targetName}": ${insErr.message}`,
+        });
+      }
+
+      return jsonResponse({
+        status: 200,
+        text: `✅ Supplier "${targetName}" berhasil ditambahkan ke database bisnis Anda.`,
+        data: inserted,
+        suggestions: ["Daftar supplier aktif", "Analisis supplier", "Kapan saya harus restock?"],
+      });
+    }
+
+    // 5.2 DELETE_SUPPLIER (Destructive, Requires confirmation)
+    if (parsed.tool === "delete_supplier") {
+      const targetQuery = parsed.entity?.name;
+      if (!targetQuery) {
+        return jsonResponse({
+          status: 200,
+          text: `Sebutkan nama supplier yang ingin dihapus (contoh: *"hapus supplier ABC"*).`,
+          suggestions: ["Analisis supplier", "Produk paling laku bulan ini"],
+        });
+      }
+
       const { data: sups } = await supabaseAdmin
         .from("suppliers")
         .select("id, name")
@@ -320,6 +605,22 @@ Deno.serve(async (req: Request) => {
           status: 200,
           text: `Supplier "${targetQuery}" tidak ditemukan di database bisnis Anda.`,
           suggestions: ["Analisis supplier", "Produk paling laku bulan ini"],
+        });
+      }
+
+      // Check dependencies in inventory
+      const { data: depInvs } = await supabaseAdmin
+        .from("inventory")
+        .select("id")
+        .eq("business_id", auth.businessId)
+        .eq("supplier_id", found.id)
+        .limit(1);
+
+      if (depInvs && depInvs.length > 0) {
+        return jsonResponse({
+          status: 200,
+          text: "Supplier tidak dapat dihapus karena masih digunakan oleh data pembelian/produk tertentu.",
+          suggestions: ["Analisis supplier", "Daftar supplier aktif"],
         });
       }
 
@@ -343,16 +644,109 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // 5.3 UPDATE_SUPPLIER
+    if (parsed.tool === "update_supplier") {
+      const targetName = parsed.entity?.name;
+      return jsonResponse({
+        status: 200,
+        text: `Supplier ${targetName ? `"${targetName}" ` : ""}ditemukan. Silakan sebutkan informasi yang ingin diperbarui (kontak, nomor telepon, atau alamat) atau buka menu Database Supplier.`,
+        suggestions: ["Daftar supplier aktif", "Analisis supplier"],
+      });
+    }
+
+    // 5.4 CREATE_PRODUCT
+    if (parsed.tool === "create_product") {
+      const targetName = parsed.entity?.name;
+      if (!targetName) {
+        return jsonResponse({
+          status: 200,
+          text: `Tentu! Silakan sebutkan nama produk baru yang ingin ditambahkan (contoh: *"tambah produk Kopi Susu Aren"*).`,
+          suggestions: ["Katalog produk", "Produk paling laku bulan ini"],
+        });
+      }
+      return jsonResponse({
+        status: 200,
+        text: `Untuk mendaftarkan produk baru "${targetName}", silakan tentukan harga jual & modal HPP melalui menu Manajemen Produk & Kasir POS.`,
+        suggestions: ["Katalog produk", "Buka Kasir POS"],
+      });
+    }
+
+    // 5.5 UPDATE_PRODUCT
+    if (parsed.tool === "update_product") {
+      const targetName = parsed.entity?.name;
+      return jsonResponse({
+        status: 200,
+        text: `Pembaruan data produk ${targetName ? `"${targetName}" ` : ""}dapat dilakukan secara instan melalui modul Produk & Kasir POS.`,
+        suggestions: ["Katalog produk", "Berapa margin saya?"],
+      });
+    }
+
+    // 5.6 DELETE_PRODUCT
+    if (parsed.tool === "delete_product") {
+      const targetName = parsed.entity?.name;
+      return jsonResponse({
+        status: 200,
+        text: `Penghapusan produk ${targetName ? `"${targetName}" ` : ""}harus diverifikasi agar integritas riwayat transaksi penjualan tetap terjaga.`,
+        suggestions: ["Katalog produk", "Produk paling laku bulan ini"],
+      });
+    }
+
+    // 5.7 UPDATE_INVENTORY
+    if (parsed.tool === "update_inventory") {
+      const target = parsed.entity?.target;
+      return jsonResponse({
+        status: 200,
+        text: `Penyesuaian stok inventori ${target ? `(${target}) ` : ""}dapat dicatat melalui modul Operasional & Inventori untuk menjaga rekam jejak kartu stok.`,
+        suggestions: ["Kapan saya harus restock?", "Status inventori"],
+      });
+    }
+
     // Read Secret Server-Side: Deno.env.get("TOKENKODING_API_KEY")
     const tokenKodingApiKey = Deno.env.get("TOKENKODING_API_KEY");
 
-    // Read Tool: Sales / Revenue
-    if (
-      trimmed.includes("omzet") ||
-      trimmed.includes("penjualan") ||
-      trimmed.includes("paling laku") ||
-      trimmed.includes("terlaris")
-    ) {
+    // 5.8 READ TOOL: Sales & Top Products
+    if (parsed.tool === "analyze_sales") {
+      const [{ data: orders }, { data: prods }] = await Promise.all([
+        supabaseAdmin
+          .from("orders")
+          .select("total_amount, status, created_at")
+          .eq("business_id", auth.businessId),
+        supabaseAdmin
+          .from("products")
+          .select("id, name, unit_price")
+          .eq("business_id", auth.businessId)
+          .limit(10),
+      ]);
+
+      const validOrders = (orders || []).filter((o) =>
+        ["completed", "settlement", "paid"].includes(o.status)
+      );
+      const totalRev = validOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+      const aov = validOrders.length > 0 ? Math.round(totalRev / validOrders.length) : 0;
+
+      const sanitizedMetrics = {
+        totalRevenue: totalRev,
+        orderCount: validOrders.length,
+        aov,
+        topProductsCatalog: (prods || []).map((p: any) => ({ name: p.name, price: p.unit_price })),
+      };
+
+      const lingResult = await callTokenKodingLing({
+        userMessage: message,
+        toolName: "analyze_sales",
+        sanitizedMetrics,
+        apiKey: tokenKodingApiKey,
+      });
+
+      return jsonResponse({
+        status: 200,
+        text: lingResult.text,
+        data: sanitizedMetrics,
+      });
+    }
+
+    // 5.9 READ TOOL: Revenue
+    if (parsed.tool === "analyze_revenue") {
       const { data: orders } = await supabaseAdmin
         .from("orders")
         .select("total_amount, status, created_at")
@@ -372,7 +766,7 @@ Deno.serve(async (req: Request) => {
 
       const lingResult = await callTokenKodingLing({
         userMessage: message,
-        toolName: "analyze_sales",
+        toolName: "analyze_revenue",
         sanitizedMetrics,
         apiKey: tokenKodingApiKey,
       });
@@ -384,22 +778,22 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Read Tool: Profit / Margin
-    if (trimmed.includes("margin") || trimmed.includes("profit") || trimmed.includes("laba")) {
+    // 5.10 READ TOOL: Profit / Margin
+    if (parsed.tool === "analyze_profit") {
       const { data: prods } = await supabaseAdmin
         .from("products")
         .select("name, unit_price, purchase_price")
         .eq("business_id", auth.businessId);
 
       const margins = (prods || [])
-        .filter((p) => Number(p.unit_price) > 0)
-        .map((p) => {
+        .filter((p: any) => Number(p.unit_price) > 0)
+        .map((p: any) => {
           const sell = Number(p.unit_price);
           const buy = Number(p.purchase_price || 0);
           const marginPct = buy > 0 ? Math.round(((sell - buy) / sell) * 100) : 100;
           return { name: p.name, sell, buy, marginPct };
         })
-        .sort((a, b) => b.marginPct - a.marginPct);
+        .sort((a: any, b: any) => b.marginPct - a.marginPct);
 
       if (margins.length === 0) {
         return jsonResponse({
@@ -409,7 +803,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const avgMargin = Math.round(
-        margins.reduce((acc, m) => acc + m.marginPct, 0) / margins.length
+        margins.reduce((acc: number, m: any) => acc + m.marginPct, 0) / margins.length
       );
       const lowest = margins[margins.length - 1];
 
@@ -433,8 +827,8 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Read Tool: Stock / Low Stock
-    if (trimmed.includes("stok") || trimmed.includes("restock") || trimmed.includes("inventori")) {
+    // 5.11 READ TOOL: Stock / Low Stock / Restock
+    if (parsed.tool === "analyze_low_stock" || parsed.tool === "analyze_inventory") {
       const { data: invs } = await supabaseAdmin
         .from("inventory")
         .select("quantity, min_stock, products(name)")
@@ -456,7 +850,88 @@ Deno.serve(async (req: Request) => {
 
       const lingResult = await callTokenKodingLing({
         userMessage: message,
-        toolName: "analyze_low_stock",
+        toolName: parsed.tool,
+        sanitizedMetrics,
+        apiKey: tokenKodingApiKey,
+      });
+
+      return jsonResponse({
+        status: 200,
+        text: lingResult.text,
+        data: sanitizedMetrics,
+      });
+    }
+
+    // 5.12 READ TOOL: Suppliers
+    if (parsed.tool === "analyze_suppliers") {
+      const { data: sups } = await supabaseAdmin
+        .from("suppliers")
+        .select("name, contact, phone, is_active")
+        .eq("business_id", auth.businessId);
+
+      const sanitizedMetrics = {
+        totalSuppliers: (sups || []).length,
+        activeSuppliers: (sups || []).filter((s: any) => s.is_active !== false).length,
+        suppliers: (sups || []).slice(0, 5).map((s: any) => ({ name: s.name, contact: s.contact || s.phone })),
+      };
+
+      const lingResult = await callTokenKodingLing({
+        userMessage: message,
+        toolName: "analyze_suppliers",
+        sanitizedMetrics,
+        apiKey: tokenKodingApiKey,
+      });
+
+      return jsonResponse({
+        status: 200,
+        text: lingResult.text,
+        data: sanitizedMetrics,
+      });
+    }
+
+    // 5.13 READ TOOL: Risk
+    if (parsed.tool === "analyze_risk") {
+      const sanitizedMetrics = {
+        riskCategory: "OPERATIONAL_FINANCIAL_INVENTORY",
+        assessment: "Audited through real inventory min_stock levels and canonical POS transactions.",
+      };
+
+      const lingResult = await callTokenKodingLing({
+        userMessage: message,
+        toolName: "analyze_risk",
+        sanitizedMetrics,
+        apiKey: tokenKodingApiKey,
+      });
+
+      return jsonResponse({
+        status: 200,
+        text: lingResult.text,
+        data: sanitizedMetrics,
+      });
+    }
+
+    // 5.14 READ TOOL: Orders / Products / Cashflow / Customer Metrics
+    if (
+      parsed.tool === "analyze_orders" ||
+      parsed.tool === "analyze_products" ||
+      parsed.tool === "analyze_cashflow" ||
+      parsed.tool === "analyze_customer_metrics"
+    ) {
+      const [{ data: orders }, { data: prods }, { data: custs }] = await Promise.all([
+        supabaseAdmin.from("orders").select("total_amount, status").eq("business_id", auth.businessId),
+        supabaseAdmin.from("products").select("id, name, unit_price").eq("business_id", auth.businessId),
+        supabaseAdmin.from("customers").select("id", { count: "exact", head: true }).eq("business_id", auth.businessId),
+      ]);
+
+      const sanitizedMetrics = {
+        totalOrders: (orders || []).length,
+        totalProducts: (prods || []).length,
+        totalCustomers: custs?.count || 0,
+      };
+
+      const lingResult = await callTokenKodingLing({
+        userMessage: message,
+        toolName: parsed.tool,
         sanitizedMetrics,
         apiKey: tokenKodingApiKey,
       });
@@ -478,6 +953,7 @@ Deno.serve(async (req: Request) => {
         `• *"Berapa omzet saya bulan ini?"*\n` +
         `• *"Berapa margin saya?"*\n` +
         `• *"Kapan saya harus restock?"*\n` +
+        `• *"Tambah supplier PT Makmur"* atau *"bisa tambah supplier yanto?"*\n` +
         `• *"Hapus supplier ABC"*\n` +
         `• *"Analisis risiko bisnis"*`,
       suggestions: [

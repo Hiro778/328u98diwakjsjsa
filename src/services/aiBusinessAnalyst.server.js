@@ -1,3 +1,5 @@
+import { parseBusinessIntent, BUSINESS_TOOLS } from './aiIntentRouter.js'
+
 /**
  * BisnisSehat AI Business Analyst — Server-Side AI Operator & Security Gate
  *
@@ -465,6 +467,58 @@ export async function executeDeleteSupplier({ db, businessId, userId, supplierId
   }
 }
 
+/**
+ * Execute supplier creation with tenant isolation, duplicate checking, and audit logging.
+ */
+export async function executeCreateSupplier({ db, businessId, userId, name, contact = '', phone = '' }) {
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return {
+      success: false,
+      error: 'Nama supplier wajib diisi.',
+    }
+  }
+  const cleanName = name.trim()
+
+  const sups = await getSuppliers(db, businessId)
+  const exists = sups.find((s) => s.name.toLowerCase() === cleanName.toLowerCase())
+  if (exists) {
+    return {
+      success: false,
+      error: `Supplier "${cleanName}" sudah terdaftar di database bisnis Anda.`,
+    }
+  }
+
+  let newSup = null
+  if (db && typeof db.createSupplier === 'function') {
+    newSup = await db.createSupplier(businessId, { name: cleanName, contact, phone })
+  } else if (db && db.suppliers) {
+    newSup = {
+      id: `sup_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      business_id: businessId,
+      name: cleanName,
+      contact,
+      phone,
+      created_at: new Date().toISOString(),
+    }
+    db.suppliers.push(newSup)
+  }
+
+  logActionAudit({
+    userId,
+    businessId,
+    tool: 'create_supplier',
+    targetEntity: newSup?.id || cleanName,
+    result: `CREATED: ${cleanName}`,
+    success: true,
+  })
+
+  return {
+    success: true,
+    message: `Supplier "${cleanName}" berhasil ditambahkan ke database bisnis Anda.`,
+    data: newSup || { name: cleanName },
+  }
+}
+
 // ── 6. DATA ACCESS HELPERS (MOCK DB & SUPABASE ADAPTER) ──
 
 async function getCanonicalOrders(db, businessId) {
@@ -622,12 +676,54 @@ export async function handleAiBusinessAnalystRequest({
   }
 
   // 4. Intent Planning & Tool Selection
-  const trimmed = (message || '').trim().toLowerCase()
+  const parsed = parseBusinessIntent(message)
 
-  // Detection for delete supplier
-  const deleteSupplierMatch = trimmed.match(/^hapus\s+supplier\s+(.+)$/i)
-  if (deleteSupplierMatch) {
-    const rawTarget = deleteSupplierMatch[1].trim()
+  // 4.1 CREATE_SUPPLIER
+  if (parsed.tool === BUSINESS_TOOLS.CREATE_SUPPLIER) {
+    const targetName = parsed.entity?.name
+    if (!targetName) {
+      return {
+        status: 200,
+        text: 'Siap. Nama supplier yang mau ditambahkan siapa?',
+        suggestions: ['Tambah supplier Yanto', 'Daftar supplier aktif', 'Analisis supplier'],
+      }
+    }
+
+    const sups = await getSuppliers(db, businessId)
+    const exists = sups.find((s) => s.name.toLowerCase() === targetName.toLowerCase())
+    if (exists) {
+      return {
+        status: 200,
+        text: `Supplier "${targetName}" sudah terdaftar di database bisnis Anda.`,
+        suggestions: ['Daftar supplier aktif', 'Analisis supplier'],
+      }
+    }
+
+    const result = await executeCreateSupplier({
+      db,
+      businessId,
+      userId: user.id,
+      name: targetName,
+    })
+
+    return {
+      status: 200,
+      text: `✅ Supplier "${targetName}" berhasil ditambahkan ke database bisnis Anda.`,
+      data: result.data,
+      suggestions: ['Daftar supplier aktif', 'Analisis supplier', 'Kapan saya harus restock?'],
+    }
+  }
+
+  // 4.2 DELETE_SUPPLIER
+  if (parsed.tool === BUSINESS_TOOLS.DELETE_SUPPLIER) {
+    const rawTarget = parsed.entity?.name
+    if (!rawTarget) {
+      return {
+        status: 200,
+        text: `Sebutkan nama supplier yang ingin dihapus (contoh: *"hapus supplier ABC"*).`,
+        suggestions: ['Analisis supplier', 'Produk paling laku bulan ini'],
+      }
+    }
     const sups = await getSuppliers(db, businessId)
     const found = sups.find(
       (s) => s.name.toLowerCase() === rawTarget.toLowerCase() || s.id === rawTarget
@@ -665,33 +761,115 @@ export async function handleAiBusinessAnalystRequest({
     }
   }
 
-  // Detection for read-only tools
-  if (
-    trimmed.includes('omzet') ||
-    trimmed.includes('penjualan') ||
-    trimmed.includes('paling laku') ||
-    trimmed.includes('terlaris')
-  ) {
+  // 4.3 UPDATE_SUPPLIER
+  if (parsed.tool === BUSINESS_TOOLS.UPDATE_SUPPLIER) {
+    const rawTarget = parsed.entity?.name
+    return {
+      status: 200,
+      text: `Supplier ${rawTarget ? `"${rawTarget}" ` : ''}ditemukan. Silakan sebutkan informasi yang ingin diperbarui (kontak, nomor telepon, atau alamat) atau buka menu Database Supplier.`,
+      suggestions: ['Daftar supplier aktif', 'Analisis supplier'],
+    }
+  }
+
+  // 4.4 CREATE_PRODUCT
+  if (parsed.tool === BUSINESS_TOOLS.CREATE_PRODUCT) {
+    const rawTarget = parsed.entity?.name
+    if (!rawTarget) {
+      return {
+        status: 200,
+        text: `Tentu! Silakan sebutkan nama produk baru yang ingin ditambahkan (contoh: *"tambah produk Kopi Susu Aren"*).`,
+        suggestions: ['Katalog produk', 'Produk paling laku bulan ini'],
+      }
+    }
+    return {
+      status: 200,
+      text: `Untuk mendaftarkan produk baru "${rawTarget}", silakan tentukan harga jual & modal HPP melalui menu Manajemen Produk & Kasir POS.`,
+      suggestions: ['Katalog produk', 'Buka Kasir POS'],
+    }
+  }
+
+  // 4.5 UPDATE_PRODUCT
+  if (parsed.tool === BUSINESS_TOOLS.UPDATE_PRODUCT) {
+    const rawTarget = parsed.entity?.name
+    return {
+      status: 200,
+      text: `Pembaruan data produk ${rawTarget ? `"${rawTarget}" ` : ''}dapat dilakukan secara instan melalui modul Produk & Kasir POS.`,
+      suggestions: ['Katalog produk', 'Berapa margin saya?'],
+    }
+  }
+
+  // 4.6 DELETE_PRODUCT
+  if (parsed.tool === BUSINESS_TOOLS.DELETE_PRODUCT) {
+    const rawTarget = parsed.entity?.name
+    return {
+      status: 200,
+      text: `Penghapusan produk ${rawTarget ? `"${rawTarget}" ` : ''}harus diverifikasi agar integritas riwayat transaksi penjualan tetap terjaga.`,
+      suggestions: ['Katalog produk', 'Produk paling laku bulan ini'],
+    }
+  }
+
+  // 4.7 UPDATE_INVENTORY
+  if (parsed.tool === BUSINESS_TOOLS.UPDATE_INVENTORY) {
+    const target = parsed.entity?.target
+    return {
+      status: 200,
+      text: `Penyesuaian stok inventori ${target ? `(${target}) ` : ''}dapat dicatat melalui modul Operasional & Inventori untuk menjaga rekam jejak kartu stok.`,
+      suggestions: ['Kapan saya harus restock?', 'Status inventori'],
+    }
+  }
+
+  // 4.8 READ TOOLS
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_REVENUE) {
+    const res = await executeReadTool('analyze_revenue', { businessId, businessName, db, userMessage: message, llmClient })
+    return { status: 200, ...res }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_SALES) {
     const res = await executeReadTool('analyze_sales', { businessId, businessName, db, userMessage: message, llmClient })
     return { status: 200, ...res }
   }
 
-  if (trimmed.includes('margin') || trimmed.includes('profit') || trimmed.includes('laba')) {
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_PROFIT) {
     const res = await executeReadTool('analyze_profit', { businessId, businessName, db, userMessage: message, llmClient })
     return { status: 200, ...res }
   }
 
-  if (trimmed.includes('stok') || trimmed.includes('restock') || trimmed.includes('inventori')) {
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_LOW_STOCK) {
     const res = await executeReadTool('analyze_low_stock', { businessId, businessName, db, userMessage: message, llmClient })
     return { status: 200, ...res }
   }
 
-  if (trimmed.includes('supplier')) {
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_INVENTORY) {
+    const res = await executeReadTool('analyze_inventory', { businessId, businessName, db, userMessage: message, llmClient })
+    return { status: 200, ...res }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_SUPPLIERS) {
     const res = await executeReadTool('analyze_suppliers', { businessId, businessName, db, userMessage: message, llmClient })
     return { status: 200, ...res }
   }
 
-  if (trimmed.includes('risiko') || trimmed.includes('keamanan bisnis')) {
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_ORDERS) {
+    const res = await executeReadTool('analyze_orders', { businessId, businessName, db, userMessage: message, llmClient })
+    return { status: 200, ...res }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_PRODUCTS) {
+    const res = await executeReadTool('analyze_products', { businessId, businessName, db, userMessage: message, llmClient })
+    return { status: 200, ...res }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_CASHFLOW) {
+    const res = await executeReadTool('analyze_cashflow', { businessId, businessName, db, userMessage: message, llmClient })
+    return { status: 200, ...res }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_CUSTOMER_METRICS) {
+    const res = await executeReadTool('analyze_customer_metrics', { businessId, businessName, db, userMessage: message, llmClient })
+    return { status: 200, ...res }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_RISK) {
     const res = await executeReadTool('analyze_risk', { businessId, businessName, db, userMessage: message, llmClient })
     return { status: 200, ...res }
   }

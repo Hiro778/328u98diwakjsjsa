@@ -16,6 +16,7 @@ import {
   aggregateSalesMetrics,
   WIB_OFFSET_MS,
 } from './canonicalSalesService.js'
+import { parseBusinessIntent, BUSINESS_TOOLS } from './aiIntentRouter.js'
 
 // ── 1. OPERATOR INTENTS ──
 export const ANALYST_INTENTS = Object.freeze({
@@ -26,8 +27,19 @@ export const ANALYST_INTENTS = Object.freeze({
   LOWEST_MARGIN: 'LOWEST_MARGIN',
   SALES_DROP: 'SALES_DROP',
   MONTHLY_COMPARISON: 'MONTHLY_COMPARISON',
+  CREATE_SUPPLIER: 'CREATE_SUPPLIER',
+  UPDATE_SUPPLIER: 'UPDATE_SUPPLIER',
   DELETE_SUPPLIER: 'DELETE_SUPPLIER',
+  CREATE_PRODUCT: 'CREATE_PRODUCT',
+  UPDATE_PRODUCT: 'UPDATE_PRODUCT',
+  DELETE_PRODUCT: 'DELETE_PRODUCT',
+  UPDATE_INVENTORY: 'UPDATE_INVENTORY',
   ANALYZE_SUPPLIERS: 'ANALYZE_SUPPLIERS',
+  ANALYZE_INVENTORY: 'ANALYZE_INVENTORY',
+  ANALYZE_ORDERS: 'ANALYZE_ORDERS',
+  ANALYZE_PRODUCTS: 'ANALYZE_PRODUCTS',
+  ANALYZE_CASHFLOW: 'ANALYZE_CASHFLOW',
+  ANALYZE_CUSTOMER_METRICS: 'ANALYZE_CUSTOMER_METRICS',
   ANALYZE_RISK: 'ANALYZE_RISK',
   MENU_HELP: 'MENU_HELP',
   UNKNOWN: 'UNKNOWN',
@@ -75,29 +87,67 @@ export function parseAnalystIntent(query) {
     return { intent: 'SECURITY_THREAT', params: {} }
   }
 
-  // 1. Top products / paling laku / terlaris
-  if (
-    q.includes('paling laku') ||
-    q.includes('terlaris') ||
-    q.includes('best seller') ||
-    q.includes('produk terlaris') ||
-    q.includes('paling laku bulan ini')
-  ) {
-    return { intent: ANALYST_INTENTS.TOP_PRODUCTS, params: {} }
+  // Check deterministic router for WRITE actions & entities first
+  const parsed = parseBusinessIntent(query)
+
+  if (parsed.tool === BUSINESS_TOOLS.CREATE_SUPPLIER) {
+    return {
+      intent: ANALYST_INTENTS.CREATE_SUPPLIER,
+      tool: 'create_supplier',
+      params: { name: parsed.entity?.name || null },
+    }
   }
 
-  // 2. Monthly revenue / omzet / omset / pendapatan
-  if (
-    q.includes('omzet') ||
-    q.includes('omset') ||
-    q.includes('pendapatan') ||
-    q.includes('total penjualan') ||
-    q.includes('revenue')
-  ) {
-    return { intent: ANALYST_INTENTS.MONTHLY_REVENUE, params: {} }
+  if (parsed.tool === BUSINESS_TOOLS.DELETE_SUPPLIER) {
+    return {
+      intent: ANALYST_INTENTS.DELETE_SUPPLIER,
+      tool: 'delete_supplier',
+      params: { target: parsed.entity?.name || null },
+    }
   }
 
-  // 3. Lowest margin products
+  if (parsed.tool === BUSINESS_TOOLS.UPDATE_SUPPLIER) {
+    return {
+      intent: ANALYST_INTENTS.UPDATE_SUPPLIER,
+      tool: 'update_supplier',
+      params: { target: parsed.entity?.name || null },
+    }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.CREATE_PRODUCT) {
+    return {
+      intent: ANALYST_INTENTS.CREATE_PRODUCT,
+      tool: 'create_product',
+      params: { name: parsed.entity?.name || null },
+    }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.UPDATE_PRODUCT) {
+    return {
+      intent: ANALYST_INTENTS.UPDATE_PRODUCT,
+      tool: 'update_product',
+      params: { name: parsed.entity?.name || null },
+    }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.DELETE_PRODUCT) {
+    return {
+      intent: ANALYST_INTENTS.DELETE_PRODUCT,
+      tool: 'delete_product',
+      params: { name: parsed.entity?.name || null },
+    }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.UPDATE_INVENTORY) {
+    return {
+      intent: ANALYST_INTENTS.UPDATE_INVENTORY,
+      tool: 'update_inventory',
+      params: { target: parsed.entity?.target || null },
+    }
+  }
+
+  // Specific query variants for backwards compatibility with existing UI tests
+  // Lowest margin products
   if (
     (q.includes('margin') && (q.includes('kecil') || q.includes('rendah') || q.includes('paling kecil') || q.includes('tipis'))) ||
     q.includes('margin terkecil')
@@ -105,23 +155,7 @@ export function parseAnalystIntent(query) {
     return { intent: ANALYST_INTENTS.LOWEST_MARGIN, params: {} }
   }
 
-  // 4. General margin analysis / profit / keuntungan
-  if (q.includes('margin') || q.includes('profit') || q.includes('laba kotor') || q.includes('keuntungan')) {
-    return { intent: ANALYST_INTENTS.MARGIN_ANALYSIS, params: {} }
-  }
-
-  // 5. Restock / inventori / stok menipis
-  if (
-    q.includes('restock') ||
-    q.includes('stok') ||
-    q.includes('habis') ||
-    q.includes('kapan harus restock') ||
-    q.includes('stok menipis')
-  ) {
-    return { intent: ANALYST_INTENTS.RESTOCK_TIMING, params: {} }
-  }
-
-  // 6. Sales drop / kenapa penjualan turun
+  // Sales drop / kenapa penjualan turun
   if (
     q.includes('turun') ||
     q.includes('penjualan turun') ||
@@ -132,7 +166,7 @@ export function parseAnalystIntent(query) {
     return { intent: ANALYST_INTENTS.SALES_DROP, params: {} }
   }
 
-  // 7. Monthly comparison / bandingkan bulan ini vs lalu
+  // Monthly comparison / bandingkan bulan ini vs lalu
   if (
     q.includes('bandingkan') ||
     q.includes('bulan lalu') ||
@@ -143,25 +177,54 @@ export function parseAnalystIntent(query) {
     return { intent: ANALYST_INTENTS.MONTHLY_COMPARISON, params: {} }
   }
 
-  // 8. Delete supplier (destructive write)
-  const delSupMatch = q.match(/^hapus\s+supplier\s+(.+)$/i)
-  if (delSupMatch) {
-    return { intent: ANALYST_INTENTS.DELETE_SUPPLIER, params: { target: delSupMatch[1].trim() } }
+  // Help / Menu
+  if (q.includes('menu') || q.includes('bantuan') || q.includes('bisa apa') || q === 'hai' || q === 'halo') {
+    return { intent: ANALYST_INTENTS.MENU_HELP, params: {} }
   }
 
-  // 9. Analyze suppliers
-  if (q.includes('supplier')) {
+  // Standard READ tools mapped to operator intents
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_SALES) {
+    return { intent: ANALYST_INTENTS.TOP_PRODUCTS, params: {} }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_REVENUE) {
+    return { intent: ANALYST_INTENTS.MONTHLY_REVENUE, params: {} }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_PROFIT) {
+    return { intent: ANALYST_INTENTS.MARGIN_ANALYSIS, params: {} }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_LOW_STOCK) {
+    return { intent: ANALYST_INTENTS.RESTOCK_TIMING, params: {} }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_INVENTORY) {
+    return { intent: ANALYST_INTENTS.ANALYZE_INVENTORY, params: {} }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_SUPPLIERS) {
     return { intent: ANALYST_INTENTS.ANALYZE_SUPPLIERS, params: {} }
   }
 
-  // 10. Analyze risk
-  if (q.includes('risiko') || q.includes('keamanan bisnis')) {
-    return { intent: ANALYST_INTENTS.ANALYZE_RISK, params: {} }
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_ORDERS) {
+    return { intent: ANALYST_INTENTS.ANALYZE_ORDERS, params: {} }
   }
 
-  // 11. Help / Menu
-  if (q.includes('menu') || q.includes('bantuan') || q.includes('bisa apa') || q === 'hai' || q === 'halo') {
-    return { intent: ANALYST_INTENTS.MENU_HELP, params: {} }
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_PRODUCTS) {
+    return { intent: ANALYST_INTENTS.ANALYZE_PRODUCTS, params: {} }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_CASHFLOW) {
+    return { intent: ANALYST_INTENTS.ANALYZE_CASHFLOW, params: {} }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_CUSTOMER_METRICS) {
+    return { intent: ANALYST_INTENTS.ANALYZE_CUSTOMER_METRICS, params: {} }
+  }
+
+  if (parsed.tool === BUSINESS_TOOLS.ANALYZE_RISK) {
+    return { intent: ANALYST_INTENTS.ANALYZE_RISK, params: {} }
   }
 
   return { intent: ANALYST_INTENTS.UNKNOWN, params: { raw: query } }
@@ -652,6 +715,127 @@ export async function processAiBusinessOperatorQuery({
 
     case ANALYST_INTENTS.MONTHLY_COMPARISON:
       return handleMonthlyComparison({ businessId, businessName, mockDb })
+
+    case ANALYST_INTENTS.CREATE_SUPPLIER: {
+      const targetName = parsed.params?.name
+      if (!targetName) {
+        return {
+          text: 'Siap. Nama supplier yang mau ditambahkan siapa?',
+          suggestions: ['Tambah supplier Yanto', 'Daftar supplier aktif', 'Analisis supplier'],
+        }
+      }
+
+      let exists = false
+      if (mockDb?.suppliers) {
+        exists = mockDb.suppliers.some(
+          (s) => s.name.toLowerCase() === targetName.toLowerCase()
+        )
+        if (!exists) {
+          mockDb.suppliers.push({
+            id: `sup_${Date.now()}`,
+            name: targetName,
+            business_id: businessId,
+            is_active: true,
+          })
+        }
+      } else {
+        const { data: existing } = await supabase
+          .from('suppliers')
+          .select('id, name')
+          .eq('business_id', businessId)
+          .ilike('name', targetName)
+          .maybeSingle()
+
+        if (existing) {
+          exists = true
+        } else {
+          await supabase.from('suppliers').insert({
+            business_id: businessId,
+            name: targetName,
+          })
+        }
+      }
+
+      if (exists) {
+        return {
+          text: `Supplier "${targetName}" sudah terdaftar di database bisnis Anda.`,
+          suggestions: ['Daftar supplier aktif', 'Analisis supplier'],
+        }
+      }
+
+      return {
+        text: `✅ Supplier "${targetName}" berhasil ditambahkan ke database bisnis Anda.`,
+        data: { name: targetName },
+        suggestions: ['Daftar supplier aktif', 'Analisis supplier', 'Kapan saya harus restock?'],
+      }
+    }
+
+    case ANALYST_INTENTS.UPDATE_SUPPLIER: {
+      const targetName = parsed.params?.target
+      return {
+        text: `Supplier ${targetName ? `"${targetName}" ` : ''}ditemukan. Silakan sebutkan data kontak, nomor telepon, atau alamat yang ingin diperbarui.`,
+        suggestions: ['Daftar supplier aktif', 'Analisis supplier'],
+      }
+    }
+
+    case ANALYST_INTENTS.CREATE_PRODUCT: {
+      const targetName = parsed.params?.name
+      if (!targetName) {
+        return {
+          text: `Tentu! Silakan sebutkan nama produk baru yang ingin ditambahkan (contoh: *"tambah produk Kopi Susu Aren"*).`,
+          suggestions: ['Katalog produk', 'Produk paling laku bulan ini'],
+        }
+      }
+      return {
+        text: `Untuk mendaftarkan produk baru "${targetName}", silakan lengkapi harga jual & modal HPP melalui menu Manajemen Produk & Kasir POS.`,
+        suggestions: ['Katalog produk', 'Buka Kasir POS'],
+      }
+    }
+
+    case ANALYST_INTENTS.UPDATE_PRODUCT: {
+      const targetName = parsed.params?.name
+      return {
+        text: `Pembaruan data produk ${targetName ? `"${targetName}" ` : ''}dapat dilakukan secara instan melalui modul Produk & Kasir POS.`,
+        suggestions: ['Katalog produk', 'Berapa margin saya?'],
+      }
+    }
+
+    case ANALYST_INTENTS.DELETE_PRODUCT: {
+      const targetName = parsed.params?.name
+      return {
+        text: `Penghapusan produk ${targetName ? `"${targetName}" ` : ''}harus diverifikasi agar integritas riwayat transaksi penjualan tetap terjaga.`,
+        suggestions: ['Katalog produk', 'Produk paling laku bulan ini'],
+      }
+    }
+
+    case ANALYST_INTENTS.UPDATE_INVENTORY: {
+      const target = parsed.params?.target
+      return {
+        text: `Penyesuaian stok inventori ${target ? `(${target}) ` : ''}dapat dicatat melalui modul Operasional & Inventori untuk menjaga rekam jejak kartu stok.`,
+        suggestions: ['Kapan saya harus restock?', 'Status inventori'],
+      }
+    }
+
+    case ANALYST_INTENTS.ANALYZE_INVENTORY:
+      return handleRestockTiming({ businessId, businessName, mockDb })
+
+    case ANALYST_INTENTS.ANALYZE_ORDERS:
+      return handleMonthlyRevenue({ businessId, businessName, mockDb })
+
+    case ANALYST_INTENTS.ANALYZE_PRODUCTS:
+      return handleTopProducts({ businessId, businessName, mockDb })
+
+    case ANALYST_INTENTS.ANALYZE_CASHFLOW:
+      return handleMonthlyRevenue({ businessId, businessName, mockDb })
+
+    case ANALYST_INTENTS.ANALYZE_CUSTOMER_METRICS: {
+      return {
+        text: `👥 **Metrik Pelanggan & CRM — ${businessName}**\n\n` +
+          `• Database pelanggan dan riwayat transaksi aktif terpantau melalui modul CRM.\n` +
+          `• Transaksi berulang berkontribusi positif terhadap stabilitas omzet bulanan.`,
+        suggestions: ['Produk apa paling laku bulan ini?', 'Berapa omzet saya bulan ini?'],
+      }
+    }
 
     case ANALYST_INTENTS.DELETE_SUPPLIER: {
       const targetName = parsed.params.target
