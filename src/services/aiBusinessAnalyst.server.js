@@ -78,28 +78,30 @@ export const SECURITY_BLOCK_MESSAGE =
 
 const ABUSE_THREAT_PATTERNS = [
   // 1. Raw DB dump / data exfiltration
-  /\b(dump\s+(semua\s+)?(database|db|user|users|transaksi|tabel|table|data\s+mentah)|kirimin\s+database|ambil\s+semua\s+transaksi\s+mentah)\b/i,
-  // 2. Supabase Service Role / secrets
-  /\b(service[_\s-]?role(\s*key)?|supabase[_\s-]?(service[_\s-]?role|key|secret|credential))\b/i,
+  /\b((dump|give\s+me|show\s+me|ambil|tampilkan|lihat)\s+(all\s+|semua\s+|the\s+)?(database|db|users?|pengguna|businesses|bisnis|transaksi|tabel|tables?|data\s+mentah)|kirimin\s+database|ambil\s+semua\s+transaksi\s+mentah)\b/i,
+  // 2. Supabase Service Role / secrets / database passwords
+  /\b(service[_\s-]?role(\s*key)?|supabase[_\s-]?(service[_\s-]?role|key|secret|credential)|database[_\s-]?password|db[_\s-]?password)\b/i,
   // 3. JWT & Access/Auth tokens
-  /\b(ambil|kasih|minta|bocorkan|lihat|dump)\s+(auth\s+)?(token|jwt|access[_\s-]?token|refresh[_\s-]?token)\b/i,
+  /\b(ambil|kasih|minta|bocorkan|lihat|dump|tampilkan|show|give)\s+(auth\s+)?(token|jwt|access[_\s-]?token|refresh[_\s-]?token)\b/i,
   /\b(bearer\s+token|jwt\s+secret)\b/i,
-  // 4. Vercel & cloud secrets
-  /\b(vercel\s+(token|credential|secret|api)|tembak\s+api\s+vercel)\b/i,
-  // 5. Environment variables & API keys
-  /\b(env(ironment)?[_\s-]?(var(iable)?s?|secret)|ambil\s+env|server\s+secrets?|api[_\s-]?keys?)\b/i,
-  // 6. External credential exfiltration & proxying
-  /\b(kirim\s+credential\s+ke|curl\s+https?:\/\/|wget\s+https?:\/\/|ngrok|webhook\.site)\b/i,
-  // 7. Request flooding & DDoS / destructive testing
+  // 4. TokenKoding API Key probing
+  /\b(tokenkoding[_\s-]?(api[_\s-]?key|key|secret|token)|ling[_\s-]?api[_\s-]?key)\b/i,
+  // 5. Vercel & cloud secrets
+  /\b(vercel\s+(token|credentials?|secrets?|apis?)|tembak\s+api\s+vercel)\b/i,
+  // 6. Environment variables & API keys
+  /(?:\b(env(ironment)?[_\s-]?(var(iable)?s?|secret)|ambil\s+env|server\s+secrets?|api[_\s-]?keys?)\b|\.env)/i,
+  // 7. External credential exfiltration & proxying
+  /\b(kirim\s+credential\s+ke|curl\s+https?:\/\/|wget\s+https?:\/\/|ngrok|webhook\.site|proxy(\s+this)?\s+url|proxy\s+request)\b/i,
+  // 8. Request flooding & DDoS / destructive testing
   /\b(hit\s+endpoint.*10\.?000|flood(ing)?\s+(request|api)|ddos|scan\s+production\s+lalu\s+exploit)\b/i,
-  // 8. Cross-tenant & RLS bypass
-  /\b(bypass[_\s-]?rls|bypass\s+(auth|authentication|authorization)|(akses|data|lihat)?\s*(bisnis|user|tenant)\s+lain|tenant\s+orang\s+lain|other[_\s-]?business)\b/i,
-  // 9. Arbitrary SQL execution / injection
-  /\b(union\s+select|information_schema|drop\s+table|delete\s+semua\s+database|exec\s*\(|alter\s+table)\b/i,
-  // 10. Arbitrary shell/OS commands
-  /\b(rm\s+-rf|sh\s+-c|bash\s+-c|cat\s+\/etc|powershell|cmd\.exe)\b/i,
-  // 11. Prompt injection directives attempting to override policies
-  /\b(ignore\s+(all\s+)?previous\s+instructions|system\s+prompt\s+override|jailbreak)\b/i,
+  // 9. Cross-tenant & RLS bypass
+  /\b((ignore|bypass)[_\s-]?rls|bypass\s+(auth|authentication|authorization)|(akses|data|lihat|show|tampilkan)?\s*(bisnis|user|tenant|business)\s+(lain|orang\s+lain)|another\s+tenant|other[_\s-]?business|other\s+tenant)\b/i,
+  // 10. Arbitrary SQL execution / injection
+  /\b(union\s+select|information_schema|drop\s+table|delete\s+semua\s+database|exec\s*\(|alter\s+table|truncate\s+table|select\s+\*\s+from|execute\s+sql|run\s+sql|arbitrary\s+sql)\b/i,
+  // 11. Arbitrary shell/OS commands / filesystem access
+  /\b(rm\s+-rf|sh\s+-c|bash\s+-c|cat\s+\/etc|powershell|cmd\.exe|eval\s*\(|(server\s+)?filesystem|file\s+system|\/etc\/passwd)\b/i,
+  // 12. Prompt injection directives & system prompt extraction
+  /\b(ignore\s+(all\s+)?previous\s+instructions|system\s+prompt\s+override|jailbreak|(bocorkan|tampilkan|lihat|dump|print|reveal|show|what\s+is|tell\s+me|repeat)\s+(your\s+|the\s+|all\s+|everything\s+you\s+received\s+in\s+your\s+)?(system\s+prompt|instruksi\s+sistem|developer\s+instruction|system\s+instruction|hidden\s+business\s+context|hidden\s+context|context\s+verbatim))\b/i,
 ]
 
 /**
@@ -519,6 +521,68 @@ export async function executeCreateSupplier({ db, businessId, userId, name, cont
   }
 }
 
+/**
+ * Check if product has dependencies in order_items or inventory.
+ */
+export async function checkProductDependencies(db, businessId, productId) {
+  if (db && typeof db.checkProductDependencies === 'function') {
+    return await db.checkProductDependencies(businessId, productId)
+  }
+  if (db && db.order_items) {
+    const hasOrder = db.order_items.some((oi) => oi.product_id === productId && oi.business_id === businessId)
+    if (hasOrder) {
+      return { hasDependencies: true, reason: 'Produk masih digunakan oleh data transaksi pesanan.' }
+    }
+  }
+  return { hasDependencies: false, reason: null }
+}
+
+/**
+ * Execute product deletion with tenant isolation, dependency protection, and audit logging.
+ */
+export async function executeDeleteProduct({ db, businessId, userId, productId }) {
+  const prods = await getProducts(db, businessId)
+  const target = prods.find((p) => p.id === productId)
+  if (!target) {
+    return {
+      success: false,
+      error: 'Produk tidak ditemukan atau bukan milik bisnis aktif.',
+    }
+  }
+
+  const depCheck = await checkProductDependencies(db, businessId, productId)
+  if (depCheck.hasDependencies) {
+    return {
+      success: false,
+      error: depCheck.reason,
+    }
+  }
+
+  if (db && typeof db.deleteProduct === 'function') {
+    await db.deleteProduct(businessId, productId)
+  } else if (db && db.products) {
+    const idx = db.products.findIndex((p) => p.id === productId && p.business_id === businessId)
+    if (idx !== -1) {
+      db.products.splice(idx, 1)
+    }
+  }
+
+  logActionAudit({
+    userId,
+    businessId,
+    tool: 'delete_product',
+    targetEntity: productId,
+    result: `DELETED: ${target.name}`,
+    success: true,
+  })
+
+  return {
+    success: true,
+    message: `Produk ${target.name} berhasil dihapus.`,
+    data: { productId, name: target.name },
+  }
+}
+
 // ── 6. DATA ACCESS HELPERS (MOCK DB & SUPABASE ADAPTER) ──
 
 async function getCanonicalOrders(db, businessId) {
@@ -642,9 +706,10 @@ export async function handleAiBusinessAnalystRequest({
         result: 'CANCELLED_BY_USER',
         success: false,
       })
+      const entityLabel = pending.action === 'delete_product' ? 'produk' : 'supplier'
       return {
         status: 200,
-        text: `Tindakan penghapusan supplier "${pending.targetName}" dibatalkan. Data tetap aman.`,
+        text: `Tindakan penghapusan ${entityLabel} "${pending.targetName}" dibatalkan. Data tetap aman.`,
       }
     }
 
@@ -664,6 +729,27 @@ export async function handleAiBusinessAnalystRequest({
           return {
             status: 200,
             text: `⚠️ **Gagal Menghapus Supplier:**\n${result.error}`,
+          }
+        }
+
+        return {
+          status: 200,
+          text: `✅ **Berhasil:** ${result.message}`,
+        }
+      }
+
+      if (pending.action === 'delete_product') {
+        const result = await executeDeleteProduct({
+          db,
+          businessId,
+          userId: user.id,
+          productId: pending.targetId,
+        })
+
+        if (!result.success) {
+          return {
+            status: 200,
+            text: `⚠️ **Gagal Menghapus Produk:**\n${result.error}`,
           }
         }
 
@@ -801,10 +887,57 @@ export async function handleAiBusinessAnalystRequest({
   // 4.6 DELETE_PRODUCT
   if (parsed.tool === BUSINESS_TOOLS.DELETE_PRODUCT) {
     const rawTarget = parsed.entity?.name
+    if (!rawTarget) {
+      return {
+        status: 200,
+        text: `Sebutkan nama produk yang ingin dihapus (contoh: *"hapus produk Espresso"*).`,
+        suggestions: ['Katalog produk', 'Produk paling laku bulan ini'],
+      }
+    }
+    const prods = await getProducts(db, businessId)
+    const found = prods.find(
+      (p) => p.name.toLowerCase() === rawTarget.toLowerCase() || p.id === rawTarget
+    )
+
+    if (!found) {
+      return {
+        status: 200,
+        text: `Produk "${rawTarget}" tidak ditemukan di database bisnis Anda.`,
+        suggestions: ['Katalog produk', 'Produk paling laku bulan ini'],
+      }
+    }
+
+    // Check dependencies (e.g. order_items)
+    const depCheck = await checkProductDependencies(db, businessId, found.id)
+    if (depCheck.hasDependencies) {
+      return {
+        status: 200,
+        text: `⚠️ **Gagal Menghapus Produk:** ${depCheck.reason}`,
+        suggestions: ['Katalog produk', 'Berapa margin saya?'],
+      }
+    }
+
+    // Destructive action: Require confirmation
+    const newConfId = `conf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    setPendingConfirmation({
+      confirmationId: newConfId,
+      userId: user.id,
+      businessId,
+      action: 'delete_product',
+      targetId: found.id,
+      targetName: found.name,
+    })
+
     return {
       status: 200,
-      text: `Penghapusan produk ${rawTarget ? `"${rawTarget}" ` : ''}harus diverifikasi agar integritas riwayat transaksi penjualan tetap terjaga.`,
-      suggestions: ['Katalog produk', 'Produk paling laku bulan ini'],
+      confirmationRequired: true,
+      confirmationId: newConfId,
+      action: 'delete_product',
+      target: {
+        id: found.id,
+        name: found.name,
+      },
+      text: `Saya menemukan produk "${found.name}". Menghapusnya akan menghapus produk tersebut dari katalog bisnis Anda. Apakah kamu yakin ingin menghapusnya?`,
     }
   }
 

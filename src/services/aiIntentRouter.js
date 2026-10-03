@@ -101,6 +101,19 @@ export function parseBusinessIntent(query) {
     }
   }
 
+  // Pattern C: "tambah yanto supplier" / "masukin yanto supplier"
+  const supInvertMatch = clean.match(
+    /^(?:bisa\s+)?(?:tambah(?:kan)?|daftarkan|masuk(?:in|kan)|input)\s+(.+?)\s+(?:supplier|pemasok)$/i
+  )
+  if (supInvertMatch) {
+    const extracted = cleanEntityName(supInvertMatch[1])
+    return {
+      tool: BUSINESS_TOOLS.CREATE_SUPPLIER,
+      type: 'WRITE',
+      entity: { name: extracted },
+    }
+  }
+
   // Pattern A: "bisa tambah supplier yanto" / "tambah supplier Yanto" / "buat supplier baru namanya Yanto"
   // "gw mau nambah supplier" / "buat supplier baru dong"
   const supAddMatch = clean.match(

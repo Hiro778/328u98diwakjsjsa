@@ -168,18 +168,31 @@ export const SECURITY_BLOCK_MESSAGE =
   "• deteksi anomali transaksi";
 
 const ABUSE_THREAT_PATTERNS = [
-  /\b(dump\s+(semua\s+)?(database|db|user|users|transaksi|tabel|table|data\s+mentah)|kirimin\s+database|ambil\s+semua\s+transaksi\s+mentah)\b/i,
-  /\b(service[_\s-]?role(\s*key)?|supabase[_\s-]?(service[_\s-]?role|key|secret|credential))\b/i,
-  /\b(ambil|kasih|minta|bocorkan|lihat|dump)\s+(auth\s+)?(token|jwt|access[_\s-]?token|refresh[_\s-]?token)\b/i,
+  // 1. Raw DB dump / data exfiltration
+  /\b((dump|give\s+me|show\s+me|ambil|tampilkan|lihat)\s+(all\s+|semua\s+|the\s+)?(database|db|users?|pengguna|businesses|bisnis|transaksi|tabel|tables?|data\s+mentah)|kirimin\s+database|ambil\s+semua\s+transaksi\s+mentah)\b/i,
+  // 2. Supabase Service Role / secrets / database passwords
+  /\b(service[_\s-]?role(\s*key)?|supabase[_\s-]?(service[_\s-]?role|key|secret|credential)|database[_\s-]?password|db[_\s-]?password)\b/i,
+  // 3. JWT & Access/Auth tokens
+  /\b(ambil|kasih|minta|bocorkan|lihat|dump|tampilkan|show|give)\s+(auth\s+)?(token|jwt|access[_\s-]?token|refresh[_\s-]?token)\b/i,
   /\b(bearer\s+token|jwt\s+secret)\b/i,
-  /\b(vercel\s+(token|credential|secret|api)|tembak\s+api\s+vercel)\b/i,
-  /\b(env(ironment)?[_\s-]?(var(iable)?s?|secret)|ambil\s+env|server\s+secrets?|api[_\s-]?keys?)\b/i,
-  /\b(kirim\s+credential\s+ke|curl\s+https?:\/\/|wget\s+https?:\/\/|ngrok|webhook\.site)\b/i,
+  // 4. TokenKoding API Key probing
+  /\b(tokenkoding[_\s-]?(api[_\s-]?key|key|secret|token)|ling[_\s-]?api[_\s-]?key)\b/i,
+  // 5. Vercel & cloud secrets
+  /\b(vercel\s+(token|credentials?|secrets?|apis?)|tembak\s+api\s+vercel)\b/i,
+  // 6. Environment variables & API keys
+  /(?:\b(env(ironment)?[_\s-]?(var(iable)?s?|secret)|ambil\s+env|server\s+secrets?|api[_\s-]?keys?)\b|\.env)/i,
+  // 7. External credential exfiltration & proxying
+  /\b(kirim\s+credential\s+ke|curl\s+https?:\/\/|wget\s+https?:\/\/|ngrok|webhook\.site|proxy(\s+this)?\s+url|proxy\s+request)\b/i,
+  // 8. Request flooding & DDoS / destructive testing
   /\b(hit\s+endpoint.*10\.?000|flood(ing)?\s+(request|api)|ddos|scan\s+production\s+lalu\s+exploit)\b/i,
-  /\b(bypass[_\s-]?rls|bypass\s+(auth|authentication|authorization)|(akses|data|lihat)?\s*(bisnis|user|tenant)\s+lain|tenant\s+orang\s+lain|other[_\s-]?business)\b/i,
-  /\b(union\s+select|information_schema|drop\s+table|delete\s+semua\s+database|exec\s*\(|alter\s+table)\b/i,
-  /\b(rm\s+-rf|sh\s+-c|bash\s+-c|cat\s+\/etc|powershell|cmd\.exe)\b/i,
-  /\b(ignore\s+(all\s+)?previous\s+instructions|system\s+prompt\s+override|jailbreak)\b/i,
+  // 9. Cross-tenant & RLS bypass
+  /\b((ignore|bypass)[_\s-]?rls|bypass\s+(auth|authentication|authorization)|(akses|data|lihat|show|tampilkan)?\s*(bisnis|user|tenant|business)\s+(lain|orang\s+lain)|another\s+tenant|other[_\s-]?business|other\s+tenant)\b/i,
+  // 10. Arbitrary SQL execution / injection
+  /\b(union\s+select|information_schema|drop\s+table|delete\s+semua\s+database|exec\s*\(|alter\s+table|truncate\s+table|select\s+\*\s+from|execute\s+sql|run\s+sql|arbitrary\s+sql)\b/i,
+  // 11. Arbitrary shell/OS commands / filesystem access
+  /\b(rm\s+-rf|sh\s+-c|bash\s+-c|cat\s+\/etc|powershell|cmd\.exe|eval\s*\(|(server\s+)?filesystem|file\s+system|\/etc\/passwd)\b/i,
+  // 12. Prompt injection directives & system prompt extraction
+  /\b(ignore\s+(all\s+)?previous\s+instructions|system\s+prompt\s+override|jailbreak|(bocorkan|tampilkan|lihat|dump|print|reveal|show|what\s+is|tell\s+me|repeat)\s+(your\s+|the\s+|all\s+|everything\s+you\s+received\s+in\s+your\s+)?(system\s+prompt|instruksi\s+sistem|developer\s+instruction|system\s+instruction|hidden\s+business\s+context|hidden\s+context|context\s+verbatim))\b/i,
 ];
 
 export function isAbuseThreat(input: string): boolean {
@@ -237,6 +250,18 @@ export function parseBusinessIntent(query: string) {
       tool: "create_supplier",
       type: "WRITE",
       entity: { name: cleanEntityName(supAsMatch[1]) },
+    };
+  }
+
+  // Pattern C: "tambah yanto supplier" / "masukin yanto supplier"
+  const supInvertMatch = clean.match(
+    /^(?:bisa\s+)?(?:tambah(?:kan)?|daftarkan|masuk(?:in|kan)|input)\s+(.+?)\s+(?:supplier|pemasok)$/i
+  );
+  if (supInvertMatch) {
+    return {
+      tool: "create_supplier",
+      type: "WRITE",
+      entity: { name: cleanEntityName(supInvertMatch[1]) },
     };
   }
 
@@ -484,9 +509,10 @@ Deno.serve(async (req: Request) => {
 
       if (confirmed === false) {
         pendingConfirmations.delete(confirmationId);
+        const entityLabel = pending.action === "delete_product" ? "produk" : "supplier";
         return jsonResponse({
           status: 200,
-          text: `Tindakan penghapusan supplier "${pending.targetName}" dibatalkan. Data tetap aman.`,
+          text: `Tindakan penghapusan ${entityLabel} "${pending.targetName}" dibatalkan. Data tetap aman.`,
         });
       }
 
@@ -522,6 +548,37 @@ Deno.serve(async (req: Request) => {
           return jsonResponse({
             status: 200,
             text: `✅ **Berhasil:** Supplier ${pending.targetName} berhasil dihapus.`,
+          });
+        }
+
+        if (pending.action === "delete_product") {
+          // Check dependencies on order_items table
+          const { data: items } = await supabaseAdmin
+            .from("order_items")
+            .select("id")
+            .eq("product_id", pending.targetId)
+            .limit(1);
+
+          if (items && items.length > 0) {
+            return jsonResponse({
+              status: 200,
+              text: `⚠️ **Gagal Menghapus:** Produk "${pending.targetName}" tidak dapat dihapus karena masih digunakan dalam riwayat pesanan aktif.`,
+            });
+          }
+
+          const { error: delErr } = await supabaseAdmin
+            .from("products")
+            .delete()
+            .eq("id", pending.targetId)
+            .eq("business_id", auth.businessId);
+
+          if (delErr) {
+            return errorResponse("Gagal menghapus produk dari database.", 500);
+          }
+
+          return jsonResponse({
+            status: 200,
+            text: `✅ **Berhasil:** Produk ${pending.targetName} berhasil dihapus.`,
           });
         }
       }
@@ -681,13 +738,69 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // 5.6 DELETE_PRODUCT
+    // 5.6 DELETE_PRODUCT (Destructive, Requires confirmation)
     if (parsed.tool === "delete_product") {
-      const targetName = parsed.entity?.name;
+      const targetQuery = parsed.entity?.name;
+      if (!targetQuery) {
+        return jsonResponse({
+          status: 200,
+          text: `Sebutkan nama produk yang ingin dihapus (contoh: *"hapus produk Espresso"*).`,
+          suggestions: ["Katalog produk", "Produk paling laku bulan ini"],
+        });
+      }
+
+      const { data: prods } = await supabaseAdmin
+        .from("products")
+        .select("id, name")
+        .eq("business_id", auth.businessId);
+
+      const found = (prods || []).find(
+        (p) => p.name.toLowerCase() === targetQuery.toLowerCase() || p.id === targetQuery
+      );
+
+      if (!found) {
+        return jsonResponse({
+          status: 200,
+          text: `Produk "${targetQuery}" tidak ditemukan di database bisnis Anda.`,
+          suggestions: ["Katalog produk", "Produk paling laku bulan ini"],
+        });
+      }
+
+      // Check dependencies on order_items table
+      const { data: items } = await supabaseAdmin
+        .from("order_items")
+        .select("id")
+        .eq("product_id", found.id)
+        .limit(1);
+
+      if (items && items.length > 0) {
+        return jsonResponse({
+          status: 200,
+          text: `⚠️ **Gagal Menghapus:** Produk "${found.name}" tidak dapat dihapus karena masih digunakan dalam riwayat pesanan aktif.`,
+          suggestions: ["Katalog produk", "Berapa margin saya?"],
+        });
+      }
+
+      const newConfId = `conf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      pendingConfirmations.set(newConfId, {
+        userId: auth.userId,
+        businessId: auth.businessId,
+        action: "delete_product",
+        targetId: found.id,
+        targetName: found.name,
+        expiresAt: Date.now() + 60 * 1000,
+      });
+
       return jsonResponse({
         status: 200,
-        text: `Penghapusan produk ${targetName ? `"${targetName}" ` : ""}harus diverifikasi agar integritas riwayat transaksi penjualan tetap terjaga.`,
-        suggestions: ["Katalog produk", "Produk paling laku bulan ini"],
+        confirmationRequired: true,
+        confirmationId: newConfId,
+        action: "delete_product",
+        target: {
+          id: found.id,
+          name: found.name,
+        },
+        text: `Saya menemukan produk "${found.name}". Menghapusnya akan menghapus produk tersebut dari katalog bisnis Anda. Apakah kamu yakin ingin menghapusnya?`,
       });
     }
 
