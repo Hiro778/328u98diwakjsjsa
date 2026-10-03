@@ -293,6 +293,8 @@ const router = createBrowserRouter([
           },
         ],
       },
+    ],
+  },
       {
         path: '/ai',
         element: <RequireAuth />,
@@ -311,8 +313,6 @@ const router = createBrowserRouter([
           },
         ],
       },
-    ],
-  },
     ],
   },
   {

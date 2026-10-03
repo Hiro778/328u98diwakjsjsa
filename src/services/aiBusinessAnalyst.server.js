@@ -1,4 +1,5 @@
-import { parseBusinessIntent, BUSINESS_TOOLS } from './aiIntentRouter.js'
+import { parseBusinessIntent, BUSINESS_TOOLS, CODING_BLOCK_MESSAGE, isCodingRequest } from './aiIntentRouter.js'
+
 
 /**
  * BisnisSehat AI Business Analyst — Server-Side AI Operator & Security Gate
@@ -126,80 +127,8 @@ export function isAbuseThreat(input) {
 
 // ── 2.1 CODING ASSISTANT REFUSAL POLICY ──
 
-export const CODING_BLOCK_MESSAGE =
-  'Maaf, saya khusus membantu urusan bisnis di BisnisSehat, bukan membuat atau menjalankan kode.\n' +
-  'Coba tanyakan tentang omzet, penjualan, laba, stok, produk, supplier, atau risiko bisnis.'
+export { CODING_BLOCK_MESSAGE, isCodingRequest } from './aiIntentRouter.js'
 
-/**
- * Check whether a message requests code creation, programming, or script execution.
- * AI Business Analyst is strictly a business assistant, not a coding agent.
- * Does NOT over-block conceptual questions like "Supabase itu apa?" or "API itu apa?".
- */
-export function isCodingRequest(input) {
-  if (!input || typeof input !== 'string') return false
-  const normalized = input.trim().toLowerCase()
-
-  // 1. Conceptual / definition questions must NOT be blocked as coding requests
-  // e.g. "Supabase itu apa?", "API itu apa?", "apa itu coding?", "what is SQL?"
-  const isExplanationQuery =
-    /^(?:apa\s+itu\b|what\s+is\b|jelaskan\s+(?:apa\s+itu|konsep|arti)\b|apa\s+maksud\b)/i.test(normalized) ||
-    /(?:itu\s+apa|artinya\s+apa|maksudnya\s+apa)\??$/i.test(normalized)
-
-  if (isExplanationQuery) {
-    if (!/(?:buatkan|tuliskan|bikin|generate|write|kasih)\s+(?:kode|kodenya|script|skrip|fungsi|sql|program)/i.test(normalized)) {
-      return false
-    }
-  }
-
-  // 2. Direct requests for coding assistance / questions asking if AI can code
-  if (
-    /\b(bisa\s+bantu\s+coding|bantu\s+coding|bisa\s+ngoding|ajarin\s+coding|tolong\s+coding|can\s+you\s+code|help\s+me\s+code|code\s+for\s+me)\b/i.test(normalized)
-  ) {
-    return true
-  }
-
-  // 3. Requests to generate/write/provide code, scripts, queries, functions, commands, or programs
-  // Covers: "buatkan script", "buatkan SQL", "buatkan kode", "kasih kodenya", "buat fungsi", "bikin command", "tolong programkan", "tuliskan SQL"
-  if (
-    /\b(buatkan|tuliskan|bikin|generate|write|create|tolong\s+programkan|programkan|kasih|minta|berikan)\s+(?:sebuah\s+|suatu\s+|contoh\s+)?(?:kode|kodenya|script|skrip|scriptnya|fungsi|function|command|perintah|program|query|sql|syntax)\b/i.test(normalized)
-  ) {
-    return true
-  }
-
-  // 4. Exact short phrases
-  if (
-    /\b(buat\s+fungsi|tulis\s+fungsi|kasih\s+kodenya|minta\s+kodenya|buatkan\s+sql|tuliskan\s+sql|bikin\s+command|tolong\s+programkan)\b/i.test(normalized)
-  ) {
-    return true
-  }
-
-  // 5. "implementasikan" when asking for coding/implementation
-  if (
-    /\bimplementasikan\b/i.test(normalized) &&
-    /\b(kode|code|fungsi|function|script|algoritma|software|program|class|method|fitur\s+ini\s+ke\s+dalam\s+kode)\b/i.test(normalized)
-  ) {
-    return true
-  }
-  if (/^(?:tolong\s+)?implementasikan[?!.]*$/i.test(normalized)) {
-    return true
-  }
-
-  // 6. Language-specific code generation requests (e.g. "buatkan kode Python", "tulis script javascript", "write a python script")
-  if (
-    /\b(?:buatkan|tuliskan|bikin|generate|write|create)\s+.*?\b(?:python|javascript|typescript|bash|shell|php|c\+\+|golang|html|css|sql|rust|java)\b/i.test(normalized)
-  ) {
-    return true
-  }
-
-  // 7. General "write code" or "generate code" in English
-  if (
-    /\b(write\s+(?:some\s+|the\s+)?code|generate\s+(?:the\s+)?code|create\s+(?:a\s+)?script|write\s+(?:a\s+)?script)\b/i.test(normalized)
-  ) {
-    return true
-  }
-
-  return false
-}
 
 // ── 3. AUDIT & CONFIRMATION STORAGE ──
 
