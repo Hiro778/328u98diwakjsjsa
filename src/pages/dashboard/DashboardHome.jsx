@@ -7,6 +7,9 @@ import { fetchBusinessSalesData, aggregateSalesMetrics } from '../../services/ex
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../lib/orderNumber'
 
+// ── AI Shortcut: same key as AiBusinessAnalystPage ──
+const LS_SHORTCUT_PINNED = 'bs_ai_shortcut_pinned'
+
 const container = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.05 } },
@@ -18,9 +21,12 @@ const item = {
 }
 
 export default function DashboardHome() {
-  const { profile, business, subscription } = useAuth()
+  const { profile, business, subscription, isPro } = useAuth()
   const firstName = profile?.full_name?.split(' ')[0] || 'Anda'
   const planInfo = getPlanDisplay(subscription?.plan)
+
+  // ── AI Shortcut pin state (read from localStorage, same key as offer) ──
+  const isAiShortcutPinned = Boolean(localStorage.getItem(LS_SHORTCUT_PINNED))
 
   const [metrics, setMetrics] = useState({
     totalRevenue: 0,
@@ -161,6 +167,52 @@ export default function DashboardHome() {
           </Link>
         </div>
       </motion.div>
+
+      {/* ── AI BUSINESS ANALYST QUICK ACCESS (shown when user pinned via offer) ── */}
+      {isPro && isAiShortcutPinned && (
+        <motion.div
+          data-testid="ai-dashboard-shortcut"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <Link
+            to="/ai"
+            className="group flex items-center gap-4 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/5 to-primary/10 px-5 py-4 shadow-xs hover:border-primary/50 hover:from-primary/10 hover:to-primary/15 transition-all"
+          >
+            {/* Icon */}
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary text-xl shadow-xs">
+              ✨
+            </div>
+
+            {/* Text */}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-text-primary group-hover:text-primary transition-colors">
+                AI Business Analyst
+              </p>
+              <p className="text-xs text-text-muted mt-0.5 truncate">
+                Tanya kondisi bisnis, analisis omzet, margin, atau stok sekarang
+              </p>
+            </div>
+
+            {/* CTA */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="hidden sm:inline rounded-full bg-primary/15 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                Pro
+              </span>
+              <svg
+                className="h-4 w-4 text-text-muted group-hover:text-primary group-hover:translate-x-0.5 transition-all"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </Link>
+        </motion.div>
+      )}
 
       {/* KPI Cards Grid */}
       <motion.div

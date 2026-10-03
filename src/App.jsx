@@ -86,6 +86,7 @@ import ABTestingPage from './pages/dashboard/marketing/ABTestingPage'
 import RealtimeDashboard from './pages/dashboard/analytics/RealtimeDashboard'
 import BenchmarkingPage from './pages/dashboard/analytics/BenchmarkingPage'
 import WeeklyRecapPage from './pages/dashboard/analytics/WeeklyRecapPage'
+import AiBusinessAnalystPage from './pages/ai/AiBusinessAnalystPage'
 
 const router = createBrowserRouter([
   // Authentication infrastructure required for admin recovery (@gas.md)
@@ -186,6 +187,24 @@ const router = createBrowserRouter([
         ],
       },
       {
+        path: '/ai',
+        element: <RequireAuth />,
+        children: [
+          {
+            element: <RequireOnboarding />,
+            children: [
+              {
+                element: <RequireSubscription requiredPlan="basic" featureName="AI Business Analyst" />,
+                children: [
+                  { index: true, element: <AiBusinessAnalystPage isStandalone={true} /> },
+                  { path: 'chat', element: <AiBusinessAnalystPage isStandalone={true} /> },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
         path: '/dashboard',
         element: <RequireAuth />,
         children: [
@@ -202,6 +221,8 @@ const router = createBrowserRouter([
               { path: 'semua-tools', element: <AllToolsPage /> },
               { path: 'bantuan', element: <HelpCenterPage /> },
               { path: 'faq', element: <HelpCenterPage /> },
+              { path: 'ai', element: <AiBusinessAnalystPage isStandalone={false} /> },
+              { path: 'ai/chat', element: <AiBusinessAnalystPage isStandalone={false} /> },
 
               // General & Category Overview Pages
               { path: 'keuangan', element: <CategoryPage categoryId="finance" /> },

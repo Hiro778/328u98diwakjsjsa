@@ -4,7 +4,7 @@ import { SIDEBAR_NAV, CATEGORIES } from '../data/categories'
 const NAV_GROUPS = [
   {
     header: 'UTAMA',
-    itemIds: ['dashboard'],
+    itemIds: ['dashboard', 'ai-analyst'],
   },
   {
     header: 'MANAJEMEN BISNIS',
