@@ -1,606 +1,371 @@
-IMPLEMENT PRO ACTIVATION CODE SYSTEM — REPLACE MIDTRANS PRO SUBSCRIPTION CHECKOUT
+IMPLEMENT ONLY — REMOVE MIDTRANS FROM CURRENT SUBSCRIPTION PURCHASE FLOW
 
-OBJECTIVE
-Replace the current Midtrans-based PRO subscription purchase/checkout flow with a secure manual activation-code system.
+Context:
+BisnisSehat sekarang SUDAH TIDAK menggunakan Midtrans untuk pembelian
+subscription.
 
-NEW BUSINESS FLOW:
+CURRENT BUSINESS FLOW:
 
-ADMIN generates a PRO activation code
-→ Admin gives the code manually to customer
-→ Customer opens PRO activation page
-→ Customer submits activation code
-→ Server securely validates the code
-→ If valid, activate the customer's PRO subscription
-→ Code becomes permanently redeemed
-→ Customer gets PRO entitlement for the configured duration.
+Customer
+→ melakukan pembayaran manual kepada owner
+→ admin memverifikasi pembayaran
+→ admin membuat kode aktivasi resmi
+→ customer memasukkan kode aktivasi
+→ subscription Pro diaktifkan secara server-side
 
-IMPORTANT:
-This is a SECURITY-SENSITIVE authentication/credential-like system.
+Activation-code flow adalah SATU-SATUNYA flow pembelian Pro yang
+ditampilkan ke customer.
 
-Do NOT implement code validation in frontend.
-Do NOT store plaintext activation codes in the database.
-Do NOT expose activation-code rows through normal Supabase client queries.
-Do NOT rely on obscurity.
-Do NOT create predictable sequential codes.
-Do NOT create short numeric-only codes.
+Screenshot production saat ini masih menunjukkan:
 
-==================================================
-1. FIRST: AUDIT EXISTING PAYMENT/SUBSCRIPTION SYSTEM
-==================================================
+"Pembayaran online instan via Midtrans (QRIS, E-Wallet, Transfer Bank)."
 
-Before modifying anything:
+dan tombol:
 
-Inspect:
-- subscriptions
-- subscription_payments
-- existing entitlement logic
-- existing admin subscription management
-- current PRO pricing UI
-- current Midtrans subscription flow
-- current audit logging
-- current Admin RBAC
-- existing security/RLS migrations
+"Menghubungkan Midtrans..."
 
-Understand the existing subscription schema and reuse it where appropriate.
-
-Do NOT blindly create duplicate subscription tables.
-
-Preserve:
-- existing PRO entitlement semantics
-- existing subscription history
-- existing admin subscription management
-- existing audit logs
-- existing tenant isolation
-
-The activation-code system should become a new authorized way to grant PRO entitlement.
+Ini harus dihapus.
 
 ==================================================
-2. ACTIVATION CODE SCHEMA
+1. AUDIT FIRST — DO NOT MODIFY YET
 ==================================================
 
-Create a migration for:
+Audit seluruh penggunaan Midtrans terkait subscription purchase:
 
-public.pro_activation_codes
+Search:
 
-Suggested fields:
+Midtrans
+midtrans
+createMidtrans
+midtrans-subscription-snap
+midtrans-notification
+payment_provider
+provider_transaction_id
+midtrans_order_id
+payment_status
+transaction_status
+subscription payment
+checkout
+Snap
 
-id uuid primary key
-code_hash text not null unique
-plan text not null
-duration_days integer not null
-expires_at timestamptz null
-redeemed_at timestamptz null
-redeemed_by uuid null references auth.users(id)
-redeemed_business_id uuid null references businesses(id)
-created_at timestamptz not null default now()
-created_by uuid null references auth.users(id)
-metadata jsonb not null default '{}'::jsonb
+Periksa:
 
-Constraints:
+- PricingPage.jsx
+- PricingExperience.jsx
+- subscriptionService.js
+- AdminSubscriptionsPage.jsx
+- payment services
+- Supabase Edge Functions
+- database RPCs
+- subscription payment tables
+- activation-code flow
+- admin verification flow
 
-plan must currently support PRO only.
+BEDAKAN:
 
-duration_days must be positive.
-
-redeemed_at / redeemed_by / redeemed_business_id represent permanent redemption.
-
-A code must NEVER be reusable.
-
-==================================================
-3. CODE GENERATION SECURITY
-==================================================
-
-Activation codes MUST be generated using a cryptographically secure random generator.
-
-Minimum target:
-128 bits of entropy.
-
-Preferred human-readable format:
-
-BS-PRO-XXXX-XXXX-XXXX-XXXX-XXXX
-
-The visible code must contain enough random entropy.
-
-DO NOT derive codes from:
-- user ID
-- email
-- timestamp
-- sequential IDs
-- business ID
-- order ID
-- predictable hashes
-- Math.random()
-
-Generate the code server-side only.
-
-The plaintext code may be returned ONLY once to the authorized admin immediately after creation.
-
-Do not store plaintext code.
-
-Store only a cryptographic hash/HMAC representation.
+A. CUSTOMER SUBSCRIPTION PURCHASE FLOW
+B. LEGACY PAYMENT DATA
+C. ADMIN PAYMENT HISTORY
+D. MIDTRANS WEBHOOK INFRASTRUCTURE
+E. UNRELATED PAYMENT LOGIC
 
 ==================================================
-4. ADMIN GENERATION
+2. CUSTOMER PRICING UI
 ==================================================
 
-Add admin functionality:
+Hapus seluruh customer-facing Midtrans messaging dari pricing.
 
-/admin/activation-codes
+JANGAN tampilkan:
 
-Only ADMIN / SUPER_ADMIN may access.
+- Midtrans
+- QRIS melalui Midtrans
+- E-Wallet melalui Midtrans
+- Transfer Bank melalui Midtrans
+- "Menghubungkan Midtrans..."
+- "Bayar via Midtrans"
+- Snap checkout
+- loading state Midtrans
+- error Midtrans
 
-Allow:
-
-Generate PRO activation code
-Duration:
-- 30 days
-- optionally configurable only from safe predefined values
-
-Display generated plaintext code once.
-
-Show:
-- plan
-- duration
-- created date
-- status
-- redeemed date
-- redeemed user/business when redeemed
-
-NEVER display code plaintext after creation.
-
-Instead display:
-
-BS-PRO-••••-••••-••••-••••-••••
-
-or a safe partial identifier.
-
-Do not allow admin to retrieve plaintext codes from the database later.
-
-Every creation must generate an audit log.
+Jangan tinggalkan tombol yang ketika diklik masih mencoba memanggil
+Midtrans.
 
 ==================================================
-5. SERVER-SIDE REDEMPTION
+3. PRO Rp130.000
 ==================================================
 
-Create a SECURITY DEFINER server-side RPC or secure Edge Function:
+Pro Rp130.000/bulan sekarang menggunakan:
 
-redeem_pro_activation_code(p_code)
+KODE AKTIVASI
 
-Requirements:
+Pricing card harus menjelaskan flow yang sebenarnya.
 
-1. Require authenticated user.
-2. Resolve user's authorized business using existing business ownership logic.
-3. Normalize code safely.
-4. Hash/HMAC the submitted code.
-5. Find matching code.
-6. Verify:
-   - code exists
-   - plan = PRO
-   - not redeemed
-   - not expired
-7. Atomically redeem the code.
-8. Create/update the user's/business subscription using the EXISTING subscription model.
-9. Set:
-   plan = pro
-   status = active
-   started_at = now()
-   expires_at = now() + duration_days
-10. Set:
-   redeemed_at
-   redeemed_by
-   redeemed_business_id
-11. Write admin/system audit event.
-12. Return success.
+Customer harus diarahkan ke activation-code flow yang SUDAH ADA.
 
-The entire redemption must be atomic.
+Contoh konsep:
 
-Use row locking / transactional protection so two simultaneous requests cannot redeem the same code.
+"Rp130.000 / bulan"
 
-Exactly ONE request may succeed.
+"Pembayaran diverifikasi manual oleh admin"
 
-The second concurrent request must fail.
+"Kode aktivasi resmi diberikan setelah pembayaran diverifikasi"
 
-==================================================
-6. DO NOT ALLOW CLIENT-SIDE SUBSCRIPTION ESCALATION
-==================================================
-
-Do NOT allow the frontend to directly update:
-
-subscriptions.plan
-subscriptions.status
-subscriptions.expires_at
-
-for this flow.
-
-The client can only request:
-
-redeem code
-
-Server decides whether entitlement changes.
-
-Verify direct REST manipulation is rejected.
-
-Test:
-
-authenticated user attempts:
-
-UPDATE subscriptions
-SET plan = 'pro'
-
-Must be rejected.
-
-Also test:
-
-UPDATE subscriptions
-SET status = 'active'
-
-Must be rejected.
-
-Also test cross-business subscription manipulation.
-
-==================================================
-7. ANTI-BRUTE-FORCE
-==================================================
-
-This is mandatory.
-
-Activation-code redemption must be protected against automated guessing.
-
-Implement rate limiting for failed redemption attempts.
-
-At minimum use multiple dimensions:
-
-- authenticated user
-- IP when available at the server/Edge Function layer
-- session/request fingerprint where appropriate
-
-Do NOT rely only on frontend throttling.
-
-Suggested policy:
-
-5 failed attempts:
-5 minute cooldown
-
-10 failed attempts:
-30 minute cooldown
-
-20 failed attempts:
-temporary longer block
-
-Make thresholds configurable in server-side code/config.
-
-Successful redemption resets the relevant failure counter.
-
-DO NOT reveal whether:
-- code exists
-- code was previously redeemed
-- code expired
-- code belongs to another user
-
-Use a generic response:
-
-"Kode aktivasi tidak valid atau sudah tidak dapat digunakan."
-
-Do not return raw database errors.
-
-==================================================
-8. ANTI-ENUMERATION
-==================================================
-
-Do not expose:
-
-- activation code ID
-- code_hash
-- exact expiration reason
-- redemption owner
-- database errors
-- whether a code exists
-
-Normal users must never be able to query:
-
-pro_activation_codes
-
-directly.
-
-RLS:
-
-authenticated users:
-NO SELECT
-NO INSERT
-NO UPDATE
-NO DELETE
-
-Admin access must go through secure admin RPCs.
-
-Public/anon:
-NO access.
-
-Revoke unnecessary EXECUTE privileges.
-
-==================================================
-9. ACTIVATION CODE STATUS
-==================================================
-
-Admin list should show:
-
-ACTIVE
-REDEEMED
-EXPIRED
-
-But status must be calculated server-side.
-
-Do not expose code_hash.
-
-Admin may see:
-- created_at
-- duration
-- redeemed_at
-- redeemed user/business
-- creator
-
-Admin cannot recover plaintext activation code after creation.
-
-==================================================
-10. SUBSCRIPTION SEMANTICS
-==================================================
-
-Reuse existing subscription entitlement logic.
-
-Do not create a second definition of "PRO".
-
-Existing entitlement:
-
-plan = pro
-status = active
-expires_at > now()
-
-must continue to be authoritative unless audit proves otherwise.
-
-If user already has active PRO:
-
-Choose and implement ONE safe documented behavior:
-
-Option A:
-extend existing expires_at by duration_days
-
-OR
-
-Option B:
-reject activation while active PRO exists.
-
-Prefer extending existing PRO expiry if this matches the current subscription business model, but verify the existing schema/service before deciding.
-
-Do not silently overwrite a longer existing expiration.
-
-Example:
-
-Current expires_at:
-2026-10-15
-
-30-day code:
-
-new expires_at:
-2026-11-14
-
-NOT:
-
-2026-10-29
-
-unless the current entitlement model explicitly requires that.
-
-==================================================
-11. REMOVE MIDTRANS PRO CHECKOUT
-==================================================
-
-After the activation system is verified:
-
-Remove/disable ONLY the Midtrans PRO subscription checkout UI and flow.
-
-Do NOT blindly delete Midtrans infrastructure because Midtrans may still be used elsewhere.
-
-Audit first.
-
-Preserve any Midtrans flow that is still legitimately used.
-
-The PRO pricing page should become:
-
-PRO
-Rp130.000 / month
-
-"Sudah punya kode aktivasi?"
 [Masukkan Kode Aktivasi]
 
-Button:
+Gunakan existing UI/route/service activation code.
 
-AKTIVASI PRO
-
-Do not show a broken Midtrans Snap modal.
+JANGAN membuat activation system kedua.
 
 ==================================================
-12. ADMIN SECURITY
+4. BASIC Rp35.000
 ==================================================
 
-Admin routes must use existing:
+JANGAN mengubah Rp35.000 atau entitlement Basic tanpa audit.
 
-RequireAuth
-RequireAdmin
-is_admin()
+Cari tahu apakah Basic juga sudah menggunakan activation code atau
+memiliki purchase flow lain.
 
-Do not implement frontend-only admin authorization.
+Jika Basic saat ini menggunakan activation code:
+- pertahankan activation flow tersebut
+- hapus hanya referensi Midtrans
 
-All sensitive admin operations must be server-side authorized.
+Jika Basic tidak menggunakan activation code:
+- JANGAN mengubah flow-nya dalam task ini
+- report apa flow aktualnya
 
-No service-role key in browser.
-
-No secret in VITE_* variables.
-
-==================================================
-13. AUDIT LOGGING
-==================================================
-
-Create audit events for:
-
-ACTIVATION_CODE_CREATED
-ACTIVATION_CODE_REDEEMED
-ACTIVATION_CODE_REDEMPTION_FAILED
-ACTIVATION_CODE_RATE_LIMITED
-PRO_ACTIVATED
-
-Do not log the plaintext activation code.
-
-Do not log code_hash.
-
-Safe metadata only:
-
-{
-  plan: "pro",
-  duration_days: 30,
-  activation_code_id: "...",
-  business_id: "...",
-  user_id: "..."
-}
+JANGAN mengarang behavior.
 
 ==================================================
-14. SECURITY TESTS
+5. ACTIVATION CODE MUST REMAIN SECURE
 ==================================================
 
-Create comprehensive tests.
+Pastikan existing activation flow tetap:
 
-Required:
+- server-side validation
+- token/code tidak menentukan sendiri nominal kredit/subscription
+- user tidak dapat mengubah plan/price melalui frontend
+- expiration sesuai implementasi existing
+- one-time use jika memang existing design
+- atomic redemption
+- tidak dapat dipakai dua kali melalui race condition
+- business/profile binding tetap benar
+- audit tetap ada
 
-A. Valid code
-→ PRO activated
-
-B. Invalid code
-→ rejected
-
-C. Wrong/random code repeatedly
-→ rate limited
-
-D. Expired code
-→ rejected
-
-E. Redeemed code
-→ rejected
-
-F. Same code concurrent redemption
-→ exactly ONE success
-
-G. Anonymous redemption
-→ rejected
-
-H. Normal authenticated user cannot read activation table
-
-I. Normal authenticated user cannot create activation codes
-
-J. Normal authenticated user cannot modify activation codes
-
-K. Normal authenticated user cannot modify subscription directly
-
-L. Cross-business redemption manipulation
-→ rejected
-
-M. Admin can generate code
-
-N. Non-admin cannot generate code
-
-O. Plaintext code never appears in database
-
-P. code_hash never exposed through normal API
-
-Q. code cannot be reconstructed from predictable values
-
-R. response does not distinguish:
-   nonexistent
-   expired
-   redeemed
-
-S. brute-force test with many requests
-→ rate limiter blocks attempts
-
-T. subscription expiration is correct
-
-U. active PRO extension behavior is correct
-
-V. audit log created
-
-W. no secrets in frontend bundle
+JANGAN memindahkan entitlement logic ke client.
 
 ==================================================
-15. SECURITY AUDIT
+6. REMOVE CUSTOMER-SIDE MIDTRANS CALLS
 ==================================================
 
-Run static searches for:
+Customer-facing React code TIDAK BOLEH lagi memanggil:
 
-- plaintext activation codes
-- hardcoded PRO codes
-- sequential code generation
-- Math.random()
-- code_hash exposed to client
-- activation table direct SELECT from frontend
-- direct subscription mutation
-- service role in frontend
-- secret keys in dist
+- Midtrans Snap
+- midtrans subscription checkout
+- midtrans subscription-snap Edge Function
+- endpoint payment creation Midtrans
+
+Search seluruh src/ untuk memastikan.
+
+Expected:
+
+Pricing → Activation Code
+
+bukan:
+
+Pricing → Midtrans
+
+==================================================
+7. DO NOT BLINDLY DELETE LEGACY BACKEND
+==================================================
+
+PENTING:
+
+Jangan langsung menghapus:
+
+supabase/functions/midtrans-notification/
+supabase/functions/midtrans-subscription-snap/
+
+sebelum audit dependency.
+
+Jika endpoint tersebut hanya legacy dan benar-benar tidak digunakan
+oleh flow aktif:
+- tandai sebagai legacy/deprecated
+- jangan hapus database payment history
+- jangan hapus historical subscription payment records
+
+Jika ada dependency aktif:
+- jangan rusak
+- report dependency tersebut
+
+Goal task ini adalah:
+NO ACTIVE CUSTOMER PURCHASE PATH THROUGH MIDTRANS.
+
+Bukan:
+"hapus semua kata Midtrans dari repository."
+
+==================================================
+8. DATABASE / PAYMENT HISTORY
+==================================================
+
+Jangan drop:
+
+subscription_payments
+
+Jangan menghapus historical payment records.
+
+Jangan mengubah subscription schema kecuali benar-benar diperlukan.
+
+Historical Midtrans payment data harus tetap bisa dibaca admin jika
+memang digunakan untuk audit/history.
+
+New subscription activation melalui kode harus menggunakan existing
+subscription/entitlement architecture.
+
+==================================================
+9. ADMIN SIDE
+==================================================
+
+Admin tetap membutuhkan kemampuan:
+
+- melihat subscription
+- memverifikasi pembayaran manual sesuai existing flow
+- membuat/generate activation code
+- melihat activation status
+- melihat audit
+
+Jangan menghilangkan Admin Subscription functionality.
+
+Pastikan admin tidak lagi diarahkan ke Midtrans untuk aktivasi manual.
+
+==================================================
+10. SEARCH FOR DEAD REFERENCES
+==================================================
+
+After implementation:
+
+Search:
+
+grep -Rni "midtrans" src supabase/functions
+
+Classify every remaining occurrence:
+
+1. ACTIVE CUSTOMER CHECKOUT
+2. LEGACY BACKEND
+3. HISTORICAL PAYMENT DATA
+4. DOCUMENTATION
+5. SECURITY/TEST
+6. UNUSED DEAD CODE
+
+There MUST be:
+
+ACTIVE CUSTOMER CHECKOUT = ZERO
+
+Do not require repository-wide Midtrans references to be zero because
+historical/backend compatibility may intentionally remain.
+
+==================================================
+11. TESTS
+==================================================
+
+Create/update focused tests.
+
+A. Pricing:
+
+- Pro card renders Rp130.000
+- no Midtrans checkout UI
+- no "Menghubungkan Midtrans..."
+- activation-code CTA works
+
+B. Activation:
+
+- valid activation code works
+- invalid code rejected
+- expired code rejected
+- used code rejected
+- user cannot alter plan/price
+- duplicate concurrent redemption rejected safely
+
+C. Midtrans:
+
+- pricing page does NOT invoke Midtrans
+- Pro purchase does NOT call Midtrans
+- no customer-side Snap initialization
+- no customer-side midtrans subscription request
+
+D. Existing security:
+
+- entitlement remains server-side
+- normal user cannot grant Pro through client manipulation
+- cross-user activation abuse rejected
+
+==================================================
+12. BUILD
+==================================================
 
 Run:
 
 npm test
-npm run lint
 npm run build
+npm run lint
 
-Also run targeted security tests.
+Run focused activation/subscription/security tests too.
 
-==================================================
-16. SCOPE LOCK
-==================================================
-
-DO NOT modify:
-
-- QRIS merchant-direct ordering
-- merchant_process_order
-- merchant_complete_order
-- POS payment authority
-- order chat
-- QRIS security
-- Admin RBAC foundation
-- existing subscription schema unless strictly required
-- unrelated admin stages
-- Footer/social links
-- Creative Studio
-- inventory
-- financial calculators
-
-Midtrans:
-DO NOT delete generic Midtrans infrastructure until audit confirms which flows still use it.
-
-Only remove/disable the PRO checkout dependency.
+Do NOT fix unrelated legacy test failures in this task.
 
 ==================================================
-17. FINAL REPORT
+13. PRODUCTION BUNDLE CHECK
+==================================================
+
+After build, inspect production bundle for active customer checkout
+references.
+
+It is acceptable for backend legacy strings to exist outside the
+customer bundle.
+
+But the customer pricing bundle must not initialize or invoke Midtrans.
+
+==================================================
+14. SCOPE LOCK
+==================================================
+
+DO NOT:
+
+- change Rp130.000
+- change Rp35.000
+- redesign pricing
+- create another activation system
+- create another subscription system
+- delete subscription_payments
+- delete historical payment records
+- weaken RLS
+- weaken entitlement checks
+- modify admin RBAC
+- modify maintenance mode
+- modify QRIS order/payment security unrelated to subscription purchase
+- add another payment gateway
+- add new database tables unless absolutely required by existing
+  activation architecture
+
+Use the existing activation-code system.
+
+==================================================
+FINAL REPORT
 ==================================================
 
 Report:
 
-1. Existing subscription schema discovered
-2. New migration
-3. New RPC/Edge Function
-4. Code generation entropy
-5. Code storage method
-6. Rate-limit design
-7. Admin UI
-8. User activation UI
-9. Subscription activation behavior
-10. Midtrans PRO flow removed/disabled
-11. Remaining Midtrans flows, if any
-12. Security test count
-13. Brute-force test result
-14. Concurrent redemption result
-15. RLS/IDOR result
-16. npm test result
-17. lint result
-18. build result
-19. git diff/status
+1. MIDTRANS CUSTOMER CHECKOUT — REMOVED/PRESENT
+2. PRO Rp130.000 FLOW — ACTIVATION CODE/PRESENT OTHER FLOW
+3. BASIC Rp35.000 FLOW — ACTUAL CURRENT FLOW
+4. ACTIVATION SYSTEM — PRESERVED/CHANGED
+5. CUSTOMER MIDTRANS REFERENCES — COUNT
+6. LEGACY MIDTRANS BACKEND — WHAT REMAINS AND WHY
+7. HISTORICAL PAYMENT DATA — PRESERVED
+8. SECURITY TESTS
+9. npm test
+10. npm run build
+11. npm run lint
+12. FILES CHANGED
+13. ANY REMAINING LIMITATION
 
-STOP after implementation and verification.
-Do not deploy production secrets.
-Do not create or expose a real production activation code in the report.
+STOP AFTER THIS TASK.

@@ -135,6 +135,70 @@ export async function fetchTargetUrlForSeo({ url, targetKeyword = '' }) {
 }
 
 /**
+ * Normalizes SEO engine errors to eliminate all provider names,
+ * HTTP status codes, and server implementation details from public view.
+ * Guarantees graceful degradation without leaking provider identity.
+ */
+export function normalizeSeoError(rawError, code) {
+  let msg = typeof rawError === 'string' ? rawError : rawError?.message || rawError?.error || ''
+
+  // Eliminate any mentions of third-party providers or internal hostnames
+  msg = msg
+    .replace(/openseo/gi, '')
+    .replace(/dataforseo/gi, '')
+    .replace(/api\.dataforseo\.com/gi, '')
+
+  // Eliminate raw codes, payment messages, numbers
+  msg = msg
+    .replace(/\b(40200|40210|40102|40103|50301)\b/g, '')
+    .replace(/insufficient\s+funds/gi, '')
+    .replace(/payment\s+required/gi, '')
+    .replace(/credit\s+exhausted/gi, '')
+    .replace(/provider\s+exception/gi, '')
+    .replace(/\(HTTP \d+\)/gi, '')
+    .replace(/\(Status \d+\)/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (['PROVIDER_NOT_CONFIGURED', 'PROVIDER_ERROR', 'PROVIDER_UNAVAILABLE', 'INSUFFICIENT_FUNDS', 'PAYMENT_REQUIRED', 'TASK_EXECUTION_FAILED'].includes(code)) {
+    return 'Data pencarian sementara tidak tersedia.'
+  }
+  if (code === 'PROVIDER_TIMEOUT') {
+    return 'Koneksi ke layanan data SEO memakan waktu terlalu lama (timeout). Silakan coba lagi.'
+  }
+  if (code === 'NO_SEARCH_RESULTS') {
+    return 'Data belum tersedia.'
+  }
+  if (code === 'MALFORMED_PROVIDER_RESPONSE') {
+    return 'Format data dari layanan SEO sementara tidak sesuai standar. Silakan coba kembali.'
+  }
+  if (code === 'FETCH_FAILED' && (!msg || msg.includes('Failed to fetch') || msg.includes('Load failed'))) {
+    return 'Koneksi ke layanan analisis SEO terputus. Silakan periksa jaringan Anda.'
+  }
+
+  // Safety net: if message still contains any provider leaks, return clean message
+  if (
+    /openseo|dataforseo|40200|40210|40102|40103|50301|insufficient|payment\s*required|stack/i.test(msg)
+  ) {
+    return 'Data pencarian sementara tidak tersedia.'
+  }
+
+  return msg || 'Data pencarian sementara tidak tersedia.'
+}
+
+const DEGRADED_CODES = [
+  'PROVIDER_NOT_CONFIGURED',
+  'PROVIDER_ERROR',
+  'PROVIDER_UNAVAILABLE',
+  'INSUFFICIENT_FUNDS',
+  'PAYMENT_REQUIRED',
+  'TASK_EXECUTION_FAILED',
+  'PROVIDER_TIMEOUT',
+  'MALFORMED_PROVIDER_RESPONSE',
+  'FETCH_FAILED',
+]
+
+/**
  * Invoke external SEO engine for keyword research.
  * Strictly requires businessId for tenant isolation and server-side IDOR defense.
  *
@@ -175,27 +239,55 @@ export async function fetchSeoKeywordResearch({ businessId, keywords, locationCo
           parsed = await error.context.json()
         }
       } catch {}
+      const code = parsed?.code || 'FETCH_FAILED'
+      const cleanError = normalizeSeoError(parsed?.error || error.message, code)
+      const isDegraded = DEGRADED_CODES.includes(code)
       return {
         ok: false,
-        code: parsed?.code || 'FETCH_FAILED',
-        error: parsed?.error || error.message || 'Gagal memproses riset kata kunci.',
+        code,
+        error: cleanError,
+        message: cleanError,
+        isDegraded,
+        fallback: {
+          available: true,
+          mode: 'on_page_audit',
+          message: 'Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.',
+        },
       }
     }
 
     if (!data || data.ok === false) {
+      const code = data?.code || 'FETCH_FAILED'
+      const cleanError = normalizeSeoError(data?.error || data?.message, code)
+      const isDegraded = DEGRADED_CODES.includes(code)
       return {
         ok: false,
-        code: data?.code || 'FETCH_FAILED',
-        error: data?.error || data?.message || 'Gagal memproses riset kata kunci.',
+        code,
+        error: cleanError,
+        message: cleanError,
+        isDegraded,
+        fallback: data?.fallback || {
+          available: true,
+          mode: 'on_page_audit',
+          message: 'Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.',
+        },
       }
     }
 
-    return data
+    return { ...data, isDegraded: false }
   } catch (err) {
+    const cleanError = normalizeSeoError(err?.message, 'CLIENT_ERROR')
     return {
       ok: false,
       code: 'CLIENT_ERROR',
-      error: err?.message || 'Terjadi kesalahan saat memanggil engine riset kata kunci.',
+      error: cleanError,
+      message: cleanError,
+      isDegraded: true,
+      fallback: {
+        available: true,
+        mode: 'on_page_audit',
+        message: 'Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.',
+      },
     }
   }
 }
@@ -235,27 +327,55 @@ export async function fetchSeoCompetitors({ businessId, targetDomain, keywords =
           parsed = await error.context.json()
         }
       } catch {}
+      const code = parsed?.code || 'FETCH_FAILED'
+      const cleanError = normalizeSeoError(parsed?.error || error.message, code)
+      const isDegraded = DEGRADED_CODES.includes(code)
       return {
         ok: false,
-        code: parsed?.code || 'FETCH_FAILED',
-        error: parsed?.error || error.message || 'Gagal mengambil wawasan kompetitor.',
+        code,
+        error: cleanError,
+        message: cleanError,
+        isDegraded,
+        fallback: {
+          available: true,
+          mode: 'on_page_audit',
+          message: 'Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.',
+        },
       }
     }
 
     if (!data || data.ok === false) {
+      const code = data?.code || 'FETCH_FAILED'
+      const cleanError = normalizeSeoError(data?.error || data?.message, code)
+      const isDegraded = DEGRADED_CODES.includes(code)
       return {
         ok: false,
-        code: data?.code || 'FETCH_FAILED',
-        error: data?.error || data?.message || 'Gagal mengambil wawasan kompetitor.',
+        code,
+        error: cleanError,
+        message: cleanError,
+        isDegraded,
+        fallback: data?.fallback || {
+          available: true,
+          mode: 'on_page_audit',
+          message: 'Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.',
+        },
       }
     }
 
-    return data
+    return { ...data, isDegraded: false }
   } catch (err) {
+    const cleanError = normalizeSeoError(err?.message, 'CLIENT_ERROR')
     return {
       ok: false,
       code: 'CLIENT_ERROR',
-      error: err?.message || 'Terjadi kesalahan saat memanggil wawasan kompetitor.',
+      error: cleanError,
+      message: cleanError,
+      isDegraded: true,
+      fallback: {
+        available: true,
+        mode: 'on_page_audit',
+        message: 'Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.',
+      },
     }
   }
 }
@@ -293,19 +413,55 @@ export async function fetchSeoBacklinks({ businessId, targetDomain }) {
           parsed = await error.context.json()
         }
       } catch {}
+      const code = parsed?.code || 'FETCH_FAILED'
+      const cleanError = normalizeSeoError(parsed?.error || error.message, code)
+      const isDegraded = DEGRADED_CODES.includes(code)
       return {
         ok: false,
-        code: parsed?.code || 'FETCH_FAILED',
-        error: parsed?.error || error.message || 'Gagal mengambil profil backlink.',
+        code,
+        error: cleanError,
+        message: cleanError,
+        isDegraded,
+        fallback: {
+          available: true,
+          mode: 'on_page_audit',
+          message: 'Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.',
+        },
       }
     }
 
-    return data || { ok: false, code: 'EMPTY_RESPONSE', error: 'Tidak ada data backlink.' }
+    if (!data || data.ok === false) {
+      const code = data?.code || 'FETCH_FAILED'
+      const cleanError = normalizeSeoError(data?.error || data?.message, code)
+      const isDegraded = DEGRADED_CODES.includes(code)
+      return {
+        ok: false,
+        code,
+        error: cleanError,
+        message: cleanError,
+        isDegraded,
+        fallback: data?.fallback || {
+          available: true,
+          mode: 'on_page_audit',
+          message: 'Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.',
+        },
+      }
+    }
+
+    return { ...data, isDegraded: false }
   } catch (err) {
+    const cleanError = normalizeSeoError(err?.message, 'CLIENT_ERROR')
     return {
       ok: false,
       code: 'CLIENT_ERROR',
-      error: err?.message || 'Terjadi kesalahan saat memanggil ringkasan backlink.',
+      error: cleanError,
+      message: cleanError,
+      isDegraded: true,
+      fallback: {
+        available: true,
+        mode: 'on_page_audit',
+        message: 'Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.',
+      },
     }
   }
 }

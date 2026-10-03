@@ -28,6 +28,7 @@ const CATEGORY_TABS = [
 export default function AllToolsPage() {
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState('all')
+  const [tierFilter, setTierFilter] = useState('all')
   const q = search.toLowerCase().trim()
 
   const categoriesToDisplay = activeCategory === 'all'
@@ -37,7 +38,13 @@ export default function AllToolsPage() {
   const filtered = categoriesToDisplay
     .map((cat) => ({
       ...cat,
-      tools: cat.tools.filter((t) => t.name.toLowerCase().includes(q)),
+      tools: cat.tools.filter((t) => {
+        const matchesQuery = t.name.toLowerCase().includes(q)
+        if (!matchesQuery) return false
+        if (tierFilter === 'basic') return t.tier === 'basic'
+        if (tierFilter === 'pro') return t.tier === 'pro' || t.requiresPro
+        return true
+      }),
     }))
     .filter((cat) => cat.tools.length > 0)
 
@@ -62,37 +69,64 @@ export default function AllToolsPage() {
         </div>
 
         {/* Search and Category Filter Controls */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
-          {/* Search Bar */}
-          <div className="relative w-full sm:max-w-xs">
-            <svg
-              className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
-              />
-            </svg>
-            <input
-              type="text"
-              placeholder={`Cari dari ${TOTAL_TOOLS} tools...`}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-lg border border-[#222C3E] bg-[#151D2C] py-2 pl-9 pr-8 text-xs sm:text-sm text-[#F8FAFC] placeholder:text-slate-500 focus:border-[#818CF8] focus:outline-none focus:ring-1 focus:ring-[#818CF8]/40 transition-all"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="absolute top-1/2 right-2.5 -translate-y-1/2 text-xs font-mono text-slate-400 hover:text-white"
+        <div className="flex flex-col gap-3 pt-1">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            {/* Search Bar */}
+            <div className="relative w-full sm:max-w-xs">
+              <svg
+                className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
               >
-                &times;
-              </button>
-            )}
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                />
+              </svg>
+              <input
+                type="text"
+                placeholder={`Cari dari ${TOTAL_TOOLS} tools...`}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-lg border border-[#222C3E] bg-[#151D2C] py-2 pl-9 pr-8 text-xs sm:text-sm text-[#F8FAFC] placeholder:text-slate-500 focus:border-[#818CF8] focus:outline-none focus:ring-1 focus:ring-[#818CF8]/40 transition-all"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute top-1/2 right-2.5 -translate-y-1/2 text-xs font-mono text-slate-400 hover:text-white"
+                >
+                  &times;
+                </button>
+              )}
+            </div>
+
+            {/* Tier Filter Pills */}
+            <div className="flex items-center gap-1.5 self-start sm:self-auto text-xs">
+              <span className="text-[11px] font-mono text-slate-500 mr-0.5">Tier:</span>
+              {[
+                { id: 'all', label: 'Semua' },
+                { id: 'basic', label: 'Basic • Rp35K', activeClass: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
+                { id: 'pro', label: 'Pro • Rp130K', activeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
+              ].map((tier) => {
+                const isSelected = tierFilter === tier.id
+                return (
+                  <button
+                    key={tier.id}
+                    onClick={() => setTierFilter(tier.id)}
+                    className={`inline-flex items-center rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                      isSelected
+                        ? tier.activeClass || 'bg-[#1E293B] text-white border-[#222C3E] shadow-xs'
+                        : 'border-transparent text-slate-400 hover:text-white hover:bg-[#151D2C]'
+                    }`}
+                  >
+                    {tier.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           {/* Category Filter Tabs */}
@@ -170,6 +204,7 @@ export default function AllToolsPage() {
             onClick={() => {
               setSearch('')
               setActiveCategory('all')
+              setTierFilter('all')
             }}
             className="mt-4 inline-flex items-center rounded-lg border border-[#222C3E] bg-[#1E293B] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#222C3E] transition-colors"
           >

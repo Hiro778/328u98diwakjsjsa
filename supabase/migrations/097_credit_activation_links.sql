@@ -161,7 +161,11 @@ BEGIN
   v_expires_at := now() + interval '24 hours';
 
   -- 6. Generate 256-bit cryptographically secure random token (32 bytes = 256 bits)
-  v_random_bytes := public.gen_random_bytes(32);
+  BEGIN
+    v_random_bytes := extensions.gen_random_bytes(32);
+  EXCEPTION WHEN OTHERS THEN
+    v_random_bytes := public.gen_random_bytes(32);
+  END;
   v_token := encode(v_random_bytes, 'hex'); -- 64 hex chars opaque token
 
   -- 7. SHA-256 Hash for storage

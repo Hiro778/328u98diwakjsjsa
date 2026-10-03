@@ -12,20 +12,22 @@ export async function isProUser(userId: string): Promise<boolean> {
   if (!userId) return false;
 
   try {
-    const { data: sub, error } = await supabaseAdmin
+    const { data: subs, error } = await supabaseAdmin
       .from("subscriptions")
       .select("id, status, plan, expires_at, is_cancelled")
       .eq("profile_id", userId)
       .eq("plan", "pro")
       .eq("status", "active")
       .gt("expires_at", new Date().toISOString())
-      .limit(1)
-      .maybeSingle();
+      .order("expires_at", { ascending: false });
 
-    if (error || !sub || (sub as any).is_cancelled === true) {
+    if (error || !subs || subs.length === 0) {
       return false;
     }
-    return true;
+    const activeUncancelled = subs.find(
+      (s: any) => s.is_cancelled === false || s.is_cancelled === null
+    );
+    return Boolean(activeUncancelled);
   } catch (err) {
     console.error("[entitlement] Error checking user Pro status:", err);
     return false;

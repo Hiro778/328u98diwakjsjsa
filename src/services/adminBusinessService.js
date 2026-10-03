@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '../lib/supabase.js'
+import { resolveCanonicalSubscription } from '../lib/subscriptionUtils.js'
 
 /**
  * Normalizes raw PostgreSQL / PostgREST errors into clean, safe user messages.
@@ -100,7 +101,15 @@ export async function fetchAdminBusinesses({
     ])
 
     const profileMap = new Map((profilesRes.data || []).map((p) => [p.id, p]))
-    const subMap = new Map((subsRes.data || []).map((s) => [s.profile_id, s]))
+    const subListByProfile = new Map()
+    for (const s of subsRes.data || []) {
+      if (!subListByProfile.has(s.profile_id)) subListByProfile.set(s.profile_id, [])
+      subListByProfile.get(s.profile_id).push(s)
+    }
+    const subMap = new Map()
+    for (const [profId, list] of subListByProfile.entries()) {
+      subMap.set(profId, resolveCanonicalSubscription(list))
+    }
     const creditMap = new Map((creditsRes.data || []).map((c) => [c.business_id, c]))
 
     const prodCountMap = new Map()
@@ -202,12 +211,12 @@ export async function fetchAdminBusinessDetail(businessId) {
     const b = bRes.data
     const [ownerRes, subRes, ticketsRes] = await Promise.all([
       b.owner_id ? supabase.from('profiles').select('*').eq('id', b.owner_id).single() : { data: null },
-      b.owner_id ? supabase.from('subscriptions').select('*').eq('profile_id', b.owner_id).order('created_at', { ascending: false }).limit(1) : { data: [] },
+      b.owner_id ? supabase.from('subscriptions').select('*').eq('profile_id', b.owner_id) : { data: [] },
       supabase.from('support_tickets').select('id, status').or(`business_id.eq.${businessId},user_id.eq.${b.owner_id}`),
     ])
 
     const owner = ownerRes.data
-    const sub = subRes.data?.[0] || null
+    const sub = resolveCanonicalSubscription(subRes.data)
     const tickets = ticketsRes.data || []
 
     return {

@@ -159,10 +159,10 @@ export function parseOperationalText(rawText) {
   if (/^\/(?:hai|help|menu)$/i.test(lower)) {
     return { intent: OPERATIONAL_INTENTS.SHOW_GREETING, source: 'rule_based', data: {}, rawText };
   }
-  if (/^(?:gunakan\s+ai|1|🤖\s*gunakan\s+ai)$/i.test(lower)) {
+  if (/^(?:(?:\/)?ai|gunakan\s+ai|ai\s+bisnissehat|1|🤖\s*ai\s*bisnissehat|🤖\s*gunakan\s+ai)$/i.test(lower)) {
     return { intent: OPERATIONAL_INTENTS.SELECT_AI_MODE, source: 'rule_based', data: {}, rawText };
   }
-  if (/^(?:gunakan\s+formulir|2|📋\s*gunakan\s+formulir)$/i.test(lower)) {
+  if (/^(?:(?:\/)?form|gunakan\s+formulir|2|📋\s*formulir\s*operasional|📋\s*gunakan\s+formulir)$/i.test(lower)) {
     return { intent: OPERATIONAL_INTENTS.SELECT_FORM_MODE, source: 'rule_based', data: {}, rawText };
   }
   const mutation = parseExplicitMutation(text, lower);

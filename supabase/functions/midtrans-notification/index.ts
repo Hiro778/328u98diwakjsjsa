@@ -4,7 +4,8 @@
 // POST body: Midtrans notification payload
 // Verifies signature using MIDTRANS_SERVER_KEY via SHA-512.
 // Idempotent — safe for duplicate notifications.
-// Handles both QR Menu order payments and BisnisSehat Pro subscription payments.
+// Handles QR Menu order payments, Credit top-ups, and legacy subscription webhook notifications.
+// (Note: New customer subscription flow uses manual payment + activation code).
 // Subscription payments are identified by midtrans_order_id starting with "SUB-".
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -246,6 +247,9 @@ Deno.serve(async (req) => {
           .update({
             status: "active",
             plan: activatedPlan,
+            is_cancelled: false,
+            cancelled_at: null,
+            cancellation_reason: null,
             started_at: period_start.toISOString(),
             expires_at: period_end.toISOString(),
             payment_provider: "midtrans",

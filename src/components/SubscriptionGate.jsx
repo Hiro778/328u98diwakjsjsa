@@ -73,17 +73,21 @@ export default function SubscriptionGate({ featureName = 'Fitur ini', requiredPl
         </div>
 
         <h2 className="mt-4 text-xl font-extrabold text-text-primary">
-          {featureName} {isBasicReq ? 'Memerlukan Langganan Aktif' : 'Memerlukan BisnisSehat Pro'}
+          {featureName && !featureName.toLowerCase().includes('fitur')
+            ? `${featureName} Memerlukan ${isBasicReq ? 'Paket Basic' : 'BisnisSehat Pro'}`
+            : isBasicReq
+            ? 'Akses Tool Ini Memerlukan Paket Basic'
+            : 'Fitur Ini Memerlukan BisnisSehat Pro'}
         </h2>
 
         <p className="mt-2 text-sm text-text-secondary leading-relaxed">
           {hasExpiredSubscription
             ? 'Masa aktif langganan kamu telah berakhir. Perpanjang sekarang untuk terus menikmati akses tanpa batas.'
             : isBasicReq
-            ? 'Akses kumpulan tools bisnis kalkulasi mandiri dengan paket Basic (Rp35.000/bulan) atau paket lengkap Pro (Rp130.000/bulan).'
+            ? 'Akses tools bisnis mandiri (HPP, BEP, Tax Planning, Loan Simulation, Cash Flow, Kurs & AI Studio) dengan paket Basic seharga Rp35.000 / bulan atau paket lengkap Pro Rp130.000 / bulan.'
             : isBasic
             ? 'Fitur ini membutuhkan koneksi database bisnis, POS kasir, atau modul AI yang tersedia di paket Pro seharga Rp130.000 / bulan.'
-            : 'Upgrade ke BisnisSehat Pro seharga Rp130.000 / bulan untuk membuka akses penuh ke analisis, tools ekspor, AI insights, dan manajemen bisnis lanjutan.'}
+            : 'Upgrade ke BisnisSehat Pro seharga Rp130.000 / bulan untuk membuka akses penuh ke analisis, POS kasir, 15.000 AI credits/bulan, dan modul bisnis lanjutan.'}
         </p>
 
         {/* Feature checklist */}
@@ -92,13 +96,13 @@ export default function SubscriptionGate({ featureName = 'Fitur ini', requiredPl
             <svg className="h-4 w-4 text-profit-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
-            <span>{isBasicReq ? 'Akses tools kalkulasi mandiri (HPP, BEP, Ads, SEO, Kurs)' : 'Semua tools bisnis, POS kasir & AI tanpa batas'}</span>
+            <span>{isBasicReq ? 'Akses tools kalkulasi mandiri (HPP, BEP, Tax, Loan, Cash Flow, Kurs, AI Studio)' : 'Semua tools bisnis, POS kasir & 15.000 kredit AI per bulan'}</span>
           </div>
           <div className="flex items-center gap-2">
             <svg className="h-4 w-4 text-profit-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
-            <span>Sistem pembayaran resmi & aman via Midtrans</span>
+            <span>Sistem aktivasi resmi & terverifikasi aman</span>
           </div>
           <div className="flex items-center gap-2">
             <svg className="h-4 w-4 text-profit-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>

@@ -51,12 +51,20 @@ describe('Open-Generative-AI Integration Security Suite (Phase 12 - @phase12.md)
         enable_ai_features: true,
       },
       ledger: {},
+      ai_usage: [],
     };
 
     let providerCallCount = 0;
     let providerFailSimulate = false;
 
-    async function simulateVideoEdgeFunction({ authHeader, body, providerFail = false }) {
+    async function simulateVideoEdgeFunction({
+      authHeader,
+      body,
+      providerFail = false,
+      providerTimeout = false,
+      providerStatus = 200,
+      providerMalformed = false,
+    }) {
       // 1. Verify JWT
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return { status: 401, error: 'UNAUTHENTICATED: Sesi tidak valid atau telah berakhir.', providerCallCount };
@@ -64,11 +72,11 @@ describe('Open-Generative-AI Integration Security Suite (Phase 12 - @phase12.md)
       const token = authHeader.replace('Bearer ', '');
       const userId = mockDb.tokens[token];
       if (!userId) {
-        return { status: 401, error: 'UNAUTHENTICATED: Invalid token', providerCallCount };
+        return { status: 401, error: 'UNAUTHENTICATED: Invalid token or expired session', providerCallCount };
       }
       const user = mockDb.users[userId];
       if (!user || user.status !== 'active') {
-        return { status: 401, error: 'UNAUTHENTICATED: Account not active', providerCallCount };
+        return { status: 401, error: 'UNAUTHENTICATED: Account not active or banned', providerCallCount };
       }
 
       // Zero-trust identity: resolved from token, NOT from body
@@ -132,9 +140,25 @@ describe('Open-Generative-AI Integration Security Suite (Phase 12 - @phase12.md)
         return { status: 200, success: true, already_processed: true, providerCallCount };
       }
 
-      // 7. Provider Call
-      if (providerFail || providerFailSimulate) {
+      // 7. Provider Call & Fault Tolerance (Timeout, 4xx, 5xx, Malformed)
+      if (providerTimeout) {
+        return { status: 504, error: 'PROVIDER_TIMEOUT: Permintaan generate video ke engine melampaui batas waktu 30 detik.', providerCallCount: providerCallCount + 1 };
+      }
+
+      if (providerStatus === 429) {
+        return { status: 429, error: 'PROVIDER_RATE_LIMITED: Batas panggilan Open-Generative-AI terlampaui.', providerCallCount: providerCallCount + 1 };
+      }
+
+      if (providerStatus >= 400 && providerStatus < 500) {
+        return { status: 400, error: 'PROVIDER_CLIENT_ERROR: Parameter atau request ditolak oleh engine.', providerCallCount: providerCallCount + 1 };
+      }
+
+      if (providerStatus >= 500 || providerFail || providerFailSimulate) {
         return { status: 502, error: 'PROVIDER_ERROR: Open-Generative-AI failure', providerCallCount: providerCallCount + 1 };
+      }
+
+      if (providerMalformed) {
+        return { status: 502, error: 'PROVIDER_ERROR: Engine Open-Generative-AI tidak mengembalikan task ID yang valid.', providerCallCount: providerCallCount + 1 };
       }
 
       providerCallCount++;
@@ -144,10 +168,25 @@ describe('Open-Generative-AI Integration Security Suite (Phase 12 - @phase12.md)
       bizCredits.consumed += requiredCredits;
       mockDb.ledger[reqId] = { credits_charged: requiredCredits, timestamp: Date.now() };
 
+      // 9. Telemetry usage recording
+      mockDb.ai_usage.push({
+        business_id: resolvedBusinessId,
+        profile_id: resolvedUserId,
+        operation: 'GENERATE_VIDEO',
+        model: requestedModel,
+        credits_charged: requiredCredits,
+        status: 'processing',
+        request_id: reqId,
+      });
+
       return {
         status: 200,
         success: true,
         taskId: `task-${Date.now()}`,
+        generationId: `gen-${Date.now()}`,
+        assetId: `asset-${Date.now()}`,
+        provider: 'open-generative-ai',
+        model: requestedModel,
         credits_charged: requiredCredits,
         remaining_credits: bizCredits.available,
         providerCallCount,
@@ -424,6 +463,239 @@ describe('Open-Generative-AI Integration Security Suite (Phase 12 - @phase12.md)
       assert.ok(creativeStudioPageSource.includes('videoResult'), 'Must track videoResult state');
       assert.ok(creativeStudioPageSource.includes('Top Up Kredit'), 'Must offer top up credit link on insufficient balance');
       assert.ok(creativeStudioPageSource.includes('Upgrade ke Pro'), 'Must offer upgrade link when user is not Pro');
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // SECTION 3: STEP 2 AUDIT & HARDENING 17 SECURITY TESTS (@gene.md line 219-238)
+  // ═════════════════════════════════════════════════════════════════════════
+  describe('gene.md 17 Authoritative Security Scenarios', () => {
+    test('1. unauthenticated request rejected', async () => {
+      const { simulateVideoEdgeFunction } = createMockEnvironment();
+      const res = await simulateVideoEdgeFunction({ authHeader: null, body: { prompt: 'video prompt' } });
+      assert.equal(res.status, 401);
+      assert.match(res.error, /UNAUTHENTICATED/);
+    });
+
+    test('2. invalid session rejected', async () => {
+      const { simulateVideoEdgeFunction } = createMockEnvironment();
+      const resMalformed = await simulateVideoEdgeFunction({ authHeader: 'Bearer non-existent-token', body: { prompt: 'video prompt' } });
+      assert.equal(resMalformed.status, 401);
+      assert.match(resMalformed.error, /UNAUTHENTICATED/);
+
+      const resBanned = await simulateVideoEdgeFunction({ authHeader: 'Bearer token-banned', body: { prompt: 'video prompt' } });
+      assert.equal(resBanned.status, 401);
+      assert.match(resBanned.error, /UNAUTHENTICATED/);
+    });
+
+    test('3. cross-business business_id rejected', async () => {
+      const { simulateVideoEdgeFunction } = createMockEnvironment();
+      const res = await simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'video hijack', business_id: 'biz-victim' },
+      });
+      assert.equal(res.status, 403);
+      assert.match(res.error, /ACCESS_DENIED/);
+    });
+
+    test('4. missing entitlement rejected', async () => {
+      const { simulateVideoEdgeFunction } = createMockEnvironment();
+      // Free user
+      const resFree = await simulateVideoEdgeFunction({ authHeader: 'Bearer token-free', body: { prompt: 'v' } });
+      assert.equal(resFree.status, 403);
+      assert.match(resFree.error, /PRO_REQUIRED/);
+
+      // Basic user
+      const resBasic = await simulateVideoEdgeFunction({ authHeader: 'Bearer token-basic', body: { prompt: 'v' } });
+      assert.equal(resBasic.status, 403);
+      assert.match(resBasic.error, /PRO_REQUIRED/);
+
+      // Expired Pro
+      const resExpired = await simulateVideoEdgeFunction({ authHeader: 'Bearer token-expired', body: { prompt: 'v' } });
+      assert.equal(resExpired.status, 403);
+      assert.match(resExpired.error, /PRO_REQUIRED/);
+
+      // Cancelled Pro
+      const resCancelled = await simulateVideoEdgeFunction({ authHeader: 'Bearer token-cancelled', body: { prompt: 'v' } });
+      assert.equal(resCancelled.status, 403);
+      assert.match(resCancelled.error, /PRO_REQUIRED/);
+    });
+
+    test('5. AI feature disabled rejected', async () => {
+      const env = createMockEnvironment();
+      env.mockDb.platform_settings.enable_ai_features = false;
+      const res = await env.simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'generate when disabled' },
+      });
+      assert.equal(res.status, 403);
+      assert.match(res.error, /FEATURE_DISABLED/);
+      assert.equal(env.getProviderCallCount(), 0);
+    });
+
+    test('6. insufficient credits rejected', async () => {
+      const env = createMockEnvironment();
+      env.mockDb.users['user-pro'].businessId = 'biz-low-credit';
+      const res = await env.simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'generate without enough credits' },
+      });
+      assert.equal(res.status, 400);
+      assert.match(res.error, /INSUFFICIENT_CREDITS/);
+      assert.equal(env.getProviderCallCount(), 0);
+    });
+
+    test('7. malformed provider response handled', async () => {
+      const env = createMockEnvironment();
+      const res = await env.simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'generate malformed response' },
+        providerMalformed: true,
+      });
+      assert.equal(res.status, 502);
+      assert.match(res.error, /PROVIDER_ERROR/);
+      assert.equal(env.mockDb.credits['biz-pro'].available, 100, 'Credits must not be deducted on malformed response');
+    });
+
+    test('8. provider timeout handled', async () => {
+      const env = createMockEnvironment();
+      const res = await env.simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'generate timeout' },
+        providerTimeout: true,
+      });
+      assert.equal(res.status, 504);
+      assert.match(res.error, /PROVIDER_TIMEOUT/);
+      assert.equal(env.mockDb.credits['biz-pro'].available, 100, 'Credits must not be deducted on timeout');
+    });
+
+    test('9. provider 4xx handled', async () => {
+      const env = createMockEnvironment();
+      const resRateLimit = await env.simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'generate rate limit' },
+        providerStatus: 429,
+      });
+      assert.equal(resRateLimit.status, 429);
+      assert.match(resRateLimit.error, /PROVIDER_RATE_LIMITED/);
+      assert.equal(env.mockDb.credits['biz-pro'].available, 100);
+
+      const resClientErr = await env.simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'generate client error' },
+        providerStatus: 400,
+      });
+      assert.equal(resClientErr.status, 400);
+      assert.match(resClientErr.error, /PROVIDER_CLIENT_ERROR/);
+      assert.equal(env.mockDb.credits['biz-pro'].available, 100);
+    });
+
+    test('10. provider 5xx handled', async () => {
+      const env = createMockEnvironment();
+      const res = await env.simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'generate server error' },
+        providerStatus: 503,
+      });
+      assert.equal(res.status, 502);
+      assert.match(res.error, /PROVIDER_ERROR/);
+      assert.equal(env.mockDb.credits['biz-pro'].available, 100);
+    });
+
+    test('11. provider secret never returned to client', async () => {
+      const env = createMockEnvironment();
+      const res = await env.simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'generate secret check' },
+      });
+      assert.equal(res.status, 200);
+      const resStr = JSON.stringify(res);
+      assert.ok(!resStr.includes('OPEN_GENERATIVE_AI_API_KEY'));
+      assert.ok(!resStr.includes('ATLAS_API_KEY'));
+      assert.ok(!resStr.includes('MUAPI'));
+      assert.equal(res.apiKey, undefined);
+      assert.equal(res.secret, undefined);
+    });
+
+    test('12. service-role key never returned', async () => {
+      const env = createMockEnvironment();
+      const res = await env.simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'generate service role check' },
+      });
+      assert.equal(res.status, 200);
+      const resStr = JSON.stringify(res);
+      assert.ok(!resStr.includes('service_role'));
+      assert.ok(!resStr.includes('SUPABASE_SERVICE_ROLE_KEY'));
+      assert.equal(res.service_role_key, undefined);
+      assert.equal(res.supabaseAdmin, undefined);
+    });
+
+    test('13. client cannot choose arbitrary credit amount', async () => {
+      const env = createMockEnvironment();
+      const res = await env.simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'arbitrary credit bypass', credits_to_deduct: 1, amount: 0 },
+      });
+      assert.equal(res.status, 200);
+      assert.equal(res.credits_charged, 20, 'Cost must strictly be server-authoritative 20 credits');
+    });
+
+    test('14. client cannot choose arbitrary business', async () => {
+      const env = createMockEnvironment();
+      const res = await env.simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'arbitrary business spoofing', business_id: 'biz-victim' },
+      });
+      assert.equal(res.status, 403);
+      assert.match(res.error, /ACCESS_DENIED/);
+    });
+
+    test('15. duplicate request does not double-charge', async () => {
+      const env = createMockEnvironment();
+      const duplicateRequestId = 'req-gene-idempotency-999';
+      const call1 = await env.simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'first call', request_id: duplicateRequestId },
+      });
+      assert.equal(call1.status, 200);
+      assert.equal(call1.credits_charged, 20);
+
+      const call2 = await env.simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'retry call', request_id: duplicateRequestId },
+      });
+      assert.equal(call2.status, 200);
+      assert.equal(call2.already_processed, true);
+      assert.equal(env.mockDb.credits['biz-pro'].available, 80, 'Credits must not be double deducted on retry');
+    });
+
+    test('16. failed generation does not incorrectly consume credits', async () => {
+      const env = createMockEnvironment();
+      const initialCredits = env.mockDb.credits['biz-pro'].available;
+      const res = await env.simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'fail generation' },
+        providerFail: true,
+      });
+      assert.equal(res.status, 502);
+      assert.equal(env.mockDb.credits['biz-pro'].available, initialCredits);
+    });
+
+    test('17. successful generation records usage correctly', async () => {
+      const env = createMockEnvironment();
+      const res = await env.simulateVideoEdgeFunction({
+        authHeader: 'Bearer token-pro',
+        body: { prompt: 'successful generation', request_id: 'req-audit-usage-1' },
+      });
+      assert.equal(res.status, 200);
+      assert.equal(env.mockDb.ai_usage.length, 1);
+      const usage = env.mockDb.ai_usage[0];
+      assert.equal(usage.operation, 'GENERATE_VIDEO');
+      assert.equal(usage.business_id, 'biz-pro');
+      assert.equal(usage.profile_id, 'user-pro');
+      assert.equal(usage.credits_charged, 20);
+      assert.equal(usage.request_id, 'req-audit-usage-1');
     });
   });
 });

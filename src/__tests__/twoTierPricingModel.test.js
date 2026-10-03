@@ -54,10 +54,11 @@ describe('Phase 11: Two-Tier Pricing Model & Entitlement Verification (gas.md)',
     const basicToolNames = [
       'HPP Calculator',
       'BEP Calculator',
+      'Tax Planning',
       'Loan Simulation',
-      'Ads',
-      'SEO Optimizer',
-      'Content Calendar',
+      'Cash Flow Forecast',
+      'Kurs',
+      'AI Creative Studio',
     ]
 
     for (const name of basicToolNames) {
@@ -93,7 +94,9 @@ describe('Phase 11: Two-Tier Pricing Model & Entitlement Verification (gas.md)',
       'Margin Analysis',
       'Customer CRM',
       'Legalitas Checker',
-      'AI Creative Studio',
+      'Ads',
+      'SEO Optimizer',
+      'Content Calendar',
       'Real-time Dashboard',
     ]
 
@@ -127,7 +130,7 @@ describe('Phase 11: Two-Tier Pricing Model & Entitlement Verification (gas.md)',
     assert.equal(proEntitlement.plan, 'pro')
 
     // Pro users get all basic tools
-    const basicToolNames = ['HPP Calculator', 'BEP Calculator', 'Loan Simulation', 'Ads', 'SEO Optimizer']
+    const basicToolNames = ['HPP Calculator', 'BEP Calculator', 'Tax Planning', 'Loan Simulation', 'Cash Flow Forecast', 'Kurs']
     for (const name of basicToolNames) {
       const tool = findTool(name)
       assert.ok(tool, `Tool ${name} must exist`)
@@ -321,7 +324,7 @@ describe('Phase 11: Two-Tier Pricing Model & Entitlement Verification (gas.md)',
     assert.ok(proSection.includes("path: 'operasional/inventory'"), 'Inventory route must be inside requiredPlan="pro"')
     assert.ok(proSection.includes("path: 'keuangan/financial-reports'"), 'Financial Reports must be inside requiredPlan="pro"')
     assert.ok(proSection.includes("path: 'penjualan/customer-crm'"), 'CRM route must be inside requiredPlan="pro"')
-    assert.ok(proSection.includes("path: 'marketing/content-generator'"), 'Creative Studio route must be inside requiredPlan="pro"')
+    assert.ok(proSection.includes("path: 'marketing/ads'"), 'Ads route must be inside requiredPlan="pro"')
     assert.ok(proSection.includes("path: 'legalitas'"), 'Legalitas route must be inside requiredPlan="pro"')
   })
 

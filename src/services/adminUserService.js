@@ -7,6 +7,7 @@
  */
 
 import { supabase } from '../lib/supabase.js'
+import { resolveCanonicalSubscription } from '../lib/subscriptionUtils.js'
 
 /**
  * Normalizes raw PostgreSQL / PostgREST errors into clean, safe user messages.
@@ -103,7 +104,15 @@ export async function fetchAdminUsers({
         primaryBizMap.set(b.owner_id, b)
       }
     }
-    const subMap = new Map((subRes.data || []).map((s) => [s.profile_id, s]))
+    const subListByProfile = new Map()
+    for (const s of subRes.data || []) {
+      if (!subListByProfile.has(s.profile_id)) subListByProfile.set(s.profile_id, [])
+      subListByProfile.get(s.profile_id).push(s)
+    }
+    const subMap = new Map()
+    for (const [profId, list] of subListByProfile.entries()) {
+      subMap.set(profId, resolveCanonicalSubscription(list))
+    }
 
     const users = (profiles || []).map((p) => {
       const biz = primaryBizMap.get(p.id)
@@ -171,7 +180,7 @@ export async function fetchAdminUserDetail(userId) {
     const [pRes, bRes, sRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).single(),
       supabase.from('businesses').select('*').eq('owner_id', userId).order('created_at', { ascending: false }),
-      supabase.from('subscriptions').select('*').eq('profile_id', userId).order('created_at', { ascending: false }).limit(1),
+      supabase.from('subscriptions').select('*').eq('profile_id', userId),
     ])
 
     if (pRes.error || !pRes.data) {
@@ -189,7 +198,7 @@ export async function fetchAdminUserDetail(userId) {
       created_at: b.created_at,
     }))
     const primaryBiz = allBiz[0] || null
-    const s = sRes.data?.[0] || null
+    const s = resolveCanonicalSubscription(sRes.data)
 
     return {
       detail: {

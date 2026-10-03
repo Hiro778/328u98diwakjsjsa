@@ -104,13 +104,13 @@ export const GENERAL_GUIDES = [
     id: 'guide-upgrade-pro',
     category: 'account',
     title: 'Bagaimana cara upgrade ke BisnisSehat Pro?',
-    keywords: ['upgrade', 'pro', 'langganan', 'bayar pro', 'pricing', 'midtrans'],
-    summary: 'Langkah berlangganan BisnisSehat Pro dengan pembayaran instan.',
+    keywords: ['upgrade', 'pro', 'langganan', 'bayar pro', 'pricing', 'kode aktivasi'],
+    summary: 'Langkah berlangganan BisnisSehat Pro dengan kode aktivasi resmi.',
     content: `1. Klik kartu **Upgrade Pro** di sidebar navigasi atau kunjungi halaman **/pricing**.
-2. Pilih durasi langganan BisnisSehat Pro (Rp130.000 / bulan).
-3. Klik tombol **Pilih Paket Pro** untuk membuka popup pembayaran Midtrans Snap.
-4. Pilih metode pembayaran favorit Anda: QRIS (GoPay, OVO, ShopeePay, BCA QRIS), Virtual Account Bank, atau Kartu Kredit/Debit.
-5. Selesaikan pembayaran. Akun Anda seketika aktif menjadi BisnisSehat Pro dan seluruh 30+ tools langsung terbuka otomatis.`,
+2. Pilih paket BisnisSehat Pro (Rp130.000 / bulan).
+3. Lakukan pembayaran manual kepada owner/admin dan tunggu verifikasi untuk mendapatkan kode aktivasi resmi.
+4. Masukkan kode aktivasi pada form aktivasi di halaman /pricing.
+5. Akun Anda seketika aktif menjadi BisnisSehat Pro dan seluruh 30+ tools langsung terbuka otomatis.`,
   },
   {
     id: 'guide-troubleshoot-locked',

@@ -201,11 +201,38 @@ function validateDomain(rawDomain: any): { valid: boolean; domain?: string; code
 }
 
 /**
+ * Safe server-side structured error logger for SEO provider diagnostics.
+ * Strictly avoids logging API keys, tokens, passwords, or sensitive payloads.
+ */
+function logProviderError(details: {
+  provider: string;
+  endpoint: string;
+  category: string;
+  statusCode?: number | string;
+  correlationId: string;
+  action: string;
+}) {
+  console.warn(
+    JSON.stringify({
+      log_type: "seo_provider_error",
+      provider: details.provider,
+      endpoint: details.endpoint,
+      category: details.category,
+      statusCode: details.statusCode,
+      correlationId: details.correlationId,
+      action: details.action,
+      timestamp: new Date().toISOString(),
+    })
+  );
+}
+
+/**
  * Execute Keyword Research via OpenSEO service or direct DataForSEO provider.
  */
 async function executeKeywordResearch(
   config: ExternalProviderConfig,
   keywords: string[],
+  correlationId: string,
   locationCode = 2360,
   languageCode = "id"
 ) {
@@ -232,23 +259,90 @@ async function executeKeywordResearch(
 
       // SSRF defense: Disallow redirects
       if (response.status >= 300 && response.status < 400) {
-        return { ok: false, code: "SSRF_REJECTED", error: "Pengalihan (redirect) engine OpenSEO ditolak untuk mencegah SSRF." };
+        logProviderError({
+          provider: "openseo",
+          endpoint: "api/keywords/research",
+          category: "SSRF_REJECTED",
+          statusCode: response.status,
+          correlationId,
+          action: "keyword-research",
+        });
+        return { ok: false, code: "SSRF_REJECTED", error: "Pengalihan (redirect) layanan SEO ditolak untuk mencegah SSRF." };
       }
 
       if (!response.ok) {
-        return { ok: false, code: "PROVIDER_ERROR", error: `Engine OpenSEO mengembalikan respon error (HTTP ${response.status}).` };
+        const category = response.status === 402 ? "INSUFFICIENT_FUNDS" : "HTTP_ERROR";
+        logProviderError({
+          provider: "openseo",
+          endpoint: "api/keywords/research",
+          category,
+          statusCode: response.status,
+          correlationId,
+          action: "keyword-research",
+        });
+        return {
+          ok: false,
+          code: "PROVIDER_UNAVAILABLE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          data: null,
+          error: "Data pencarian sementara tidak tersedia.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
       }
 
       let json: any;
       try {
         json = await response.json();
       } catch {
-        return { ok: false, code: "MALFORMED_PROVIDER_RESPONSE", error: "Format respon dari engine OpenSEO tidak valid (bukan JSON)." };
+        logProviderError({
+          provider: "openseo",
+          endpoint: "api/keywords/research",
+          category: "MALFORMED_PROVIDER_RESPONSE",
+          correlationId,
+          action: "keyword-research",
+        });
+        return {
+          ok: false,
+          code: "MALFORMED_PROVIDER_RESPONSE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          data: null,
+          error: "Format respon dari layanan penyedia data SEO tidak valid.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
       }
 
       const rawList = Array.isArray(json?.results) ? json.results : Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : null;
       if (!rawList) {
-        return { ok: false, code: "MALFORMED_PROVIDER_RESPONSE", error: "Format respon dari engine OpenSEO tidak valid (data tidak ditemukan)." };
+        logProviderError({
+          provider: "openseo",
+          endpoint: "api/keywords/research",
+          category: "MALFORMED_PROVIDER_RESPONSE",
+          correlationId,
+          action: "keyword-research",
+        });
+        return {
+          ok: false,
+          code: "MALFORMED_PROVIDER_RESPONSE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          data: null,
+          error: "Format respon dari layanan penyedia data SEO tidak valid (data tidak ditemukan).",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
       }
 
       const sanitizedItems = rawList
@@ -263,15 +357,59 @@ async function executeKeywordResearch(
         .filter((item: any) => item.keyword.length > 0);
 
       if (sanitizedItems.length === 0) {
-        return { ok: false, code: "MALFORMED_PROVIDER_RESPONSE", error: "Respon engine OpenSEO tidak memuat kata kunci yang valid." };
+        return {
+          ok: true,
+          source: "openseo",
+          data: [],
+          total: 0,
+          notice: "Data belum tersedia.",
+        };
       }
 
       return { ok: true, source: "openseo", data: sanitizedItems, total: sanitizedItems.length };
     } catch (err: any) {
       if (err?.name === "AbortError") {
-        return { ok: false, code: "PROVIDER_TIMEOUT", error: "Koneksi ke engine OpenSEO memakan waktu terlalu lama (timeout > 10 detik)." };
+        logProviderError({
+          provider: "openseo",
+          endpoint: "api/keywords/research",
+          category: "TIMEOUT",
+          correlationId,
+          action: "keyword-research",
+        });
+        return {
+          ok: false,
+          code: "PROVIDER_TIMEOUT",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          data: null,
+          error: "Koneksi ke layanan data SEO memakan waktu terlalu lama (timeout > 10 detik).",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
       }
-      return { ok: false, code: "PROVIDER_ERROR", error: "Engine OpenSEO tidak dapat dihubungi saat ini." };
+      logProviderError({
+        provider: "openseo",
+        endpoint: "api/keywords/research",
+        category: "PROVIDER_UNAVAILABLE",
+        correlationId,
+        action: "keyword-research",
+      });
+      return {
+        ok: false,
+        code: "PROVIDER_ERROR",
+        availability: "temporarily_unavailable",
+        source: "fallback",
+        data: null,
+        error: "Layanan penyedia data SEO tidak dapat dihubungi saat ini.",
+        fallback: {
+          available: true,
+          mode: "on_page_audit",
+          message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+        },
+      };
     }
   }
 
@@ -302,14 +440,39 @@ async function executeKeywordResearch(
 
       // SSRF defense: Disallow redirects
       if (d4sResponse.status >= 300 && d4sResponse.status < 400) {
-        return { ok: false, code: "SSRF_REJECTED", error: "Pengalihan (redirect) provider SEO ditolak untuk mencegah SSRF." };
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "keywords_data/google/search_volume/live",
+          category: "SSRF_REJECTED",
+          statusCode: d4sResponse.status,
+          correlationId,
+          action: "keyword-research",
+        });
+        return { ok: false, code: "SSRF_REJECTED", error: "Pengalihan (redirect) layanan SEO ditolak untuk mencegah SSRF." };
       }
 
       if (!d4sResponse.ok) {
+        const category = d4sResponse.status === 402 ? "INSUFFICIENT_FUNDS" : "HTTP_ERROR";
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "keywords_data/google/search_volume/live",
+          category,
+          statusCode: d4sResponse.status,
+          correlationId,
+          action: "keyword-research",
+        });
         return {
           ok: false,
-          code: "PROVIDER_ERROR",
-          error: `Penyedia SEO eksternal mengembalikan respon error (HTTP ${d4sResponse.status}).`,
+          code: "PROVIDER_UNAVAILABLE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          data: null,
+          error: "Data pencarian sementara tidak tersedia.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
         };
       }
 
@@ -317,20 +480,162 @@ async function executeKeywordResearch(
       try {
         resJson = await d4sResponse.json();
       } catch {
-        return { ok: false, code: "MALFORMED_PROVIDER_RESPONSE", error: "Penyedia SEO mengembalikan data yang tidak valid (malformed JSON)." };
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "keywords_data/google/search_volume/live",
+          category: "MALFORMED_PROVIDER_RESPONSE",
+          correlationId,
+          action: "keyword-research",
+        });
+        return {
+          ok: false,
+          code: "MALFORMED_PROVIDER_RESPONSE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          data: null,
+          error: "Format respon dari layanan penyedia data SEO tidak valid.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
+      }
+
+      // Check root level status code
+      const rootStatusCode = Number(resJson?.status_code || 20000);
+      if (rootStatusCode === 40200 || rootStatusCode === 40210) {
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "keywords_data/google/search_volume/live",
+          category: rootStatusCode === 40210 ? "INSUFFICIENT_FUNDS" : "PAYMENT_REQUIRED",
+          statusCode: rootStatusCode,
+          correlationId,
+          action: "keyword-research",
+        });
+        return {
+          ok: false,
+          code: "PROVIDER_UNAVAILABLE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          data: null,
+          error: "Data pencarian sementara tidak tersedia.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
+      }
+
+      if (rootStatusCode >= 40000) {
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "keywords_data/google/search_volume/live",
+          category: rootStatusCode === 50301 ? "PROVIDER_UNAVAILABLE" : "TASK_EXECUTION_FAILED",
+          statusCode: rootStatusCode,
+          correlationId,
+          action: "keyword-research",
+        });
+        return {
+          ok: false,
+          code: "PROVIDER_UNAVAILABLE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          data: null,
+          error: "Data pencarian sementara tidak tersedia.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
       }
 
       const task = resJson?.tasks?.[0];
-      if (task?.status_code && task.status_code >= 40000) {
+      const taskStatusCode = Number(task?.status_code || 20000);
+
+      if (taskStatusCode === 40200 || taskStatusCode === 40210) {
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "keywords_data/google/search_volume/live",
+          category: taskStatusCode === 40210 ? "INSUFFICIENT_FUNDS" : "PAYMENT_REQUIRED",
+          statusCode: taskStatusCode,
+          correlationId,
+          action: "keyword-research",
+        });
         return {
           ok: false,
-          code: "PROVIDER_ERROR",
-          error: `Penyedia SEO tidak dapat menyelesaikan tugas riset kata kunci (Status ${task.status_code}).`,
+          code: "PROVIDER_UNAVAILABLE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          data: null,
+          error: "Data pencarian sementara tidak tersedia.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
+      }
+
+      if (taskStatusCode === 40102) {
+        // No search results found (legitimate empty state, not outage)
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "keywords_data/google/search_volume/live",
+          category: "NO_SEARCH_RESULTS",
+          statusCode: taskStatusCode,
+          correlationId,
+          action: "keyword-research",
+        });
+        return {
+          ok: true,
+          source: "dataforseo",
+          data: [],
+          total: 0,
+          notice: "Data belum tersedia.",
+        };
+      }
+
+      if (taskStatusCode === 40103 || taskStatusCode === 50301 || taskStatusCode >= 40000) {
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "keywords_data/google/search_volume/live",
+          category: taskStatusCode === 50301 ? "PROVIDER_UNAVAILABLE" : "TASK_EXECUTION_FAILED",
+          statusCode: taskStatusCode,
+          correlationId,
+          action: "keyword-research",
+        });
+        return {
+          ok: false,
+          code: "PROVIDER_UNAVAILABLE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          data: null,
+          error: "Data pencarian sementara tidak tersedia.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
         };
       }
 
       if (!task || !Array.isArray(task.result)) {
-        return { ok: false, code: "MALFORMED_PROVIDER_RESPONSE", error: "Struktur respon provider SEO tidak sesuai standar." };
+        return {
+          ok: false,
+          code: "MALFORMED_PROVIDER_RESPONSE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          data: null,
+          error: "Struktur respon data SEO tidak sesuai standar.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
       }
 
       const items = task.result
@@ -352,9 +657,47 @@ async function executeKeywordResearch(
       };
     } catch (err: any) {
       if (err?.name === "AbortError") {
-        return { ok: false, code: "PROVIDER_TIMEOUT", error: "Koneksi ke provider SEO memakan waktu terlalu lama (timeout > 10 detik)." };
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "keywords_data/google/search_volume/live",
+          category: "TIMEOUT",
+          correlationId,
+          action: "keyword-research",
+        });
+        return {
+          ok: false,
+          code: "PROVIDER_TIMEOUT",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          data: null,
+          error: "Koneksi ke layanan data SEO memakan waktu terlalu lama (timeout > 10 detik).",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
       }
-      return { ok: false, code: "PROVIDER_ERROR", error: "Provider SEO eksternal tidak dapat dihubungi saat ini." };
+      logProviderError({
+        provider: "dataforseo",
+        endpoint: "keywords_data/google/search_volume/live",
+        category: "PROVIDER_UNAVAILABLE",
+        correlationId,
+        action: "keyword-research",
+      });
+      return {
+        ok: false,
+        code: "PROVIDER_ERROR",
+        availability: "temporarily_unavailable",
+        source: "fallback",
+        data: null,
+        error: "Layanan penyedia data SEO tidak dapat dihubungi saat ini.",
+        fallback: {
+          available: true,
+          mode: "on_page_audit",
+          message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+        },
+      };
     }
   }
 
@@ -362,7 +705,15 @@ async function executeKeywordResearch(
   return {
     ok: false,
     code: "PROVIDER_NOT_CONFIGURED",
-    error: "Penyedia SEO eksternal (OpenSEO / DataForSEO) belum dikonfigurasi di server.",
+    availability: "temporarily_unavailable",
+    source: "fallback",
+    data: null,
+    error: "Layanan data riset SEO server sedang dalam tahap optimasi atau pemeliharaan berkala.",
+    fallback: {
+      available: true,
+      mode: "on_page_audit",
+      message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+    },
   };
 }
 
@@ -373,6 +724,7 @@ async function executeCompetitorInsights(
   config: ExternalProviderConfig,
   targetDomain: string,
   keywords: string[] = [],
+  correlationId: string,
   locationCode = 2360,
   languageCode = "id"
 ) {
@@ -399,23 +751,90 @@ async function executeCompetitorInsights(
 
       // SSRF defense: Disallow redirects
       if (response.status >= 300 && response.status < 400) {
-        return { ok: false, code: "SSRF_REJECTED", error: "Pengalihan (redirect) engine OpenSEO ditolak untuk mencegah SSRF." };
+        logProviderError({
+          provider: "openseo",
+          endpoint: "api/competitors/insights",
+          category: "SSRF_REJECTED",
+          statusCode: response.status,
+          correlationId,
+          action: "competitor-insights",
+        });
+        return { ok: false, code: "SSRF_REJECTED", error: "Pengalihan (redirect) layanan SEO ditolak untuk mencegah SSRF." };
       }
 
       if (!response.ok) {
-        return { ok: false, code: "PROVIDER_ERROR", error: `Engine OpenSEO mengembalikan respon error (HTTP ${response.status}).` };
+        const category = response.status === 402 ? "INSUFFICIENT_FUNDS" : "HTTP_ERROR";
+        logProviderError({
+          provider: "openseo",
+          endpoint: "api/competitors/insights",
+          category,
+          statusCode: response.status,
+          correlationId,
+          action: "competitor-insights",
+        });
+        return {
+          ok: false,
+          code: "PROVIDER_UNAVAILABLE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          competitors: null,
+          error: "Data pencarian sementara tidak tersedia.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
       }
 
       let json: any;
       try {
         json = await response.json();
       } catch {
-        return { ok: false, code: "MALFORMED_PROVIDER_RESPONSE", error: "Format respon dari engine OpenSEO tidak valid (bukan JSON)." };
+        logProviderError({
+          provider: "openseo",
+          endpoint: "api/competitors/insights",
+          category: "MALFORMED_PROVIDER_RESPONSE",
+          correlationId,
+          action: "competitor-insights",
+        });
+        return {
+          ok: false,
+          code: "MALFORMED_PROVIDER_RESPONSE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          competitors: null,
+          error: "Format respon dari layanan penyedia data SEO tidak valid.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
       }
 
       const rawCompetitors = Array.isArray(json?.competitors) ? json.competitors : Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : null;
       if (!rawCompetitors) {
-        return { ok: false, code: "MALFORMED_PROVIDER_RESPONSE", error: "Struktur respon engine OpenSEO tidak sesuai standar." };
+        logProviderError({
+          provider: "openseo",
+          endpoint: "api/competitors/insights",
+          category: "MALFORMED_PROVIDER_RESPONSE",
+          correlationId,
+          action: "competitor-insights",
+        });
+        return {
+          ok: false,
+          code: "MALFORMED_PROVIDER_RESPONSE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          competitors: null,
+          error: "Struktur respon data SEO tidak sesuai standar.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
       }
 
       const items = rawCompetitors
@@ -426,6 +845,7 @@ async function executeCompetitorInsights(
           visibility: Number(item?.visibility ?? 0),
           competitor_relevance: Number(item?.competitor_relevance ?? 0),
           rating: Number(item?.rating ?? 0),
+          etv: Number(item?.etv ?? item?.estimated_traffic ?? 0),
         }))
         .filter((item: any) => item.domain.length > 0);
 
@@ -437,13 +857,51 @@ async function executeCompetitorInsights(
       };
     } catch (err: any) {
       if (err?.name === "AbortError") {
-        return { ok: false, code: "PROVIDER_TIMEOUT", error: "Koneksi ke engine OpenSEO memakan waktu terlalu lama (timeout > 10 detik)." };
+        logProviderError({
+          provider: "openseo",
+          endpoint: "api/competitors/insights",
+          category: "TIMEOUT",
+          correlationId,
+          action: "competitor-insights",
+        });
+        return {
+          ok: false,
+          code: "PROVIDER_TIMEOUT",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          competitors: null,
+          error: "Koneksi ke layanan data SEO memakan waktu terlalu lama (timeout > 10 detik).",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
       }
-      return { ok: false, code: "PROVIDER_ERROR", error: "Engine OpenSEO tidak dapat dihubungi saat ini." };
+      logProviderError({
+        provider: "openseo",
+        endpoint: "api/competitors/insights",
+        category: "PROVIDER_UNAVAILABLE",
+        correlationId,
+        action: "competitor-insights",
+      });
+      return {
+        ok: false,
+        code: "PROVIDER_ERROR",
+        availability: "temporarily_unavailable",
+        source: "fallback",
+        competitors: null,
+        error: "Layanan penyedia data SEO tidak dapat dihubungi saat ini.",
+        fallback: {
+          available: true,
+          mode: "on_page_audit",
+          message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+        },
+      };
     }
   }
 
-  // Option B: Direct DataForSEO Labs API
+  // Option B: Direct DataForSEO Labs API (SERP Competitors)
   if (config.dataForSeoAuth) {
     try {
       const controller = new AbortController();
@@ -472,14 +930,39 @@ async function executeCompetitorInsights(
 
       // SSRF defense: Disallow redirects
       if (d4sResponse.status >= 300 && d4sResponse.status < 400) {
-        return { ok: false, code: "SSRF_REJECTED", error: "Pengalihan (redirect) provider SEO ditolak untuk mencegah SSRF." };
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "dataforseo_labs/google/serp_competitors/live",
+          category: "SSRF_REJECTED",
+          statusCode: d4sResponse.status,
+          correlationId,
+          action: "competitor-insights",
+        });
+        return { ok: false, code: "SSRF_REJECTED", error: "Pengalihan (redirect) layanan SEO ditolak untuk mencegah SSRF." };
       }
 
       if (!d4sResponse.ok) {
+        const category = d4sResponse.status === 402 ? "INSUFFICIENT_FUNDS" : "HTTP_ERROR";
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "dataforseo_labs/google/serp_competitors/live",
+          category,
+          statusCode: d4sResponse.status,
+          correlationId,
+          action: "competitor-insights",
+        });
         return {
           ok: false,
-          code: "PROVIDER_ERROR",
-          error: `Penyedia SEO eksternal mengembalikan respon error (HTTP ${d4sResponse.status}).`,
+          code: "PROVIDER_UNAVAILABLE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          competitors: null,
+          error: "Data pencarian sementara tidak tersedia.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
         };
       }
 
@@ -487,20 +970,163 @@ async function executeCompetitorInsights(
       try {
         resJson = await d4sResponse.json();
       } catch {
-        return { ok: false, code: "MALFORMED_PROVIDER_RESPONSE", error: "Penyedia SEO mengembalikan data yang tidak valid (malformed JSON)." };
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "dataforseo_labs/google/serp_competitors/live",
+          category: "MALFORMED_PROVIDER_RESPONSE",
+          correlationId,
+          action: "competitor-insights",
+        });
+        return {
+          ok: false,
+          code: "MALFORMED_PROVIDER_RESPONSE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          competitors: null,
+          error: "Format respon dari layanan penyedia data SEO tidak valid.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
+      }
+
+      // Check root level status code
+      const rootStatusCode = Number(resJson?.status_code || 20000);
+      if (rootStatusCode === 40200 || rootStatusCode === 40210) {
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "dataforseo_labs/google/serp_competitors/live",
+          category: rootStatusCode === 40210 ? "INSUFFICIENT_FUNDS" : "PAYMENT_REQUIRED",
+          statusCode: rootStatusCode,
+          correlationId,
+          action: "competitor-insights",
+        });
+        return {
+          ok: false,
+          code: "PROVIDER_UNAVAILABLE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          competitors: null,
+          error: "Data pencarian sementara tidak tersedia.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
+      }
+
+      if (rootStatusCode >= 40000) {
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "dataforseo_labs/google/serp_competitors/live",
+          category: rootStatusCode === 50301 ? "PROVIDER_UNAVAILABLE" : "TASK_EXECUTION_FAILED",
+          statusCode: rootStatusCode,
+          correlationId,
+          action: "competitor-insights",
+        });
+        return {
+          ok: false,
+          code: "PROVIDER_UNAVAILABLE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          competitors: null,
+          error: "Data pencarian sementara tidak tersedia.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
       }
 
       const task = resJson?.tasks?.[0];
-      if (task?.status_code && task.status_code >= 40000) {
+      const taskStatusCode = Number(task?.status_code || 20000);
+
+      if (taskStatusCode === 40200 || taskStatusCode === 40210) {
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "dataforseo_labs/google/serp_competitors/live",
+          category: taskStatusCode === 40210 ? "INSUFFICIENT_FUNDS" : "PAYMENT_REQUIRED",
+          statusCode: taskStatusCode,
+          correlationId,
+          action: "competitor-insights",
+        });
         return {
           ok: false,
-          code: "PROVIDER_ERROR",
-          error: `Penyedia SEO tidak dapat menyelesaikan tugas wawasan kompetitor (Status ${task.status_code}).`,
+          code: "PROVIDER_UNAVAILABLE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          competitors: null,
+          error: "Data pencarian sementara tidak tersedia.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
+      }
+
+      if (taskStatusCode === 40102) {
+        // No competitors found for domain/keyword (legitimate empty state)
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "dataforseo_labs/google/serp_competitors/live",
+          category: "NO_SEARCH_RESULTS",
+          statusCode: taskStatusCode,
+          correlationId,
+          action: "competitor-insights",
+        });
+        return {
+          ok: true,
+          source: "dataforseo",
+          targetDomain,
+          competitors: [],
+          total: 0,
+          notice: "Data belum tersedia.",
+        };
+      }
+
+      if (taskStatusCode === 40103 || taskStatusCode === 50301 || taskStatusCode >= 40000) {
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "dataforseo_labs/google/serp_competitors/live",
+          category: taskStatusCode === 50301 ? "PROVIDER_UNAVAILABLE" : "TASK_EXECUTION_FAILED",
+          statusCode: taskStatusCode,
+          correlationId,
+          action: "competitor-insights",
+        });
+        return {
+          ok: false,
+          code: "PROVIDER_UNAVAILABLE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          competitors: null,
+          error: "Data pencarian sementara tidak tersedia.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
         };
       }
 
       if (!task || !Array.isArray(task.result)) {
-        return { ok: false, code: "MALFORMED_PROVIDER_RESPONSE", error: "Struktur respon provider SEO tidak sesuai standar." };
+        return {
+          ok: false,
+          code: "MALFORMED_PROVIDER_RESPONSE",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          competitors: null,
+          error: "Struktur respon data SEO tidak sesuai standar.",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
       }
 
       const rawItems = Array.isArray(task.result?.[0]?.items) ? task.result[0].items : [];
@@ -512,6 +1138,7 @@ async function executeCompetitorInsights(
           visibility: Number(item?.visibility ?? 0),
           competitor_relevance: Number(item?.competitor_relevance ?? 0),
           rating: Number(item?.rating ?? 0),
+          etv: Number(item?.etv ?? item?.estimated_traffic ?? 0),
         }))
         .filter((item: any) => item.domain.length > 0);
 
@@ -520,19 +1147,66 @@ async function executeCompetitorInsights(
         source: "dataforseo",
         targetDomain,
         competitors: items,
+        total: items.length,
       };
     } catch (err: any) {
       if (err?.name === "AbortError") {
-        return { ok: false, code: "PROVIDER_TIMEOUT", error: "Koneksi ke provider SEO memakan waktu terlalu lama (timeout > 10 detik)." };
+        logProviderError({
+          provider: "dataforseo",
+          endpoint: "dataforseo_labs/google/serp_competitors/live",
+          category: "TIMEOUT",
+          correlationId,
+          action: "competitor-insights",
+        });
+        return {
+          ok: false,
+          code: "PROVIDER_TIMEOUT",
+          availability: "temporarily_unavailable",
+          source: "fallback",
+          competitors: null,
+          error: "Koneksi ke layanan data SEO memakan waktu terlalu lama (timeout > 10 detik).",
+          fallback: {
+            available: true,
+            mode: "on_page_audit",
+            message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+          },
+        };
       }
-      return { ok: false, code: "PROVIDER_ERROR", error: "Provider SEO eksternal tidak dapat dihubungi saat ini." };
+      logProviderError({
+        provider: "dataforseo",
+        endpoint: "dataforseo_labs/google/serp_competitors/live",
+        category: "PROVIDER_UNAVAILABLE",
+        correlationId,
+        action: "competitor-insights",
+      });
+      return {
+        ok: false,
+        code: "PROVIDER_ERROR",
+        availability: "temporarily_unavailable",
+        source: "fallback",
+        competitors: null,
+        error: "Layanan penyedia data SEO tidak dapat dihubungi saat ini.",
+        fallback: {
+          available: true,
+          mode: "on_page_audit",
+          message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+        },
+      };
     }
   }
 
   return {
     ok: false,
     code: "PROVIDER_NOT_CONFIGURED",
-    error: "Penyedia SEO eksternal (OpenSEO / DataForSEO) belum dikonfigurasi di server.",
+    availability: "temporarily_unavailable",
+    source: "fallback",
+    competitors: null,
+    error: "Layanan data riset SEO server sedang dalam tahap optimasi atau pemeliharaan berkala.",
+    fallback: {
+      available: true,
+      mode: "on_page_audit",
+      message: "Fitur Audit On-Page SEO lokal tetap aktif dan dapat digunakan sepenuhnya.",
+    },
   };
 }
 
@@ -555,6 +1229,7 @@ Deno.serve(async (req) => {
 
     const businessId = String(body?.business_id || body?.businessId || "").trim();
     const action = String(body?.action || "").trim();
+    const correlationId = req.headers.get("x-request-id") || crypto.randomUUID();
 
     // 1. Authorize user & strictly enforce business ownership (IDOR defense)
     const authResult = await authenticateAndAuthorizeBusiness(req, businessId);
@@ -578,6 +1253,7 @@ Deno.serve(async (req) => {
         const result = await executeKeywordResearch(
           providerConfig,
           validation.keywords,
+          correlationId,
           body?.locationCode,
           body?.languageCode
         );
@@ -606,6 +1282,7 @@ Deno.serve(async (req) => {
           providerConfig,
           domainValidation.domain,
           validatedKeywords,
+          correlationId,
           body?.locationCode,
           body?.languageCode
         );

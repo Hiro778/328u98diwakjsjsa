@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { calculateSubscriptionEntitlement } from '../lib/subscriptionUtils'
+import { calculateSubscriptionEntitlement, resolveCanonicalSubscription } from '../lib/subscriptionUtils'
 import { fetchPublicPlatformSettings } from '../services/adminSettingsService'
 
 const AuthContext = createContext(null)
@@ -54,13 +54,10 @@ export function AuthProvider({ children }) {
     let sub = null
     let hasPaid = false
     try {
-      const { data: subData, error: subErr } = await supabase
+      const { data: subRows, error: subErr } = await supabase
         .from('subscriptions')
         .select('*')
         .eq('profile_id', profileId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
 
       if (subErr) {
         console.error('[AuthContext] subscription query error:', subErr)
@@ -69,8 +66,8 @@ export function AuthProvider({ children }) {
         return null
       }
 
-      if (subData) {
-        sub = subData
+      if (subRows && subRows.length > 0) {
+        sub = resolveCanonicalSubscription(subRows)
       }
 
       // Query database for verified payment records (source of truth for paid Pro)

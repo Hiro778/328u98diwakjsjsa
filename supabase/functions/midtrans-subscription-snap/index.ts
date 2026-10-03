@@ -1,13 +1,15 @@
 // midtrans-subscription-snap/index.ts
-// Create Midtrans Snap token & verify payment status for BisnisSehat Pro subscription.
+// @deprecated LEGACY BACKEND — Active customer subscription purchase flow now uses manual payment + activation code.
+// Snap checkout creation is deprecated and disconnected from customer Pricing UI.
+// Retained for status synchronization, legacy order verification, and audit history.
 //
 // Endpoint: POST /functions/v1/midtrans-subscription-snap
 // Auth: Bearer JWT from Authorization header
-// Amount: Fixed server-side at Rp 130.000
+// Amount: Fixed server-side at Rp 130.000 (Pro) or Rp 35.000 (Basic)
 // Duration: 1 calendar month
 //
 // Actions:
-// 1. (Default) Create Snap token: { } -> { snap_token, midtrans_order_id, redirect_url, amount }
+// 1. (Legacy) Create Snap token: { } -> { snap_token, midtrans_order_id, redirect_url, amount }
 // 2. Verify payment status: { action: "verify_payment", order_id?: string } -> { status, is_active, expires_at }
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -127,14 +129,31 @@ Deno.serve(async (req) => {
       return errorResponse("Konfigurasi payment gateway belum lengkap", 500);
     }
 
-    // 2. Query existing subscription
-    const { data: existingSub, error: subError } = await supabaseAdmin
+    // 2. Query existing subscription with canonical resolution
+    const { data: existingSubs, error: subError } = await supabaseAdmin
       .from("subscriptions")
-      .select("id, status, plan, started_at, expires_at, payment_provider, provider_transaction_id, business_id")
-      .eq("profile_id", profileId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .select("id, status, plan, started_at, expires_at, payment_provider, provider_transaction_id, business_id, is_cancelled, updated_at, created_at")
+      .eq("profile_id", profileId);
+
+    if (subError) {
+      console.error("[midtrans-subscription-snap] Subscription query error:", subError);
+      return errorResponse("Gagal mengambil data langganan", 500);
+    }
+
+    let existingSub: any = null;
+    if (existingSubs && existingSubs.length > 0) {
+      const activeUncancelled = existingSubs.find(
+        (s: any) => s.status === "active" && s.is_cancelled !== true && (!s.expires_at || new Date(s.expires_at) > new Date())
+      );
+      existingSub = activeUncancelled || existingSubs.sort((a: any, b: any) => {
+        const aExp = a.expires_at ? new Date(a.expires_at).getTime() : 0;
+        const bExp = b.expires_at ? new Date(b.expires_at).getTime() : 0;
+        if (bExp !== aExp) return bExp - aExp;
+        const aUpd = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+        const bUpd = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+        return bUpd - aUpd;
+      })[0];
+    }
 
     if (subError) {
       console.error("[midtrans-subscription-snap] Subscription query error:", subError);

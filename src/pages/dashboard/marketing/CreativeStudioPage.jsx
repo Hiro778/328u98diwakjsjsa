@@ -375,6 +375,15 @@ export default function CreativeStudioPage() {
               </div>
             </div>
           )}
+          {isPro ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+              ⭐ Pro • 15.000 Kredit/bln
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-500/10 text-blue-400 border-blue-500/20">
+              Akses Basic (Top up kredit terpisah)
+            </span>
+          )}
           <button
             onClick={() => navigate('/dashboard/marketing/credits')}
             className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded-lg transition-colors shadow-sm cursor-pointer shrink-0"

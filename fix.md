@@ -1,107 +1,307 @@
-MOBILE RESPONSIVE FIX ONLY — DO NOT CHANGE DESKTOP UI
+URGENT BUG FIX ONLY — FIX SettingsProvider HIERARCHY REGRESSION
 
-Context:
-Desktop BisnisSehat saat ini sudah terlihat bagus.
-Mobile pada viewport sekitar 390px masih banyak masalah:
-- horizontal overflow
-- beberapa content terpotong
-- pricing cards terlalu desktop-oriented
-- QR Menu / Simulator masih terasa fixed-width
-- notification dropdown terlalu lebar
-- beberapa teks terlalu low-contrast
-- spacing/header belum optimal untuk mobile
+BisnisSehat sekarang mengalami production crash:
 
-IMPORTANT SCOPE LOCK:
-- Fokus ONLY viewport mobile.
-- Jangan redesign desktop.
-- Jangan mengubah business logic.
-- Jangan mengubah Supabase/RLS/RPC/API.
-- Jangan mengubah QRIS/payment/order logic.
-- Jangan mengubah Admin RBAC.
-- Jangan mengubah desktop visual hierarchy.
-- Jangan mengganti design system secara global.
-- Jangan melakukan refactor besar.
+Unexpected Application Error!
+
+[usePlatformSettings] Must be used inside <SettingsProvider>.
+Ensure SettingsProvider wraps the component tree above this component.
+
+Stack:
+usePlatformSettings
+→ MaintenanceGate / related settings consumer
+→ React Router tree
+
+PROBLEM:
+Setelah perubahan MaintenanceGate / maintenance-mode access control, ada component yang memanggil usePlatformSettings() tetapi berada DI LUAR SettingsProvider.
 
 TARGET:
-Mobile widths:
-- 360px
-- 390px
-- 412px
-Desktop regression:
-- 1280px
-- 1440px
+Perbaiki provider hierarchy dengan benar.
+Jangan workaround dengan try/catch.
+Jangan mengubah usePlatformSettings agar diam-diam bekerja tanpa provider.
+Jangan disable maintenance mode.
 
-TASK:
+==================================================
+1. AUDIT ACTUAL TREE FIRST
+==================================================
 
-1. Audit global responsive CSS/layout:
-   - fixed width
-   - min-width
-   - width > viewport
-   - fixed positioning
-   - absolute positioning
-   - overflow-x
-   - grid columns
-   - flex rows
-   - large desktop paddings
-   - hardcoded card widths
+Cari dan baca:
 
-2. Fix horizontal overflow FIRST.
-   Mobile page must not require horizontal scrolling.
+- src/App.jsx
+- entry point main.jsx / main.tsx / index.jsx yang sebenarnya
+- SettingsProvider
+- usePlatformSettings
+- MaintenanceGate
+- AuthProvider/AuthContext
+- RequireAuth
+- RequireAdmin
+- AdminLayout
+- RouterProvider / createBrowserRouter / routes
+- komponen lain yang menggunakan usePlatformSettings()
 
-3. Fix mobile app header:
-   - hamburger stays accessible
-   - logo/title fits
-   - notification/profile controls don't overflow
-   - preserve existing desktop header.
+Gunakan grep/search untuk:
 
-4. Fix pricing/top-up cards:
-   - mobile width: calc(100vw - 32px) or equivalent container width
-   - internal padding responsive
-   - buttons full-width where appropriate
-   - text remains readable
-   - preserve desktop appearance.
+usePlatformSettings(
+<SettingsProvider
+<MaintenanceGate
+AuthProvider
+RequireAuth
+RequireAdmin
 
-5. Fix notification dropdown:
-   - mobile width must fit viewport
-   - use approximately calc(100vw - 32px)
-   - max-width for larger screens
-   - prevent clipping/overflow
-   - preserve desktop dropdown.
+Jangan menebak struktur.
 
-6. Fix QR Menu / Simulator:
-   - mobile preview must fit 360/390/412px viewport
-   - no horizontal overflow
-   - simulator controls wrap appropriately
-   - preview/canvas scales to available width
-   - QR remains readable
-   - product cards fit inside preview
-   - desktop simulator remains unchanged.
+Identifikasi EXACTLY component pertama yang memanggil
+usePlatformSettings() di luar provider.
 
-7. Fix mobile typography/readability:
-   - identify text that becomes too dark/low contrast
-   - preserve existing color system
-   - do NOT randomly change all colors.
+==================================================
+2. FIX PROVIDER HIERARCHY
+==================================================
 
-8. Use CSS media queries/container queries where appropriate instead of JS viewport hacks.
+Pastikan setiap consumer usePlatformSettings() berada di bawah:
 
-9. Add/extend responsive regression tests if the project already has them.
-   At minimum verify:
-   - no obvious fixed-width overflow at 360px
-   - pricing card width
-   - notification panel width
-   - simulator width
-   - mobile header layout.
+<SettingsProvider>
+  ...
+</SettingsProvider>
 
-10. Run:
-   npm run build
+Idealnya hierarchy tetap sederhana seperti:
 
-11. If possible run the existing test suite relevant to affected components.
+<ThemeProvider>
+  <AuthProvider>
+    <SettingsProvider>
+      <RouterProvider ... />
+    </SettingsProvider>
+  </AuthProvider>
+</ThemeProvider>
 
-12. Final report:
-   - exact files changed
-   - exact mobile problems fixed
-   - desktop behavior preserved
-   - test results
-   - build result
+ATAU struktur setara yang sesuai dengan architecture aktual.
 
-STOP after this task.
+IMPORTANT:
+
+Jangan memindahkan SettingsProvider ke tempat yang menyebabkan:
+
+SettingsProvider
+  → router
+  → component
+  → SettingsProvider
+
+Jangan membuat nested duplicate SettingsProvider tanpa alasan.
+
+Jangan membuat circular dependency.
+
+==================================================
+3. MAINTENANCE GATE
+==================================================
+
+MaintenanceGate memang membutuhkan usePlatformSettings(),
+jadi MaintenanceGate HARUS berada di bawah SettingsProvider.
+
+Expected conceptual hierarchy:
+
+SettingsProvider
+    ↓
+MaintenanceGate
+    ↓
+Router / authenticated application
+
+Tetapi sesuaikan dengan architecture aktual.
+
+Jika MaintenanceGate harus membungkus RouterProvider dan RouterProvider
+sendiri menyebabkan route-level consumers berada di luar provider,
+gunakan wrapper component yang benar.
+
+Contoh pola yang BOLEH digunakan:
+
+function AppShell() {
+  return (
+    <SettingsProvider>
+      <MaintenanceGate>
+        <RouterProvider router={router} />
+      </MaintenanceGate>
+    </SettingsProvider>
+  );
+}
+
+Hanya gunakan pola ini jika cocok dengan architecture aktual.
+
+==================================================
+4. PRESERVE AUTH + ADMIN RBAC
+==================================================
+
+Jangan merusak hierarchy yang sudah benar:
+
+AuthProvider
+RequireAuth
+RequireAdmin
+AdminLayout
+
+Admin/SUPER_ADMIN tetap harus bisa:
+
+/admin
+/admin/settings
+/dashboard
+
+ketika maintenance_mode=true.
+
+Normal user tetap harus terkena maintenance pada protected application
+routes ketika maintenance_mode=true.
+
+Pricing/purchase routes yang sebelumnya ditetapkan public/purchase-accessible
+tetap jangan ikut rusak.
+
+Jangan mengubah subscription/payment logic.
+
+==================================================
+5. IMPORTANT — AVOID LOADING RACE
+==================================================
+
+Pastikan SettingsProvider tidak mengembalikan consumer sebelum context
+tersedia.
+
+Expected:
+
+SettingsProvider
+  → initializes settings
+  → provides context
+  → children render
+
+MaintenanceGate
+  → consumes settings only after provider exists.
+
+Saat settings masih loading:
+- render loading state
+- jangan throw
+- jangan redirect prematurely
+
+==================================================
+6. CHECK ALL usePlatformSettings CONSUMERS
+==================================================
+
+Setelah hierarchy diperbaiki, cari SEMUA:
+
+usePlatformSettings()
+
+Pastikan semuanya berada di bawah SettingsProvider.
+
+Jangan hanya memperbaiki component pertama yang muncul di stack trace.
+
+Potential consumers include:
+- MaintenanceGate
+- DashboardLayout
+- PublicMenuPage
+- AuthPage
+- AnnouncementBanner
+- CustomerSupportWidget
+- AI feature components
+- settings-related components
+
+Jangan menghapus penggunaan hook hanya untuk membuat build hijau.
+
+==================================================
+7. PRODUCTION REPRODUCTION
+==================================================
+
+Reproduce the actual failure:
+
+Production currently crashes with:
+
+[usePlatformSettings] Must be used inside <SettingsProvider>
+
+Verify after fix:
+
+1. Open /
+2. Open /pricing
+3. Login
+4. Open /dashboard
+5. Open /admin
+6. Open /admin/settings
+7. Refresh each page directly
+8. maintenance_mode=true
+9. test admin
+10. test normal user
+
+There must be NO:
+
+"Must be used inside <SettingsProvider>"
+
+==================================================
+8. TESTS
+==================================================
+
+Add/update focused regression test proving:
+
+A. usePlatformSettings consumer under SettingsProvider
+B. MaintenanceGate renders without context error
+C. SettingsProvider + MaintenanceGate can mount together
+D. AuthProvider still works
+E. Admin route still works
+F. Pricing route still works
+G. maintenance ON behavior still works
+H. maintenance OFF behavior still works
+
+If existing tests already cover these, extend them rather than duplicating
+the entire suite.
+
+==================================================
+9. BUILD + LINT
+==================================================
+
+Run:
+
+npm test
+npm run build
+
+Also run lint if configured.
+
+Production build MUST succeed.
+
+After build, verify the generated bundle does not contain this runtime
+error caused by provider hierarchy.
+
+==================================================
+10. SCOPE LOCK
+==================================================
+
+ONLY fix the SettingsProvider/provider hierarchy regression.
+
+DO NOT:
+
+- create database migration
+- modify platform_settings schema
+- modify maintenance_mode database logic
+- modify subscription prices
+- modify Rp130.000
+- modify Rp35.000
+- modify payment logic
+- modify Midtrans
+- modify QRIS
+- modify admin RBAC
+- modify AI credits
+- redesign UI
+- change unrelated responsive code
+- introduce another state-management library
+- introduce Redux/Zustand/etc.
+- create a second settings architecture
+
+Reuse the existing SettingsProvider and usePlatformSettings.
+
+==================================================
+11. FINAL REPORT
+==================================================
+
+Report:
+
+1. EXACT ROOT CAUSE
+2. ACTUAL PROVIDER HIERARCHY BEFORE
+3. ACTUAL PROVIDER HIERARCHY AFTER
+4. FILES CHANGED
+5. ALL usePlatformSettings CONSUMERS CHECKED
+6. ADMIN/SUPER_ADMIN — PASS/FAIL
+7. NORMAL USER MAINTENANCE — PASS/FAIL
+8. /pricing — PASS/FAIL
+9. /admin/settings — PASS/FAIL
+10. npm test result
+11. build result
+12. lint result
+13. CONFIRM NO OTHER LOGIC WAS CHANGED
+
+STOP after this bug fix.

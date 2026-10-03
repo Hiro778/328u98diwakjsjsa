@@ -109,12 +109,12 @@ export async function advanceConversation({ businessId, senderPhone, input, exec
   }
 
   if (state.step === 'landing') {
-    if (/^(?:MODE_AI|gunakan\s+ai|🤖\s*ai\s*bisnissehat)$/i.test(value)) {
+    if (/^(?:MODE_AI|ai|\/ai|1|gunakan\s+ai|🤖\s*ai\s*bisnissehat|🤖\s*gunakan\s+ai)$/i.test(value)) {
       clear(businessId, senderPhone);
       const result = await execute({ intent: OPERATIONAL_INTENTS.SELECT_AI_MODE, source: 'whatsapp_interactive', data: {} });
       return { handled: true, text: result.message };
     }
-    if (/^(?:MODE_FORM|gunakan\s+formulir|📋\s*formulir\s*operasional)$/i.test(value)) {
+    if (/^(?:MODE_FORM|form|\/form|2|gunakan\s+formulir|📋\s*formulir\s*operasional|📋\s*gunakan\s+formulir)$/i.test(value)) {
       flows.set(key, { step: 'form_menu' });
       return { handled: true, interactive: { kind: 'list', ...productMenu } };
     }

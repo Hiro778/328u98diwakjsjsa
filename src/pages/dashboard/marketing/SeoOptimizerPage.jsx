@@ -161,12 +161,16 @@ export default function SeoOptimizerPage() {
   const [researchQuery, setResearchQuery] = useState('')
   const [researchLoading, setResearchLoading] = useState(false)
   const [researchError, setResearchError] = useState(null)
+  const [researchNotice, setResearchNotice] = useState(null)
+  const [researchDegraded, setResearchDegraded] = useState(false)
   const [researchResults, setResearchResults] = useState([])
 
   // OpenSEO Vertical Slice: Competitor Insights states
   const [competitorQuery, setCompetitorQuery] = useState('')
   const [competitorLoading, setCompetitorLoading] = useState(false)
   const [competitorError, setCompetitorError] = useState(null)
+  const [competitorNotice, setCompetitorNotice] = useState(null)
+  const [competitorDegraded, setCompetitorDegraded] = useState(false)
   const [competitorResults, setCompetitorResults] = useState([])
 
   // Keyword research submit handler
@@ -175,22 +179,39 @@ export default function SeoOptimizerPage() {
     const q = researchQuery.trim()
     if (!q) {
       setResearchError('Masukkan kata kunci yang ingin diriset.')
+      setResearchDegraded(false)
+      setResearchNotice(null)
       return
     }
     setResearchLoading(true)
     setResearchError(null)
+    setResearchNotice(null)
+    setResearchDegraded(false)
     try {
       const res = await fetchSeoKeywordResearch({
         businessId: business?.id || user?.id,
         keywords: q.split(',').map((s) => s.trim()).filter(Boolean),
       })
       if (!res.ok) {
-        setResearchError(res.error || res.message || 'Gagal memproses riset kata kunci.')
+        setResearchError(res.error || res.message || 'Data pencarian sementara tidak tersedia.')
+        setResearchDegraded(Boolean(res.isDegraded || res.availability === 'temporarily_unavailable'))
+        setResearchResults([])
+        setResearchNotice(null)
       } else {
-        setResearchResults(Array.isArray(res.data) ? res.data : [])
+        const items = Array.isArray(res.data) ? res.data : []
+        setResearchResults(items)
+        setResearchDegraded(false)
+        if (items.length === 0) {
+          setResearchNotice(res.notice || 'Data belum tersedia.')
+        } else {
+          setResearchNotice(null)
+        }
       }
     } catch (err) {
-      setResearchError(err?.message || 'Terjadi kesalahan sistem saat riset kata kunci.')
+      setResearchError(err?.message || 'Data pencarian sementara tidak tersedia.')
+      setResearchDegraded(true)
+      setResearchResults([])
+      setResearchNotice(null)
     } finally {
       setResearchLoading(false)
     }
@@ -202,22 +223,39 @@ export default function SeoOptimizerPage() {
     const domain = competitorQuery.trim()
     if (!domain) {
       setCompetitorError('Masukkan domain target untuk menganalisis pesaing.')
+      setCompetitorDegraded(false)
+      setCompetitorNotice(null)
       return
     }
     setCompetitorLoading(true)
     setCompetitorError(null)
+    setCompetitorNotice(null)
+    setCompetitorDegraded(false)
     try {
       const res = await fetchSeoCompetitors({
         businessId: business?.id || user?.id,
         targetDomain: domain,
       })
       if (!res.ok) {
-        setCompetitorError(res.error || res.message || 'Gagal mengambil wawasan kompetitor.')
+        setCompetitorError(res.error || res.message || 'Data pencarian sementara tidak tersedia.')
+        setCompetitorDegraded(Boolean(res.isDegraded || res.availability === 'temporarily_unavailable'))
+        setCompetitorResults([])
+        setCompetitorNotice(null)
       } else {
-        setCompetitorResults(Array.isArray(res.competitors) ? res.competitors : [])
+        const items = Array.isArray(res.competitors) ? res.competitors : []
+        setCompetitorResults(items)
+        setCompetitorDegraded(false)
+        if (items.length === 0) {
+          setCompetitorNotice(res.notice || 'Data belum tersedia.')
+        } else {
+          setCompetitorNotice(null)
+        }
       }
     } catch (err) {
-      setCompetitorError(err?.message || 'Terjadi kesalahan sistem saat menganalisis pesaing.')
+      setCompetitorError(err?.message || 'Data pencarian sementara tidak tersedia.')
+      setCompetitorDegraded(true)
+      setCompetitorResults([])
+      setCompetitorNotice(null)
     } finally {
       setCompetitorLoading(false)
     }
@@ -991,7 +1029,7 @@ export default function SeoOptimizerPage() {
         </div>
       )}
 
-      {/* VIEW: KEYWORDS RESEARCH TAB (OpenSEO / DataForSEO vertical slice) */}
+      {/* VIEW: KEYWORDS RESEARCH TAB */}
       {activeTab === 'keywords' && (
         <div className="space-y-6">
           <div className="rounded-2xl border border-border bg-surface p-5 shadow-xs">
@@ -1040,13 +1078,54 @@ export default function SeoOptimizerPage() {
               </div>
 
               {researchError && (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-                  <p className="font-semibold">Informasi Engine:</p>
-                  <p className="mt-0.5 leading-relaxed">{researchError}</p>
-                </div>
+                researchDegraded ? (
+                  <div className="rounded-2xl border border-warm-200 bg-warm-50/90 p-4 text-xs shadow-xs">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-xl bg-warm-100 p-2 text-warm-700 shrink-0">
+                        <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-bold text-warm-900">Layanan Riset Pasar Sedang Dioptimalkan</p>
+                        <p className="mt-1 leading-relaxed text-warm-800">{researchError}</p>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('audit')}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-warm-700 px-3.5 py-2 text-xs font-bold text-white hover:bg-warm-800 transition-colors shadow-xs cursor-pointer"
+                          >
+                            <span>Gunakan Audit On-Page SEO (100% Aktif)</span>
+                            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                    <p className="font-semibold">Perhatian:</p>
+                    <p className="mt-0.5 leading-relaxed">{researchError}</p>
+                  </div>
+                )
               )}
             </form>
           </div>
+
+          {/* Notice for genuine empty results (e.g. 40102 No Search Results) */}
+          {researchNotice && (
+            <div className="rounded-2xl border border-border bg-surface p-6 text-center shadow-xs">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-cream">
+                <svg className="h-6 w-6 text-navy-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <h3 className="mt-3 text-sm font-bold text-navy-700">Hasil Tidak Ditemukan</h3>
+              <p className="mt-1 text-xs text-text-secondary max-w-sm mx-auto">{researchNotice}</p>
+            </div>
+          )}
 
           {/* Results table */}
           {researchResults.length > 0 && (
@@ -1088,7 +1167,7 @@ export default function SeoOptimizerPage() {
         </div>
       )}
 
-      {/* VIEW: COMPETITORS INSIGHTS TAB (OpenSEO / DataForSEO vertical slice) */}
+      {/* VIEW: COMPETITORS INSIGHTS TAB */}
       {activeTab === 'competitors' && (
         <div className="space-y-6">
           <div className="rounded-2xl border border-border bg-surface p-5 shadow-xs">
@@ -1137,13 +1216,54 @@ export default function SeoOptimizerPage() {
               </div>
 
               {competitorError && (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-                  <p className="font-semibold">Informasi Engine:</p>
-                  <p className="mt-0.5 leading-relaxed">{competitorError}</p>
-                </div>
+                competitorDegraded ? (
+                  <div className="rounded-2xl border border-warm-200 bg-warm-50/90 p-4 text-xs shadow-xs">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-xl bg-warm-100 p-2 text-warm-700 shrink-0">
+                        <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-bold text-warm-900">Layanan Analisis Kompetitor Sedang Dioptimalkan</p>
+                        <p className="mt-1 leading-relaxed text-warm-800">{competitorError}</p>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('audit')}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-warm-700 px-3.5 py-2 text-xs font-bold text-white hover:bg-warm-800 transition-colors shadow-xs cursor-pointer"
+                          >
+                            <span>Gunakan Audit On-Page SEO (100% Aktif)</span>
+                            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                    <p className="font-semibold">Perhatian:</p>
+                    <p className="mt-0.5 leading-relaxed">{competitorError}</p>
+                  </div>
+                )
               )}
             </form>
           </div>
+
+          {/* Notice for genuine empty results (e.g. 40102 No Search Results) */}
+          {competitorNotice && (
+            <div className="rounded-2xl border border-border bg-surface p-6 text-center shadow-xs">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-cream">
+                <svg className="h-6 w-6 text-navy-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              </div>
+              <h3 className="mt-3 text-sm font-bold text-navy-700">Pesaing Tidak Ditemukan</h3>
+              <p className="mt-1 text-xs text-text-secondary max-w-sm mx-auto">{competitorNotice}</p>
+            </div>
+          )}
 
           {/* Results table */}
           {competitorResults.length > 0 && (
@@ -1159,6 +1279,7 @@ export default function SeoOptimizerPage() {
                       <th className="px-4 py-3 font-semibold">Domain Pesaing</th>
                       <th className="px-4 py-3 font-semibold">Rata-rata Posisi</th>
                       <th className="px-4 py-3 font-semibold">Skor Visibilitas</th>
+                      <th className="px-4 py-3 font-semibold">Estimasi Trafik</th>
                       <th className="px-4 py-3 font-semibold">Relevansi</th>
                     </tr>
                   </thead>
@@ -1168,6 +1289,7 @@ export default function SeoOptimizerPage() {
                         <td className="px-4 py-3 font-medium text-navy-900">{item.domain}</td>
                         <td className="px-4 py-3 text-text-secondary font-mono">{item.avg_position ? Number(item.avg_position).toFixed(1) : '-'}</td>
                         <td className="px-4 py-3 text-text-secondary font-mono">{Number(item.visibility || 0).toLocaleString('id-ID')}</td>
+                        <td className="px-4 py-3 text-text-secondary font-mono">{item.etv ? `${Number(item.etv).toLocaleString('id-ID')} /bln` : '-'}</td>
                         <td className="px-4 py-3 text-profit-600 font-semibold">{item.competitor_relevance ? `${Math.round(item.competitor_relevance * 100)}%` : '-'}</td>
                       </tr>
                     ))}

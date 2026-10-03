@@ -48,19 +48,21 @@ export function normalizeCreditActivationError(err, defaultMessage = 'Terjadi ke
  */
 export async function adminGenerateCreditActivation({
   profileId,
+  userId,
   businessId,
   packageKey,
   metadata = {},
 }) {
-  if (!profileId) throw new Error('Pengguna wajib dipilih.')
+  const targetId = profileId || userId
+  if (!targetId) throw new Error('Pengguna wajib dipilih.')
   if (!businessId) throw new Error('Bisnis wajib dipilih.')
   if (!packageKey) throw new Error('Paket kredit wajib dipilih.')
 
   const { data, error } = await supabase.rpc('admin_generate_credit_activation', {
-    p_profile_id: profileId,
+    p_profile_id: targetId,
     p_business_id: businessId,
     p_package_key: packageKey,
-    p_metadata: metadata,
+    p_metadata: metadata || {},
   })
 
   if (error) {
@@ -86,11 +88,12 @@ export async function getAdminCreditActivations({
   limit = 20,
   offset = 0,
 } = {}) {
+  const cleanSearch = typeof search === 'string' && search.trim() ? search.trim() : null
   const { data, error } = await supabase.rpc('get_admin_credit_activations', {
-    p_search: search || null,
-    p_status: status,
-    p_limit: limit,
-    p_offset: offset,
+    p_search: cleanSearch,
+    p_status: status || 'all',
+    p_limit: typeof limit === 'number' ? limit : 20,
+    p_offset: typeof offset === 'number' ? offset : 0,
   })
 
   if (error) {

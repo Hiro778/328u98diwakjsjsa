@@ -42,6 +42,7 @@ const TOOL_DESCRIPTIONS = {
   'Certification Guide': 'Standar sertifikasi mutu & kepatuhan internasional.',
   'Freight Estimator': 'Estimasi ongkos kirim logistik laut & udara.',
   'Localization Tool': 'Penyesuaian bahasa, label, & preferensi pasar target.',
+  'Kurs': 'Live currency intelligence & pemantauan nilai tukar Rupiah.',
 }
 
 function getToolContextIcon(name) {
@@ -118,20 +119,35 @@ export default function ToolCard({ tool }) {
   const isComingSoon = tool.status === 'coming_soon' || tool.availability === 'COMING_SOON'
   const needsConnection = tool.status === 'needs_connection'
 
-  // Tier classification per 2-tier pricing model (@gas.md)
-  const isHpp = tool.name === 'HPP Calculator' || tool.path?.includes('hpp')
-  const isBep = tool.name === 'BEP Calculator' || tool.name?.includes('Break-even') || tool.path?.includes('bep')
-  const isLoan = tool.name === 'Loan Simulation' || tool.path?.includes('loan-simulation')
-  const isAds = tool.name === 'Ads' || tool.path?.includes('marketing/ads')
-  const isSeo = tool.name === 'SEO Optimizer' || tool.path?.includes('seo')
-  const isKurs = tool.name === 'Kurs & Valuta Asing' || tool.path?.includes('ekspor') || tool.path?.includes('kurs')
-
-  const isBasicTier = tool.tier === 'basic' || (!tool.requiresPro && (isHpp || isBep || isLoan || isAds || isSeo || isKurs))
+  // Tier classification per 2-tier pricing model
+  const BASIC_NAMES = [
+    'HPP Calculator',
+    'BEP Calculator',
+    'Tax Planning',
+    'Loan Simulation',
+    'Cash Flow Forecast',
+    'Kurs',
+    'Kurs & Valuta Asing',
+    'AI Creative Studio',
+  ]
+  const isBasicTier =
+    tool.tier === 'basic' ||
+    (!tool.requiresPro && BASIC_NAMES.includes(tool.name)) ||
+    tool.path?.includes('hpp') ||
+    tool.path?.includes('bep') ||
+    tool.path?.includes('tax-planning') ||
+    tool.path?.includes('loan-simulation') ||
+    tool.path?.includes('cash-flow-forecast') ||
+    tool.path?.includes('ekspor') ||
+    tool.path?.includes('kurs') ||
+    tool.name === 'Kurs'
 
   // Entitlement determination
   let isLocked = false
   let showLockIcon = false
   let badgeConfig = null
+  let lockTooltip = ''
+  let lockActionText = ''
 
   if (isComingSoon) {
     // COMING_SOON tools have NO Free or Pro entitlement (per soon.md)
@@ -151,18 +167,21 @@ export default function ToolCard({ tool }) {
   } else if (isBasicTier) {
     // Basic tier tools (Rp35K / standalone)
     if (hasActiveSubscription) {
-      // User has active Basic or Pro subscription
+      // User has active Basic or Pro subscription -> Unlocked
       isLocked = false
       showLockIcon = false
       badgeConfig = {
-        label: 'Siap Digunakan',
-        classes: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-        dot: 'bg-emerald-400',
+        label: 'Basic • Rp35K',
+        classes: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+        icon: null,
+        dot: 'bg-blue-400',
       }
     } else {
       // User has no active subscription -> gate to Basic
       isLocked = true
       showLockIcon = true
+      lockTooltip = 'Langganan Basic (Rp35.000/bln)'
+      lockActionText = 'Upgrade Basic'
       badgeConfig = {
         label: 'Basic • Rp35K',
         classes: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
@@ -173,17 +192,21 @@ export default function ToolCard({ tool }) {
   } else {
     // Pro tier tools (Rp130K / DB, POS, AI, Analytics)
     if (isPro) {
+      // Pro user -> Unlocked
       isLocked = false
       showLockIcon = false
       badgeConfig = {
-        label: 'Siap Digunakan',
-        classes: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-        dot: 'bg-emerald-400',
+        label: 'Pro • Rp130K',
+        classes: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+        icon: null,
+        dot: 'bg-amber-400',
       }
     } else {
       // Basic user or un-subscribed user attempting Pro tool
       isLocked = true
       showLockIcon = true
+      lockTooltip = 'Upgrade ke Pro (Rp130.000/bln)'
+      lockActionText = 'Upgrade Pro'
       badgeConfig = {
         label: 'Pro • Rp130K',
         classes: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
@@ -212,12 +235,14 @@ export default function ToolCard({ tool }) {
       type="button"
       onClick={handleClick}
       disabled={isComingSoon}
-      title={isLocked ? 'Upgrade ke Pro' : undefined}
+      title={isLocked ? lockTooltip : undefined}
       className={`group relative flex w-full flex-col justify-between rounded-xl border p-4 text-left transition-all duration-150 min-h-[148px] ${
         isComingSoon
           ? 'cursor-default border-[#222C3E]/60 bg-[#151D2C]/40 opacity-55'
           : isLocked
-          ? 'cursor-pointer border-amber-500/20 bg-[#151D2C] hover:border-amber-500/40 hover:bg-[#1E293B]/70 shadow-xs'
+          ? isBasicTier
+            ? 'cursor-pointer border-blue-500/20 bg-[#151D2C] hover:border-blue-500/40 hover:bg-[#1E293B]/70 shadow-xs'
+            : 'cursor-pointer border-amber-500/20 bg-[#151D2C] hover:border-amber-500/40 hover:bg-[#1E293B]/70 shadow-xs'
           : 'cursor-pointer border-[#222C3E] bg-[#151D2C] hover:border-[#818CF8]/40 hover:bg-[#1E293B]/80 shadow-xs hover:-translate-y-0.5'
       }`}
     >
@@ -230,8 +255,12 @@ export default function ToolCard({ tool }) {
 
           {showLockIcon ? (
             <span
-              title="Upgrade ke Pro"
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20"
+              title={lockTooltip}
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${
+                isBasicTier
+                  ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                  : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+              }`}
             >
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -283,8 +312,14 @@ export default function ToolCard({ tool }) {
             Segera Hadir
           </span>
         ) : tool.path ? (
-          <span className="text-[11px] font-medium text-slate-400 group-hover:text-[#818CF8] transition-colors">
-            {isLocked ? 'Upgrade Pro' : 'Buka Tool'}
+          <span className={`text-[11px] font-medium transition-colors ${
+            isLocked
+              ? isBasicTier
+                ? 'text-blue-400 group-hover:text-blue-300'
+                : 'text-amber-400 group-hover:text-amber-300'
+              : 'text-slate-400 group-hover:text-[#818CF8]'
+          }`}>
+            {isLocked ? lockActionText : 'Buka Tool'}
           </span>
         ) : null}
       </div>

@@ -210,9 +210,9 @@ const router = createBrowserRouter([
               { path: 'penjualan', element: <CategoryPage categoryId="sales" /> },
               { path: 'analytics', element: <CategoryPage categoryId="analytics" /> },
 
-              // ── TIER 1: BASIC TOOLS (Rp35.000/bln — Standalone Calculators) ──
+              // ── TIER 1: BASIC TOOLS (Rp35.000/bln — Standalone Calculators & AI Studio) ──
               {
-                element: <RequireSubscription requiredPlan="basic" featureName="Fitur Basic ini" />,
+                element: <RequireSubscription requiredPlan="basic" featureName="Tools Basic" />,
                 children: [
                   { path: 'ekspor', element: <ExportCenterPage /> },
                   { path: 'kurs', element: <ExportCenterPage /> },
@@ -220,37 +220,37 @@ const router = createBrowserRouter([
                   { path: 'keuangan/hpp', element: <HPPCalculator /> },
                   { path: 'keuangan/bep-calculator', element: <BEPCalculator /> },
                   { path: 'keuangan/bep', element: <BEPCalculator /> },
+                  { path: 'keuangan/tax-planning', element: <TaxPlanning /> },
                   { path: 'keuangan/loan-simulation', element: <LoanSimulation /> },
+                  { path: 'keuangan/cash-flow-forecast', element: <CashFlowForecastPage /> },
+                  { path: 'marketing/content-generator', element: <CreativeStudioPage /> },
+                ],
+              },
+
+              // ── TIER 2: PRO TOOLS (Rp130.000/bln — DB, POS, AI Credits, Analytics) ──
+              {
+                element: <RequireSubscription requiredPlan="pro" featureName="Fitur Pro" />,
+                children: [
+                  // Legalitas
+                  { path: 'legalitas', element: <LegalitasPage /> },
+
+                  // Marketing Pro
+                  { path: 'marketing/credits', element: <CreativeCreditsPage /> },
+                  { path: 'marketing/ads', element: <AdsPage /> },
                   { path: 'marketing/seo-optimizer', element: <SeoOptimizerPage /> },
                   { path: 'marketing/seo', element: <SeoOptimizerPage /> },
-                  { path: 'marketing/ads', element: <AdsPage /> },
                   { path: 'marketing/content-calendar', element: <ContentCalendarPage /> },
                   { path: 'marketing/calendar', element: <ContentCalendarPage /> },
                   { path: 'marketing/google-business', element: <Navigate to="/dashboard/marketing/ads" replace /> },
                   { path: 'marketing/google-business-profile', element: <Navigate to="/dashboard/marketing/ads" replace /> },
                   { path: 'marketing/google-profile', element: <Navigate to="/dashboard/marketing/ads" replace /> },
                   { path: 'marketing/google-business/callback', element: <Navigate to="/dashboard/marketing/ads" replace /> },
-                ],
-              },
-
-              // ── TIER 2: PRO TOOLS (Rp130.000/bln — DB, POS, AI, Analytics) ──
-              {
-                element: <RequireSubscription requiredPlan="pro" featureName="Fitur Pro ini" />,
-                children: [
-                  // Legalitas
-                  { path: 'legalitas', element: <LegalitasPage /> },
-
-                  // Marketing Pro
-                  { path: 'marketing/content-generator', element: <CreativeStudioPage /> },
-                  { path: 'marketing/credits', element: <CreativeCreditsPage /> },
                   { path: 'marketing/ab-testing', element: <ABTestingPage /> },
                   { path: 'marketing/ab-testing/:id', element: <ABTestingPage /> },
                   { path: 'marketing/competitor-analysis', element: <CompetitorAnalysisPage /> },
 
                   // Keuangan Pro
                   { path: 'keuangan/margin-analysis', element: <MarginAnalysis /> },
-                  { path: 'keuangan/cash-flow-forecast', element: <CashFlowForecastPage /> },
-                  { path: 'keuangan/tax-planning', element: <TaxPlanning /> },
                   { path: 'keuangan/financial-reports', element: <FinancialReports /> },
                   { path: 'keuangan/anomaly-detection', element: <AnomalyDetection /> },
                   { path: 'keuangan/financial-health-score', element: <FinancialHealthScore /> },

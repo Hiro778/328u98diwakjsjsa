@@ -70,12 +70,68 @@ export async function executeOperationalCommand(command, { supabase, businessId,
           data: { isGreeting: true, choices: ['AI', 'FORM'] }
         };
 
-      case OPERATIONAL_INTENTS.SELECT_AI_MODE:
+      case OPERATIONAL_INTENTS.SELECT_AI_MODE: {
+        const baseUrl = (process.env.APP_BASE_URL || process.env.VITE_APP_URL || 'https://bisnissehat.my.id').replace(/\/+$/, '');
+        let businessName = 'Bisnis Anda';
+        try {
+          if (supabase && businessId) {
+            const { data: biz } = await supabase
+              .from('businesses')
+              .select('name')
+              .eq('id', businessId)
+              .maybeSingle();
+            if (biz?.name) businessName = biz.name;
+          }
+        } catch {
+          // Gracefully retain fallback name
+        }
+
+        const message = [
+          `🤖 *AI BisnisSehat — Asisten Cerdas untuk ${businessName}*`,
+          '',
+          'Halo! Fitur AI BisnisSehat siap membantu mengembangkan usaha Anda dengan kapabilitas cerdas berbasis data langsung di aplikasi web:',
+          '',
+          '✨ *Layanan In-App AI BisnisSehat:*',
+          '1. 🎨 *Creative Studio AI*',
+          '   Buat copy iklan, caption medsos, skrip video produk, & ide promosi secara otomatis.',
+          `   👉 ${baseUrl}/dashboard/marketing/creative-studio`,
+          '',
+          '2. 📊 *Business & Financial Intelligence*',
+          '   Analisis performa keuangan, evaluasi margin produk, proyeksi arus kas, dan skor kesehatan bisnis.',
+          `   👉 ${baseUrl}/dashboard/analytics`,
+          '',
+          '3. 🔍 *SEO & Optimasi Pemasaran*',
+          '   Riset kata kunci dan optimasi visibilitas online bisnis Anda.',
+          `   👉 ${baseUrl}/dashboard/marketing/seo`,
+          '',
+          '4. 📱 *WhatsApp & Operasional Dashboard*',
+          '   Kelola katalog produk, stok, dan pantau status transaksi WhatsApp secara visual.',
+          `   👉 ${baseUrl}/dashboard/operasional/whatsapp`,
+          '',
+          '💡 *Operasional Cepat di WhatsApp:*',
+          'Anda juga dapat langsung mencatat transaksi di sini dengan mengetik contoh:',
+          '• *Tambah produk Kopi Susu beli 5000 jual 10000 stok 50*',
+          '• *Catat penjualan Kopi Susu 2 harga 10000*',
+          '• Atau ketik *menu* untuk melihat semua opsi.'
+        ].join('\n');
+
         return {
           success: true,
-          message: process.env.GEMINI_API_KEY ? 'Mode AI aktif. Silakan kirimkan perintah operasional Anda.' : 'Untuk menggunakan mode AI, diperlukan Gemini API Key melalui pengaturan aman BisnisSehat.',
-          data: { mode: 'ai', requiresApiKey: !process.env.GEMINI_API_KEY }
+          message,
+          data: {
+            mode: 'in_app_ai',
+            businessId,
+            businessName,
+            appUrl: baseUrl,
+            links: {
+              creativeStudio: `${baseUrl}/dashboard/marketing/creative-studio`,
+              analytics: `${baseUrl}/dashboard/analytics`,
+              seo: `${baseUrl}/dashboard/marketing/seo`,
+              operasional: `${baseUrl}/dashboard/operasional/whatsapp`
+            }
+          }
         };
+      }
 
       case OPERATIONAL_INTENTS.SELECT_FORM_MODE:
         return {

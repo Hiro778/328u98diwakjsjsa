@@ -11,7 +11,8 @@ import {
 let snapScriptPromise = null
 
 /**
- * Load Midtrans Snap JS dynamically using client key
+ * @deprecated LEGACY / DEPRECATED: Customer subscription flow now uses manual payment + activation code.
+ * Load Midtrans Snap JS dynamically using client key (retained strictly for legacy compatibility).
  */
 export function loadSnapScript() {
   if (typeof window !== 'undefined' && window.snap) {
@@ -59,8 +60,9 @@ export function loadSnapScript() {
 }
 
 /**
- * Create subscription Snap transaction via Edge Function.
- * Strictly sends no custom amount from frontend — amount is Rp 35.000 for Basic or Rp 130.000 for Pro determined by server.
+ * @deprecated LEGACY / DEPRECATED: Subscription checkout via Midtrans Snap has been removed from customer flow.
+ * BisnisSehat now uses manual payment verification + activation code redemption.
+ * Retained strictly for legacy backend/test compatibility.
  *
  * @param {'pro'|'basic'} [plan='pro']
  */
@@ -172,7 +174,8 @@ export async function verifySubscriptionPayment(orderId = null) {
 }
 
 /**
- * Open Midtrans Snap modal
+ * @deprecated LEGACY / DEPRECATED: Open Midtrans Snap modal.
+ * No longer invoked by customer subscription flow.
  */
 export async function openSnapPaymentModal(snapToken, callbacks = {}) {
   await loadSnapScript()

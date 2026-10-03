@@ -233,3 +233,82 @@ export function getFriendlyErrorMessage() {
   }
 }
 
+/**
+ * Resolves the canonical subscription from an array of subscription records for a user.
+ * Prioritizes active, uncancelled subscriptions with future expiry.
+ * If none, resolves to the most appropriate record (recently expired, then cancelled, then others).
+ *
+ * @param {Array<Object>|Object|null} subscriptions One or more subscription rows from database
+ * @param {Date|number|string} [now] Reference date (default: new Date())
+ * @returns {Object|null} Canonical subscription object or null
+ */
+export function resolveCanonicalSubscription(subscriptions, now = new Date()) {
+  if (!subscriptions) return null
+  const list = Array.isArray(subscriptions) ? subscriptions.filter(Boolean) : [subscriptions]
+  if (list.length === 0) return null
+  if (list.length === 1) return list[0]
+
+  const currentTime = now instanceof Date ? now.getTime() : new Date(now).getTime()
+
+  const scored = list.map((sub) => {
+    if (!sub || typeof sub !== 'object') return { sub, rank: -1, expiryTime: 0, updatedAtTime: 0, createdAtTime: 0 }
+
+    const isCancelled = sub.status === 'cancelled' || sub.is_cancelled === true
+    const expiresAt = sub.expires_at ? new Date(sub.expires_at).getTime() : null
+    const hasValidExpiry = expiresAt !== null && !isNaN(expiresAt)
+    const isFuture = hasValidExpiry ? expiresAt > currentTime : false
+    const plan = sub.plan?.toLowerCase()
+    const isPro = plan === 'pro'
+    const isBasic = plan === 'basic'
+    const isActive = sub.status === 'active'
+
+    let rank = 0
+    // Priority 1: active + is_cancelled=false + expires_at > now()
+    if (isActive && !isCancelled && isFuture) {
+      rank = isPro ? 5000 : (isBasic ? 4000 : 3800)
+    }
+    // Priority 2: active + is_cancelled=false
+    else if (isActive && !isCancelled) {
+      rank = isPro ? 3500 : (isBasic ? 3000 : 2800)
+    }
+    // Priority 3: non-cancelled subscription (e.g. past expiry or pending transition)
+    else if (!isCancelled) {
+      rank = isPro ? 2500 : (isBasic ? 2200 : 2000)
+    }
+    // Priority 4: Cancelled, but still has future expiry (period not ended)
+    else if (isCancelled && isFuture) {
+      rank = isPro ? 1500 : (isBasic ? 1400 : 1300)
+    }
+    // Priority 5: Cancelled in the past
+    else if (isCancelled) {
+      rank = 1000
+    }
+    // Priority 6: Other
+    else {
+      rank = 500
+    }
+
+    const expiryTime = hasValidExpiry ? expiresAt : 0
+    const updatedAtTime = sub.updated_at ? new Date(sub.updated_at).getTime() : 0
+    const createdAtTime = sub.created_at ? new Date(sub.created_at).getTime() : 0
+
+    return {
+      sub,
+      rank,
+      expiryTime,
+      updatedAtTime,
+      createdAtTime,
+    }
+  })
+
+  scored.sort((a, b) => {
+    if (b.rank !== a.rank) return b.rank - a.rank
+    if (b.expiryTime !== a.expiryTime) return b.expiryTime - a.expiryTime
+    if (b.updatedAtTime !== a.updatedAtTime) return b.updatedAtTime - a.updatedAtTime
+    return b.createdAtTime - a.createdAtTime
+  })
+
+  return scored[0]?.sub || list[0]
+}
+
+

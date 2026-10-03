@@ -3,25 +3,25 @@ import { useNavigate, Link, useSearchParams } from 'react-router'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { PLANS, PLAN_CONFIG } from '../data/categories'
-import { cancelSubscription, createSubscriptionSnap, openSnapPaymentModal } from '../lib/subscriptionService'
+import { cancelSubscription } from '../lib/subscriptionService'
 import { redeemActivationCode } from '../lib/activationCodeService'
 
 const BASIC_FEATURES = [
-  '14+ Kalkulator Keuangan & Operasional (HPP, BEP, Gaji, Simulasi Pinjaman)',
-  'Generator Iklan & Copywriting Cepat',
-  'Tools Kurs, Bea Cukai & Valuta Ekspor Standalone',
+  'Tools Bisnis Basic: HPP, BEP, Tax Planning, Loan Simulation, Cash Flow Forecast, dan Kurs',
+  'Akses AI Creative Studio (tanpa kuota kredit bulanan; top-up kredit tersedia terpisah)',
   'Perhitungan realtime instan langsung di browser',
-  'Tanpa komitmen jangka panjang, bayar bulanan',
+  'Tanpa komitmen jangka panjang, bayar bulanan Rp35.000',
 ]
 
 const PRO_FEATURES = [
-  'Semua fitur & tools standalone paket Basic',
+  'Semua fitur & tools paket Basic',
+  'AI Creative Studio dengan 15.000 Kredit AI per bulan',
   'Point of Sales (POS) Kasir & QR Menu Toko/Resto',
   'Database Bisnis, Inventori & Stok Multi-Lokasi',
   'CRM Pelanggan & Integrasi WhatsApp Gateway',
-  'Laporan Keuangan Komprehensif (Laba Rugi, Neraca, Arus Kas)',
-  'AI Creative Studio & 200 Kredit AI per bulan',
-  'Pemeriksaan Legalitas Usaha Resmi',
+  'Laporan Keuangan Komprehensif (Laba Rugi, Neraca, Arus Kas) & Margin Analysis',
+  'Tools Marketing Pro (Ads, SEO Optimizer, Content Calendar, A/B Testing, Riset Kompetitor)',
+  'Legalitas Checker & Analitik Bisnis Realtime',
   'Dukungan prioritas tim BisnisSehat',
 ]
 
@@ -54,8 +54,6 @@ export default function PricingPage() {
   const [redeeming, setRedeeming] = useState(false)
   const [redeemSuccessMessage, setRedeemSuccessMessage] = useState(null)
   const [error, setError] = useState(null)
-  const [paymentSuccessMessage, setPaymentSuccessMessage] = useState(null)
-  const [payingPlan, setPayingPlan] = useState(null) // 'basic' | 'pro' | null
 
   // Subscription cancellation modal states
   const [showCancelModal, setShowCancelModal] = useState(false)
@@ -111,7 +109,6 @@ export default function PricingPage() {
     setRedeeming(true)
     setError(null)
     setRedeemSuccessMessage(null)
-    setPaymentSuccessMessage(null)
     setCancelSuccessMessage(null)
 
     try {
@@ -126,52 +123,6 @@ export default function PricingPage() {
       setError(err.message || 'Kode aktivasi tidak valid atau sudah tidak dapat digunakan.')
     } finally {
       setRedeeming(false)
-    }
-  }
-
-  // Handle Midtrans Snap online payment
-  async function handlePayOnline(planToPay) {
-    if (!user) {
-      const returnUrl = `/pricing?plan=${planToPay}`
-      navigate(`/auth?returnTo=${encodeURIComponent(returnUrl)}`)
-      return
-    }
-
-    setPayingPlan(planToPay)
-    setError(null)
-    setRedeemSuccessMessage(null)
-    setPaymentSuccessMessage(null)
-    setCancelSuccessMessage(null)
-
-    try {
-      const snapData = await createSubscriptionSnap(planToPay)
-      if (!snapData?.snap_token) {
-        throw new Error(snapData?.error || 'Gagal membuat sesi pembayaran Midtrans.')
-      }
-
-      await openSnapPaymentModal(snapData.snap_token, {
-        onSuccess: async () => {
-          await refreshSubscription()
-          setPaymentSuccessMessage(
-            `Pembayaran berhasil! Paket BisnisSehat ${planToPay === 'basic' ? 'Basic' : 'Pro'} Anda telah aktif.`
-          )
-        },
-        onPending: async () => {
-          await refreshSubscription()
-          setPaymentSuccessMessage('Menunggu penyelesaian pembayaran. Status akan diperbarui secara otomatis.')
-        },
-        onError: () => {
-          setError('Pembayaran gagal atau dibatalkan. Silakan coba kembali.')
-        },
-        onClose: () => {
-          refreshSubscription()
-        },
-      })
-    } catch (err) {
-      console.error('[PricingPage] Online payment error:', err)
-      setError(err.message || 'Gagal memproses pembayaran online. Silakan coba lagi.')
-    } finally {
-      setPayingPlan(null)
     }
   }
 
@@ -283,7 +234,7 @@ export default function PricingPage() {
               </motion.div>
             )}
 
-            {(redeemSuccessMessage || paymentSuccessMessage) && (
+            {redeemSuccessMessage && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
@@ -294,7 +245,7 @@ export default function PricingPage() {
                   <span className="text-base">🎉</span>
                   <div>
                     <p className="font-bold text-sm">Aktivasi Berhasil!</p>
-                    <p className="mt-0.5 text-text-primary">{redeemSuccessMessage || paymentSuccessMessage}</p>
+                    <p className="mt-0.5 text-text-primary">{redeemSuccessMessage}</p>
                     {formattedExpiry && (
                       <p className="mt-1 font-semibold text-profit-600">
                         Aktif sampai: {formattedExpiry}
@@ -304,10 +255,7 @@ export default function PricingPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setRedeemSuccessMessage(null)
-                    setPaymentSuccessMessage(null)
-                  }}
+                  onClick={() => setRedeemSuccessMessage(null)}
                   className="text-profit-500/70 hover:text-profit-500 font-bold p-0.5 cursor-pointer"
                 >
                   ✕
@@ -435,7 +383,7 @@ export default function PricingPage() {
                     <span className="text-xs font-medium text-text-muted">/ bulan</span>
                   </div>
                   <p className="mt-1 text-[11px] text-text-muted">
-                    Pembayaran online instan via Midtrans (QRIS, E-Wallet, Transfer Bank).
+                    Pembayaran diverifikasi manual oleh admin.
                   </p>
                 </div>
 
@@ -465,36 +413,18 @@ export default function PricingPage() {
                     Sudah Termasuk dalam Pro Anda
                   </div>
                 ) : isBasic ? (
-                  <button
-                    type="button"
-                    onClick={() => handlePayOnline('basic')}
-                    disabled={payingPlan === 'basic'}
-                    className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 py-3 text-xs font-bold text-white shadow-sm transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    {payingPlan === 'basic' ? (
-                      <>
-                        <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        <span>Menghubungkan Midtrans...</span>
-                      </>
-                    ) : (
-                      'Perpanjang Paket Basic'
-                    )}
-                  </button>
+                  <div className="w-full rounded-xl bg-emerald-500/10 border border-emerald-500/25 py-3 text-center text-xs font-bold text-emerald-500">
+                    Paket Basic Aktif
+                  </div>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => handlePayOnline('basic')}
-                    disabled={payingPlan === 'basic'}
-                    className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 py-3 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition-all active:scale-[0.98] disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
+                    onClick={() => {
+                      setError('Pembayaran Paket Basic diverifikasi manual oleh admin. Silakan hubungi admin atau customer support untuk aktivasi.')
+                    }}
+                    className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 py-3 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5"
                   >
-                    {payingPlan === 'basic' ? (
-                      <>
-                        <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        <span>Menghubungkan Midtrans...</span>
-                      </>
-                    ) : (
-                      'Pilih Basic &bull; Rp 35.000 / bln'
-                    )}
+                    Pilih Basic &bull; Rp 35.000 / bln
                   </button>
                 )}
               </div>
@@ -544,7 +474,7 @@ export default function PricingPage() {
                     <span className="text-xs font-medium text-text-muted">/ bulan</span>
                   </div>
                   <p className="mt-1 text-[11px] text-text-muted">
-                    Dapat dibayar via Online Payment (Midtrans) atau Kode Voucher Aktivasi resmi.
+                    Pembayaran diverifikasi manual oleh admin. Kode aktivasi resmi diberikan setelah pembayaran diverifikasi.
                   </p>
                 </div>
 
@@ -571,31 +501,20 @@ export default function PricingPage() {
               <div className="mt-6 pt-4 border-t border-border space-y-2">
                 <button
                   type="button"
-                  onClick={() => handlePayOnline('pro')}
-                  disabled={payingPlan === 'pro'}
-                  className="w-full rounded-xl bg-primary hover:bg-primary-hover py-3 text-xs font-bold text-white shadow-md shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
+                  onClick={() => {
+                    document.getElementById('pro-activation-input')?.focus()
+                    document.getElementById('pro-activation-section')?.scrollIntoView({ behavior: 'smooth' })
+                  }}
+                  className="w-full rounded-xl bg-primary hover:bg-primary-hover py-3 text-xs font-bold text-white shadow-md shadow-primary/20 transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  {payingPlan === 'pro' ? (
-                    <>
-                      <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      <span>Menghubungkan Midtrans...</span>
-                    </>
-                  ) : isPro ? (
-                    'Perpanjang Pro'
-                  ) : hasCancelledSubscription ? (
-                    'Berlangganan Pro Kembali'
-                  ) : isBasic ? (
-                    'Upgrade ke PRO • Rp 130.000 / bln'
-                  ) : (
-                    'Pilih PRO • Rp 130.000 / bln'
-                  )}
+                  Masukkan Kode Aktivasi
                 </button>
               </div>
             </div>
           </div>
 
           {/* PRO Activation Voucher Section */}
-          <div className="mt-8 rounded-2xl border border-border bg-surface p-5 sm:p-7 shadow-sm">
+          <div id="pro-activation-section" className="mt-8 rounded-2xl border border-border bg-surface p-5 sm:p-7 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
               <div>
                 <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">
@@ -612,6 +531,7 @@ export default function PricingPage() {
 
             <form onSubmit={handleRedeem} className="flex flex-col sm:flex-row gap-2.5">
               <input
+                id="pro-activation-input"
                 type="text"
                 placeholder="Contoh: BS-PRO-9F8A-7B2C-..."
                 value={activationCode}
