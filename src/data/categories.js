@@ -126,7 +126,7 @@ export const CATEGORIES = {
     title: 'Analytics',
     color: '#818CF8',
     tools: [
-      { name: 'AI Business Analyst', path: '/ai', tier: 'basic', requiresPro: false, availability: 'LIVE' },
+      { name: 'AI Business Analyst', path: '/ai', tier: 'pro', requiresPro: true, availability: 'LIVE' },
       { name: 'Real-time Dashboard', path: '/dashboard/analytics/realtime', tier: 'pro', requiresPro: true },
       { name: 'Benchmarking', path: '/dashboard/analytics/benchmarking', tier: 'pro', requiresPro: true },
       { name: 'Weekly Recap', path: '/dashboard/analytics/weekly-recap', tier: 'pro', requiresPro: true },
@@ -136,7 +136,7 @@ export const CATEGORIES = {
 
 export const SIDEBAR_NAV = [
   { id: 'dashboard', label: 'Dashboard', path: '/dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4' },
-  { id: 'ai-analyst', label: '✨ AI Business Analyst', path: '/ai', icon: 'M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z' },
+  { id: 'ai-analyst', label: '✨ AI Business Analyst', path: '/ai', proOnly: true, icon: 'M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z' },
   { id: 'keuangan', label: 'Keuangan', path: '/dashboard/keuangan', categoryId: 'finance', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1' },
   { id: 'operasional', label: 'Operasional', path: '/dashboard/operasional', categoryId: 'operations', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' },
   { id: 'penjualan', label: 'Penjualan & CRM', path: '/dashboard/penjualan', categoryId: 'sales', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },

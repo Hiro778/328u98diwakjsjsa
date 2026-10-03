@@ -92,8 +92,8 @@ const ABUSE_THREAT_PATTERNS = [
   /(?:\b(env(ironment)?[_\s-]?(var(iable)?s?|secret)|(ambil|kirim(kan)?|lihat|dump|tampilkan|show|give|kasih)\s+(semua\s+)?env|server\s+secrets?|api[_\s-]?keys?)\b|\.env)/i,
   // 7. External credential exfiltration & proxying
   /\b(kirim\s+credential\s+ke|curl\s+https?:\/\/|wget\s+https?:\/\/|ngrok|webhook\.site|proxy(\s+this)?\s+url|proxy\s+request)\b/i,
-  // 8. Request flooding & DDoS / destructive testing
-  /\b(hit\s+endpoint.*10\.?000|flood(ing)?\s+(request|api)|ddos|scan\s+production\s+lalu\s+exploit)\b/i,
+  // 8. Request flooding & DDoS / destructive testing / exploit & malware payloads
+  /\b(hit\s+endpoint.*10\.?000|flood(ing)?\s+(request|api)|ddos|scan\s+production\s+lalu\s+exploit|exploit|malware|ransomware|keylogger|backdoor|reverse\s+shell|payload\s+serangan)\b/i,
   // 9. Cross-tenant & RLS bypass
   /\b((ignore|bypass)[_\s-]?rls|bypass\s+(auth|authentication|authorization)|(akses|data|lihat|show|tampilkan)?\s*(bisnis|user|tenant|business)\s+(lain|orang\s+lain)|another\s+tenant|other[_\s-]?business|other\s+tenant)\b/i,
   // 10. Arbitrary SQL execution / injection
@@ -122,6 +122,83 @@ export function isAbuseThreat(input) {
   }
 
   return ABUSE_THREAT_PATTERNS.some((pattern) => pattern.test(normalized))
+}
+
+// ── 2.1 CODING ASSISTANT REFUSAL POLICY ──
+
+export const CODING_BLOCK_MESSAGE =
+  'Maaf, saya khusus membantu urusan bisnis di BisnisSehat, bukan membuat atau menjalankan kode.\n' +
+  'Coba tanyakan tentang omzet, penjualan, laba, stok, produk, supplier, atau risiko bisnis.'
+
+/**
+ * Check whether a message requests code creation, programming, or script execution.
+ * AI Business Analyst is strictly a business assistant, not a coding agent.
+ * Does NOT over-block conceptual questions like "Supabase itu apa?" or "API itu apa?".
+ */
+export function isCodingRequest(input) {
+  if (!input || typeof input !== 'string') return false
+  const normalized = input.trim().toLowerCase()
+
+  // 1. Conceptual / definition questions must NOT be blocked as coding requests
+  // e.g. "Supabase itu apa?", "API itu apa?", "apa itu coding?", "what is SQL?"
+  const isExplanationQuery =
+    /^(?:apa\s+itu\b|what\s+is\b|jelaskan\s+(?:apa\s+itu|konsep|arti)\b|apa\s+maksud\b)/i.test(normalized) ||
+    /(?:itu\s+apa|artinya\s+apa|maksudnya\s+apa)\??$/i.test(normalized)
+
+  if (isExplanationQuery) {
+    if (!/(?:buatkan|tuliskan|bikin|generate|write|kasih)\s+(?:kode|kodenya|script|skrip|fungsi|sql|program)/i.test(normalized)) {
+      return false
+    }
+  }
+
+  // 2. Direct requests for coding assistance / questions asking if AI can code
+  if (
+    /\b(bisa\s+bantu\s+coding|bantu\s+coding|bisa\s+ngoding|ajarin\s+coding|tolong\s+coding|can\s+you\s+code|help\s+me\s+code|code\s+for\s+me)\b/i.test(normalized)
+  ) {
+    return true
+  }
+
+  // 3. Requests to generate/write/provide code, scripts, queries, functions, commands, or programs
+  // Covers: "buatkan script", "buatkan SQL", "buatkan kode", "kasih kodenya", "buat fungsi", "bikin command", "tolong programkan", "tuliskan SQL"
+  if (
+    /\b(buatkan|tuliskan|bikin|generate|write|create|tolong\s+programkan|programkan|kasih|minta|berikan)\s+(?:sebuah\s+|suatu\s+|contoh\s+)?(?:kode|kodenya|script|skrip|scriptnya|fungsi|function|command|perintah|program|query|sql|syntax)\b/i.test(normalized)
+  ) {
+    return true
+  }
+
+  // 4. Exact short phrases
+  if (
+    /\b(buat\s+fungsi|tulis\s+fungsi|kasih\s+kodenya|minta\s+kodenya|buatkan\s+sql|tuliskan\s+sql|bikin\s+command|tolong\s+programkan)\b/i.test(normalized)
+  ) {
+    return true
+  }
+
+  // 5. "implementasikan" when asking for coding/implementation
+  if (
+    /\bimplementasikan\b/i.test(normalized) &&
+    /\b(kode|code|fungsi|function|script|algoritma|software|program|class|method|fitur\s+ini\s+ke\s+dalam\s+kode)\b/i.test(normalized)
+  ) {
+    return true
+  }
+  if (/^(?:tolong\s+)?implementasikan[?!.]*$/i.test(normalized)) {
+    return true
+  }
+
+  // 6. Language-specific code generation requests (e.g. "buatkan kode Python", "tulis script javascript", "write a python script")
+  if (
+    /\b(?:buatkan|tuliskan|bikin|generate|write|create)\s+.*?\b(?:python|javascript|typescript|bash|shell|php|c\+\+|golang|html|css|sql|rust|java)\b/i.test(normalized)
+  ) {
+    return true
+  }
+
+  // 7. General "write code" or "generate code" in English
+  if (
+    /\b(write\s+(?:some\s+|the\s+)?code|generate\s+(?:the\s+)?code|create\s+(?:a\s+)?script|write\s+(?:a\s+)?script)\b/i.test(normalized)
+  ) {
+    return true
+  }
+
+  return false
 }
 
 // ── 3. AUDIT & CONFIRMATION STORAGE ──
@@ -297,7 +374,7 @@ export async function generateBusinessInsightsWithLLM({
  */
 export function getGeneralConversationResponse({
   message = '',
-  _businessName = 'Bisnis Anda',
+  businessName = 'Bisnis Anda',
   _history = [],
 }) {
   const clean = (message || '').trim()
@@ -321,18 +398,39 @@ export function getGeneralConversationResponse({
     }
   }
 
-  // 1.1 Platform & General Tech Questions
-  if (/^(?:apa\s+itu\s+supabase\??|jelaskan\s+supabase\??)$/i.test(clean)) {
+  // 1.1 Platform & Conceptual Tech Questions (Allow normal conceptual inquiries)
+  if (/(?:supabase\s+itu\s+apa|apa\s+itu\s+supabase|jelaskan\s+supabase)/i.test(clean)) {
     return {
-      text: 'Supabase adalah platform backend open-source alternatif Firebase yang menyediakan database PostgreSQL, autentikasi, storage, dan Edge Functions.',
+      text: 'Supabase adalah platform backend open-source berbasis PostgreSQL yang menyediakan database, autentikasi aman, storage, dan fungsi serverless untuk aplikasi modern.',
       suggestions: ['Apa yang bisa kamu lakukan?', 'Berapa omzet saya bulan ini?'],
     }
   }
 
-  if (/^(?:bisa\s+bantu\s+coding\??|bisa\s+ngoding\??)$/i.test(clean)) {
+  if (/(?:api\s+itu\s+apa|apa\s+itu\s+api|jelaskan\s+api)/i.test(clean)) {
     return {
-      text: 'Fokus utama saya adalah asisten analisis bisnis UMKM BisnisSehat (omzet, laba, stok, supplier). Namun saya juga dapat berdiskusi santai seputar operasional teknis.',
+      text: 'API (Application Programming Interface) adalah antarmuka yang memungkinkan dua atau lebih sistem aplikasi saling berkomunikasi dan bertukar data secara terstruktur dan aman.',
+      suggestions: ['Berapa omzet saya bulan ini?', 'Lihat supplier'],
+    }
+  }
+
+  if (/(?:bisnissehat\s+pakai\s+ai\s+apa|ai\s+apa\s+(?:yang\s+)?dipakai\s+bisnissehat)/i.test(clean)) {
+    return {
+      text: 'BisnisSehat AI menggunakan model kecerdasan buatan terdedikasi untuk analisis bisnis UMKM, membantu Anda memantau performa penjualan, laba, dan manajemen inventori secara cerdas dan aman.',
       suggestions: ['Berapa omzet saya bulan ini?', 'Apa yang bisa kamu lakukan?'],
+    }
+  }
+
+  if (/(?:menurut\s+(?:lu|kamu|anda)\s+bisnis\s+(?:gw|saya|kami)\s+apa|bisnis\s+(?:gw|saya|kami)\s+apa)/i.test(clean)) {
+    return {
+      text: `Berdasarkan profil bisnis Anda, usaha ini terdaftar sebagai "${businessName}". Saya siap membantu menganalisis data penjualan, produk, dan operasional untuk usaha ini.`,
+      suggestions: ['Berapa omzet saya bulan ini?', 'Produk apa paling laku?'],
+    }
+  }
+
+  if (isCodingRequest(clean)) {
+    return {
+      text: CODING_BLOCK_MESSAGE,
+      suggestions: ['Berapa omzet saya bulan ini?', 'Produk apa paling laku?', 'Kapan harus restock?', 'Lihat supplier'],
     }
   }
 
@@ -1082,6 +1180,9 @@ export async function handleAiBusinessAnalystRequest({
   confirmed = null,
   db = null,
   llmClient = null,
+  isPro = true,
+  subscription = null,
+  requestedBusinessId = null,
 }) {
   // 1. Auth & Tenant Verification
   if (!user || !user.id) {
@@ -1095,6 +1196,41 @@ export async function handleAiBusinessAnalystRequest({
     return {
       status: 403,
       error: 'Access denied: Anda tidak memiliki akses ke bisnis ini.',
+    }
+  }
+
+  // Cross-tenant / manipulated business ID check
+  if (requestedBusinessId && requestedBusinessId !== businessId) {
+    return {
+      status: 403,
+      error: 'Access denied: Otorisasi bisnis tidak sesuai atau dimanipulasi.',
+    }
+  }
+
+  if (db && Array.isArray(db.businesses)) {
+    const userOwnsBiz = db.businesses.some((b) => b.id === businessId && b.owner_id === user.id)
+    if (!userOwnsBiz) {
+      return {
+        status: 403,
+        error: 'Access denied: Anda tidak memiliki akses ke bisnis ini.',
+      }
+    }
+  }
+
+  // 1.1 Pro Entitlement Check (Server-Side Authority)
+  let effectivePro = (user.isPro !== undefined) ? Boolean(user.isPro) : Boolean(isPro)
+  if (subscription) {
+    const isProPlan = subscription.plan === 'pro'
+    const isActive = subscription.status === 'active'
+    const notCancelled = !subscription.is_cancelled && subscription.status !== 'cancelled'
+    const notExpired = subscription.expires_at ? new Date(subscription.expires_at).getTime() > Date.now() : true
+    effectivePro = isProPlan && isActive && notCancelled && notExpired
+  }
+
+  if (!effectivePro) {
+    return {
+      status: 403,
+      error: 'Forbidden: Fitur AI Business Analyst membutuhkan langganan BisnisSehat Pro.',
     }
   }
 
@@ -1117,7 +1253,7 @@ export async function handleAiBusinessAnalystRequest({
   }
 
   // 2. Security & Abuse Gate (Server-Side)
-  // Must intercept prohibited requests BEFORE any tool execution
+  // Must intercept prohibited requests BEFORE any tool execution or memory processing
   if (message && isAbuseThreat(message)) {
     logActionAudit({
       userId: user.id,
@@ -1139,6 +1275,21 @@ export async function handleAiBusinessAnalystRequest({
         'Kapan saya harus restock?',
       ],
     }
+  }
+
+  // 2.1 Coding Request Gate (Business Assistant, NOT Coding Agent)
+  if (message && isCodingRequest(message)) {
+    return recordAndReturn({
+      status: 200,
+      isCodingBlocked: true,
+      text: CODING_BLOCK_MESSAGE,
+      suggestions: [
+        'Berapa omzet saya bulan ini?',
+        'Produk apa paling laku?',
+        'Kapan harus restock?',
+        'Lihat supplier',
+      ],
+    })
   }
 
   // 3. Confirmation Flow Handling

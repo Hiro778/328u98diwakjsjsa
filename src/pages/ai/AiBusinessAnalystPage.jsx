@@ -6,6 +6,7 @@ import { usePlatformSettings } from '../../hooks/usePlatformSettings'
 import BackButton from '../../components/BackButton'
 import { supabase } from '../../lib/supabase'
 import { processAiBusinessOperatorQuery } from '../../services/aiBusinessOperator'
+import SubscriptionGate from '../../components/SubscriptionGate'
 
 // ── AI SHORTCUT OFFER — localStorage keys ──
 const LS_OFFER_DISMISSED = 'bs_ai_shortcut_offer_dismissed'
@@ -296,6 +297,15 @@ export default function AiBusinessAnalystPage({ isStandalone = false }) {
     localStorage.setItem(LS_OFFER_DISMISSED, '1')
     setShowShortcutOffer(false)
   }, [])
+
+  // Pro-only entitlement gate
+  if (!isPro) {
+    return (
+      <div className={isStandalone ? 'min-h-screen bg-canvas py-8 px-4 sm:px-6' : 'py-4'}>
+        <SubscriptionGate featureName="AI Business Analyst" requiredPlan="pro" />
+      </div>
+    )
+  }
 
   return (
     <div

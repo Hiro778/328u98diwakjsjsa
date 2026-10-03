@@ -78,8 +78,6 @@ import CreativeStudioPage from './pages/dashboard/marketing/CreativeStudioPage'
 import CreativeCreditsPage from './pages/dashboard/marketing/CreativeCreditsPage'
 import CompetitorAnalysisPage from './pages/dashboard/marketing/CompetitorAnalysisPage'
 import AdsPage from './pages/dashboard/marketing/AdsPage'
-import GoogleBusinessProfilePage from './pages/dashboard/marketing/GoogleBusinessProfilePage'
-import GoogleBusinessCallbackPage from './pages/dashboard/marketing/GoogleBusinessCallbackPage'
 import SeoOptimizerPage from './pages/dashboard/marketing/SeoOptimizerPage'
 import ContentCalendarPage from './pages/dashboard/marketing/ContentCalendarPage'
 import ABTestingPage from './pages/dashboard/marketing/ABTestingPage'
@@ -187,24 +185,6 @@ const router = createBrowserRouter([
         ],
       },
       {
-        path: '/ai',
-        element: <RequireAuth />,
-        children: [
-          {
-            element: <RequireOnboarding />,
-            children: [
-              {
-                element: <RequireSubscription requiredPlan="basic" featureName="AI Business Analyst" />,
-                children: [
-                  { index: true, element: <AiBusinessAnalystPage isStandalone={true} /> },
-                  { path: 'chat', element: <AiBusinessAnalystPage isStandalone={true} /> },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-      {
         path: '/dashboard',
         element: <RequireAuth />,
         children: [
@@ -221,8 +201,6 @@ const router = createBrowserRouter([
               { path: 'semua-tools', element: <AllToolsPage /> },
               { path: 'bantuan', element: <HelpCenterPage /> },
               { path: 'faq', element: <HelpCenterPage /> },
-              { path: 'ai', element: <AiBusinessAnalystPage isStandalone={false} /> },
-              { path: 'ai/chat', element: <AiBusinessAnalystPage isStandalone={false} /> },
 
               // General & Category Overview Pages
               { path: 'keuangan', element: <CategoryPage categoryId="finance" /> },
@@ -252,6 +230,10 @@ const router = createBrowserRouter([
               {
                 element: <RequireSubscription requiredPlan="pro" featureName="Fitur Pro" />,
                 children: [
+                  // AI Business Analyst (Pro Only)
+                  { path: 'ai', element: <AiBusinessAnalystPage isStandalone={false} /> },
+                  { path: 'ai/chat', element: <AiBusinessAnalystPage isStandalone={false} /> },
+
                   // Legalitas
                   { path: 'legalitas', element: <LegalitasPage /> },
 
@@ -305,6 +287,24 @@ const router = createBrowserRouter([
                   { path: 'pos/tables', element: <TableManager /> },
                   { path: 'pos/orders', element: <OrderHistory /> },
                   { path: 'pos/receipt-settings', element: <ReceiptSettingsPage /> },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        path: '/ai',
+        element: <RequireAuth />,
+        children: [
+          {
+            element: <RequireOnboarding />,
+            children: [
+              {
+                element: <RequireSubscription requiredPlan="pro" featureName="AI Business Analyst" />,
+                children: [
+                  { index: true, element: <AiBusinessAnalystPage isStandalone={true} /> },
+                  { path: 'chat', element: <AiBusinessAnalystPage isStandalone={true} /> },
                 ],
               },
             ],

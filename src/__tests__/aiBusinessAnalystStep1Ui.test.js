@@ -42,8 +42,8 @@ describe('AI Business Analyst — Step 1 UI & Routing Specification Suite', () =
       '/ai route must be wrapped by RequireSubscription'
     )
     assert.ok(
-      aiSection.includes('requiredPlan="basic"'),
-      '/ai route must specify requiredPlan="basic"'
+      aiSection.includes('requiredPlan="pro"'),
+      '/ai route must specify requiredPlan="pro"'
     )
   })
 

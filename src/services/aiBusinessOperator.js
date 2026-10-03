@@ -17,6 +17,7 @@ import {
   WIB_OFFSET_MS,
 } from './canonicalSalesService.js'
 import { parseBusinessIntent, BUSINESS_TOOLS } from './aiIntentRouter.js'
+import { isCodingRequest, CODING_BLOCK_MESSAGE } from './aiBusinessAnalyst.server.js'
 
 // ── 1. OPERATOR INTENTS ──
 export const ANALYST_INTENTS = Object.freeze({
@@ -54,7 +55,7 @@ const SECURITY_PATTERNS = [
   /\b(vercel\s+(token|credential|secret|api)|tembak\s+api\s+vercel)\b/i,
   /\b(env(ironment)?[_\s-]?(var(iable)?s?|secret)|ambil\s+env|server\s+secrets?|api[_\s-]?keys?)\b/i,
   /\b(kirim\s+credential\s+ke|curl\s+https?:\/\/|wget\s+https?:\/\/|ngrok|webhook\.site)\b/i,
-  /\b(hit\s+endpoint.*10\.?000|flood(ing)?\s+(request|api)|ddos|scan\s+production\s+lalu\s+exploit)\b/i,
+  /\b(hit\s+endpoint.*10\.?000|flood(ing)?\s+(request|api)|ddos|scan\s+production\s+lalu\s+exploit|exploit|malware|ransomware|keylogger|backdoor|reverse\s+shell|payload\s+serangan)\b/i,
   /\b(bypass[_\s-]?rls|bypass\s+(auth|authentication|authorization)|(akses|data|lihat)?\s*(bisnis|user|tenant)\s+lain|tenant\s+orang\s+lain|other[_\s-]?business)\b/i,
   /\b(union\s+select|information_schema|drop\s+table|delete\s+semua\s+database|exec\s*\(|alter\s+table)\b/i,
   /\b(rm\s+-rf|sh\s+-c|bash\s+-c|cat\s+\/etc|powershell|cmd\.exe)\b/i,
@@ -690,6 +691,14 @@ export async function processAiBusinessOperatorQuery({
       text: SECURITY_ALERT_MESSAGE,
       suggestions: ['Produk apa paling laku bulan ini?', 'Berapa omzet saya bulan ini?'],
       isThreat: true,
+    }
+  }
+
+  // 1.1 Coding request refusal guard (Business Assistant, NOT Coding Agent)
+  if (isCodingRequest(query)) {
+    return {
+      text: CODING_BLOCK_MESSAGE,
+      suggestions: ['Berapa omzet saya bulan ini?', 'Produk apa paling laku?', 'Kapan harus restock?', 'Lihat supplier'],
     }
   }
 
