@@ -1115,10 +1115,11 @@ export default function PublicMenuPage() {
               </motion.button>
             )}
 
-            {/* Chat Penjual Button: Available after QRIS payment acknowledged, during processing, or completed */}
-            {(!isCancelled && (qrisPaidAcknowledged || isProcessing || isCompleted || !isQris)) && (
+            {/* Chat Penjual Button: Prominently available for customer on active order screen */}
+            {Boolean(orderSuccess) && (
               <motion.button
                 type="button"
+                data-testid="buyer-chat-penjual-btn"
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => {
@@ -1127,9 +1128,7 @@ export default function PublicMenuPage() {
                 }}
                 className={`w-full py-3.5 text-sm font-bold transition hover:opacity-90 active:scale-[0.98] flex items-center justify-center gap-2 border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-xs ${qrBtnRadius}`}
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
+                <span className="text-base leading-none">💬</span>
                 <span>Chat Penjual</span>
                 {unreadChatCount > 0 && (
                   <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-600 px-1.5 text-[10px] font-bold text-white shadow-xs animate-bounce">

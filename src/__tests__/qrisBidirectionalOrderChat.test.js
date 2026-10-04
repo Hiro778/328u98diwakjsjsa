@@ -228,14 +228,18 @@ describe('Bidirectional Buyer ↔ Seller Chat After QRIS Payment Suite', () => {
     )
   })
 
-  it('7. PublicMenuPage renders Chat Penjual button when qrisPaidAcknowledged is true (after paying QRIS)', () => {
+  it('7. PublicMenuPage renders Chat Penjual button prominently for buyer on active order screen', () => {
     const menuPath = path.resolve(process.cwd(), 'src/pages/public/PublicMenuPage.jsx')
     const menuContent = fs.readFileSync(menuPath, 'utf8')
 
-    // Must show Chat Penjual when qrisPaidAcknowledged is true without requiring isProcessing
+    // Must show Chat Penjual button on active order screen
     assert.ok(
-      menuContent.includes('qrisPaidAcknowledged || isProcessing || isCompleted'),
-      'PublicMenuPage must render Chat Penjual button when qrisPaidAcknowledged is true'
+      menuContent.includes('buyer-chat-penjual-btn'),
+      'PublicMenuPage must render buyer-chat-penjual-btn on active order'
+    )
+    assert.ok(
+      menuContent.includes('Chat Penjual'),
+      'PublicMenuPage must render Chat Penjual button label'
     )
     assert.ok(
       menuContent.includes('OrderChatModal'),
