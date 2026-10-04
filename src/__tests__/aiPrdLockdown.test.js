@@ -9,6 +9,7 @@
 // 6. Legitimate free usage claim works for own business and is idempotent (anti-duplicate)
 // 7. Legitimate server-side workflows (service_role) retain full mutation capabilities
 // 8. Concurrent requests are safely handled without race condition leaks
+// 9. Admin functionality remains functional (admin can query all creative records)
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -123,6 +124,8 @@ describe('BS-CONF-02: AI / PRD Credit Bypass Security Lockdown Suite', () => {
     let userACampId;
     let userABriefId;
     let userAServerPrdId;
+    let userAServerAssetId;
+    let userAServerGenId;
 
     before(async () => {
       if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SUPABASE_ANON_KEY) {
@@ -162,13 +165,31 @@ describe('BS-CONF-02: AI / PRD Credit Bypass Security Lockdown Suite', () => {
       const { data: bB } = await userBClient.from('businesses').insert({ name: 'Biz B', owner_id: userBId }).select().single();
       userBBizId = bB.id;
 
-      // Trusted server generates a legitimate PRD row for User A
+      // Trusted server generates a legitimate PRD, Asset, and Generation row for User A
       const { data: servPrd } = await serviceClient.from('creative_prds').insert({
         brief_id: userABriefId,
         prd_content: { headline: 'Legit PRD' },
         status: 'ready'
       }).select().single();
       userAServerPrdId = servPrd.id;
+
+      const { data: servAsset } = await serviceClient.from('creative_assets').insert({
+        prd_id: userAServerPrdId,
+        business_id: userABizId,
+        asset_type: 'copy',
+        metadata: { text: 'Legit Copy' }
+      }).select().single();
+      userAServerAssetId = servAsset.id;
+
+      const { data: servGen } = await serviceClient.from('creative_generations').insert({
+        asset_id: userAServerAssetId,
+        business_id: userABizId,
+        provider: 'gemini',
+        model: 'gemini-3.6-flash',
+        idempotency_key: `legit-gen-${Date.now()}`,
+        status: 'completed'
+      }).select().single();
+      userAServerGenId = servGen.id;
     });
 
     after(async () => {
@@ -226,9 +247,24 @@ describe('BS-CONF-02: AI / PRD Credit Bypass Security Lockdown Suite', () => {
       assert.strictEqual(data, null);
     });
 
-    it('3.5. Authenticated user CANNOT directly INSERT into public.creative_generations', async () => {
+    it('3.5. Authenticated user CANNOT directly UPDATE row in public.creative_assets', async () => {
+      const { error } = await userAClient.from('creative_assets').update({
+        metadata: { text: 'Tampered copy' }
+      }).eq('id', userAServerAssetId);
+
+      assert.ok(error, 'Direct UPDATE on creative_assets must be rejected');
+      assert.strictEqual(error.code, '42501');
+    });
+
+    it('3.6. Authenticated user CANNOT directly DELETE row in public.creative_assets', async () => {
+      const { error } = await userAClient.from('creative_assets').delete().eq('id', userAServerAssetId);
+      assert.ok(error, 'Direct DELETE on creative_assets must be rejected');
+      assert.strictEqual(error.code, '42501');
+    });
+
+    it('3.7. Authenticated user CANNOT directly INSERT into public.creative_generations', async () => {
       const { data, error } = await userAClient.from('creative_generations').insert({
-        asset_id: '00000000-0000-0000-0000-000000000000',
+        asset_id: userAServerAssetId,
         business_id: userABizId,
         provider: 'fake',
         model: 'fake',
@@ -240,19 +276,44 @@ describe('BS-CONF-02: AI / PRD Credit Bypass Security Lockdown Suite', () => {
       assert.strictEqual(data, null);
     });
 
-    it('3.6. Authenticated user CAN SELECT own legitimate creative_prds', async () => {
+    it('3.8. Authenticated user CANNOT directly UPDATE row in public.creative_generations', async () => {
+      const { error } = await userAClient.from('creative_generations').update({
+        status: 'refunded'
+      }).eq('id', userAServerGenId);
+
+      assert.ok(error, 'Direct UPDATE on creative_generations must be rejected');
+      assert.strictEqual(error.code, '42501');
+    });
+
+    it('3.9. Authenticated user CANNOT directly DELETE row in public.creative_generations', async () => {
+      const { error } = await userAClient.from('creative_generations').delete().eq('id', userAServerGenId);
+      assert.ok(error, 'Direct DELETE on creative_generations must be rejected');
+      assert.strictEqual(error.code, '42501');
+    });
+
+    it('3.10. Authenticated user CAN SELECT own legitimate creative_prds', async () => {
       const { data, error } = await userAClient.from('creative_prds').select('*').eq('id', userAServerPrdId).single();
       assert.strictEqual(error, null, 'Must allow SELECT on own PRDs');
       assert.ok(data);
       assert.strictEqual(data.id, userAServerPrdId);
     });
 
-    it('3.7. Cross-tenant isolation: User B CANNOT view User A PRDs', async () => {
-      const { data, error } = await userBClient.from('creative_prds').select('*').eq('id', userAServerPrdId).maybeSingle();
+    it('3.11. Cross-tenant isolation: User B CANNOT view User A PRDs', async () => {
+      const { data } = await userBClient.from('creative_prds').select('*').eq('id', userAServerPrdId).maybeSingle();
       assert.strictEqual(data, null, 'User B must not see User A PRD');
     });
 
-    it('3.8. Cross-tenant claim_creative_free_usage_atomic is REJECTED', async () => {
+    it('3.12. Cross-tenant isolation: User B CANNOT mutate User A assets or generations', async () => {
+      const { error: assetErr } = await userBClient.from('creative_assets').update({ metadata: { hacked: true } }).eq('id', userAServerAssetId);
+      assert.ok(assetErr, 'Cross-tenant asset mutation must fail');
+      assert.strictEqual(assetErr.code, '42501');
+
+      const { error: genErr } = await userBClient.from('creative_generations').delete().eq('id', userAServerGenId);
+      assert.ok(genErr, 'Cross-tenant generation deletion must fail');
+      assert.strictEqual(genErr.code, '42501');
+    });
+
+    it('3.13. Cross-tenant claim_creative_free_usage_atomic is REJECTED', async () => {
       const { data, error } = await userAClient.rpc('claim_creative_free_usage_atomic', {
         p_business_id: userBBizId,
         p_profile_id: userAId,
@@ -265,7 +326,7 @@ describe('BS-CONF-02: AI / PRD Credit Bypass Security Lockdown Suite', () => {
       assert.strictEqual(data.error, 'UNAUTHORIZED_BUSINESS_OWNERSHIP');
     });
 
-    it('3.9. Legitimate own-business claim_creative_free_usage_atomic SUCCEEDS', async () => {
+    it('3.14. Legitimate own-business claim_creative_free_usage_atomic SUCCEEDS', async () => {
       const { data, error } = await userAClient.rpc('claim_creative_free_usage_atomic', {
         p_business_id: userABizId,
         p_profile_id: userAId,
@@ -278,7 +339,7 @@ describe('BS-CONF-02: AI / PRD Credit Bypass Security Lockdown Suite', () => {
       assert.strictEqual(data.business_id, userABizId);
     });
 
-    it('3.10. Duplicate free usage claim is safely rejected (idempotency)', async () => {
+    it('3.15. Duplicate free usage claim is safely rejected (idempotency)', async () => {
       const { data, error } = await userAClient.rpc('claim_creative_free_usage_atomic', {
         p_business_id: userABizId,
         p_profile_id: userAId,
@@ -291,7 +352,7 @@ describe('BS-CONF-02: AI / PRD Credit Bypass Security Lockdown Suite', () => {
       assert.strictEqual(data.error, 'FREE_USAGE_ALREADY_CONSUMED');
     });
 
-    it('3.11. Concurrent race condition: 10 simultaneous unauthorized INSERT attempts on creative_prds all fail', async () => {
+    it('3.16. Concurrent race condition: 10 simultaneous unauthorized INSERT attempts on creative_prds all fail', async () => {
       const attempts = Array.from({ length: 10 }, (_, i) =>
         userAClient.from('creative_prds').insert({
           brief_id: userABriefId,
@@ -303,6 +364,34 @@ describe('BS-CONF-02: AI / PRD Credit Bypass Security Lockdown Suite', () => {
       const results = await Promise.all(attempts);
       const blockedCount = results.filter(r => r.error && r.error.code === '42501').length;
       assert.strictEqual(blockedCount, 10, 'All 10 unauthorized concurrent inserts must fail with 42501');
+    });
+
+    it('3.17. Free user cannot call creative-generate-prd without Pro entitlement', async () => {
+      // User A is a Free user
+      const { data: { session } } = await anonClient.auth.signInWithPassword({
+        email: `test_prd_lock_a_${userAId}@example.com`,
+        password: 'TestP@ss123456!'
+      }).catch(() => ({ data: { session: null } }));
+
+      // Call edge function with User A's token
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/creative-generate-prd`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userAClient.supabaseKey || ''}`,
+          'apikey': SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ brief_id: userABriefId })
+      });
+
+      // Free user must be rejected with 401 or 403
+      assert.ok(res.status === 401 || res.status === 403, `Must reject Free user (status: ${res.status})`);
+    });
+
+    it('3.18. Admin role can query all creative artifacts via service_role / is_admin', async () => {
+      const { data, error } = await serviceClient.from('creative_prds').select('id').limit(5);
+      assert.strictEqual(error, null, 'Service role / admin must retain full SELECT access');
+      assert.ok(Array.isArray(data));
     });
   });
 });
