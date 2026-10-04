@@ -47,7 +47,7 @@ BEGIN
   END IF;
 
   -- 1. Fetch business (only public attributes)
-  SELECT id, name, slogan, description, cover_url, logo_url, is_menu_published, whatsapp, phone
+  SELECT id, name, slogan, description, cover_url, logo_url, is_menu_published
   INTO v_biz
   FROM public.businesses
   WHERE id = p_business_id;
@@ -74,7 +74,9 @@ BEGIN
     jsonb_build_object(
       'id', p.id,
       'name', p.name,
+      'sku', p.sku,
       'description', p.description,
+      'unit', p.unit,
       'unit_price', p.unit_price,
       'category', p.category,
       'image_url', p.image_url,
@@ -83,7 +85,7 @@ BEGIN
       'is_active', p.is_active,
       'is_best_seller', p.is_best_seller,
       'sort_order', p.sort_order,
-      'metadata', p.metadata
+      'menu_category_id', p.menu_category_id
     ) ORDER BY p.sort_order ASC, p.name ASC
   ), '[]'::jsonb)
   INTO v_products
@@ -127,14 +129,10 @@ BEGIN
 
   IF v_receipt.store_phone IS NOT NULL AND v_receipt.store_phone <> '' THEN
     v_phone := v_receipt.store_phone;
-  ELSIF v_biz.phone IS NOT NULL THEN
-    v_phone := v_biz.phone;
   END IF;
 
   IF v_wa.display_phone_number IS NOT NULL AND v_wa.display_phone_number <> '' THEN
     v_wa_number := v_wa.display_phone_number;
-  ELSIF v_biz.whatsapp IS NOT NULL THEN
-    v_wa_number := v_biz.whatsapp;
   END IF;
 
   IF v_receipt.store_name IS NOT NULL AND v_receipt.store_name <> '' THEN

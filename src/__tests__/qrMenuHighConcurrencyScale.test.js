@@ -285,4 +285,26 @@ describe('Public QR Menu High Concurrency & Scale Suite (Phase 11)', () => {
     assert.equal(resUnpublished.success, false)
     assert.equal(resUnpublished.error, 'NOT_PUBLISHED')
   })
+
+  it('G. Schema Column Integrity & Whitespace Trimming (Fix: Bisnis tidak ditemukan)', async () => {
+    // 1. Verify qrMenuCacheService source code does NOT query non-existent columns on businesses
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const serviceSrc = fs.readFileSync(path.resolve('src/services/qrMenuCacheService.js'), 'utf8')
+
+    // Must never select non-existent phone or whatsapp on businesses table
+    assert.doesNotMatch(serviceSrc, /from\(['"]businesses['"]\)\s*\.select\([^)]*\bphone\b/, 'Must NOT select phone from businesses')
+    assert.doesNotMatch(serviceSrc, /from\(['"]businesses['"]\)\s*\.select\([^)]*\bwhatsapp\b/, 'Must NOT select whatsapp from businesses')
+
+    // Must never select cost_price or notes from products table
+    assert.doesNotMatch(serviceSrc, /from\(['"]products['"]\)\s*\.select\([^)]*\bcost_price\b/, 'Must NOT select cost_price from products')
+    assert.doesNotMatch(serviceSrc, /from\(['"]products['"]\)\s*\.select\([^)]*\bnotes\b/, 'Must NOT select notes from products')
+
+    // 2. Test whitespace trimming prevents 'Bisnis tidak ditemukan'
+    const mockClient = createInstrumentedMockClient()
+    const trimmedRes = await getPublicMenuBundle('  biz-1  ', { client: mockClient })
+    assert.equal(trimmedRes.success, true)
+    assert.equal(trimmedRes.business.id, 'biz-1')
+  })
 })
+

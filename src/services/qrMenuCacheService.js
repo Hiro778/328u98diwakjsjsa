@@ -112,18 +112,20 @@ export function getCachedProduct(businessId, productId) {
  * Fetches the public menu bundle directly using parallel queries when RPC is unavailable.
  */
 async function fetchParallelFallback(businessId, client = supabase) {
-  // Query 1: Business info
+  const cleanId = typeof businessId === 'string' ? businessId.trim() : businessId
+
+  // Query 1: Business info (only existing public columns on businesses table)
   const bizPromise = client
     .from('businesses')
-    .select('id, name, slogan, description, cover_url, logo_url, is_menu_published, phone, whatsapp')
-    .eq('id', businessId)
+    .select('id, name, slogan, description, cover_url, logo_url, is_menu_published')
+    .eq('id', cleanId)
     .single()
 
-  // Query 2: Products
+  // Query 2: Products (safe public columns, strictly exclude cost_price and notes)
   const prodPromise = client
     .from('products')
-    .select('*')
-    .eq('business_id', businessId)
+    .select('id, business_id, name, sku, description, category, unit, unit_price, is_active, created_at, updated_at, image_url, slogan, is_best_seller, sort_order, is_available, menu_category_id')
+    .eq('business_id', cleanId)
     .eq('is_available', true)
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
@@ -131,16 +133,16 @@ async function fetchParallelFallback(businessId, client = supabase) {
   // Query 3: Tables
   const tblPromise = client
     .from('tables')
-    .select('*')
-    .eq('business_id', businessId)
+    .select('id, business_id, name, sort_order, is_active')
+    .eq('business_id', cleanId)
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
 
   // Query 4: QR Menu Design
-  const designPromise = getDesignSettings(businessId, client)
+  const designPromise = getDesignSettings(cleanId, client)
 
   // Query 5: QRIS Settings
-  const qrisPromise = getPublicQrisSettings(businessId, client)
+  const qrisPromise = getPublicQrisSettings(cleanId, client)
 
   // Wait in parallel
   const [bizRes, prodRes, tblRes, designData, qrisRes] = await Promise.all([
@@ -211,10 +213,11 @@ async function fetchParallelFallback(businessId, client = supabase) {
  * falling back cleanly to parallel queries.
  */
 async function executeFetch(businessId, client = supabase) {
+  const cleanId = typeof businessId === 'string' ? businessId.trim() : businessId
   try {
     // 1. Try Unified High-Performance RPC
     const { data: rpcData, error: rpcErr } = await client.rpc('get_public_menu_bundle', {
-      p_business_id: businessId,
+      p_business_id: cleanId,
     })
 
     if (!rpcErr && rpcData && typeof rpcData === 'object') {
@@ -239,7 +242,7 @@ async function executeFetch(businessId, client = supabase) {
       if (qrisData?.qris_enabled && qrisData?.qris_image_url) {
         qrisSettings = qrisData
         try {
-          const secureRes = await getSecureQrisUrl(businessId, client)
+          const secureRes = await getSecureQrisUrl(cleanId, client)
           qrisUrl = secureRes?.data?.signedUrl || null
         } catch {}
       }
@@ -270,7 +273,7 @@ async function executeFetch(businessId, client = supabase) {
   }
 
   // 2. Parallel Fallback
-  return fetchParallelFallback(businessId, client)
+  return fetchParallelFallback(cleanId, client)
 }
 
 /**
@@ -285,8 +288,9 @@ async function executeFetch(businessId, client = supabase) {
  */
 export async function getPublicMenuBundle(businessId, options = {}) {
   const { forceRefresh = false, client = supabase } = options
+  const cleanId = typeof businessId === 'string' ? businessId.trim() : businessId
 
-  if (!businessId) {
+  if (!cleanId) {
     return {
       success: false,
       error: 'INVALID_ID',
@@ -297,7 +301,7 @@ export async function getPublicMenuBundle(businessId, options = {}) {
   const now = Date.now()
 
   // 1. Check L1 Memory Cache (Fresh)
-  const l1Entry = l1Cache.get(businessId)
+  const l1Entry = l1Cache.get(cleanId)
   if (!forceRefresh && l1Entry && now - l1Entry.timestamp < CACHE_TTL_MS) {
     return { ...l1Entry.data, fromCache: true, isStale: false }
   }
@@ -305,7 +309,7 @@ export async function getPublicMenuBundle(businessId, options = {}) {
   // 2. Check Stale-While-Revalidate (SWR) Window
   if (!forceRefresh && l1Entry && now - l1Entry.timestamp < SWR_WINDOW_MS) {
     // If not already revalidating, trigger background revalidation
-    if (!inFlightRequests.has(businessId)) {
+    if (!inFlightRequests.has(cleanId)) {
       const bgPromise = executeFetch(businessId, client)
         .then((fresh) => {
           if (fresh && fresh.success) {
