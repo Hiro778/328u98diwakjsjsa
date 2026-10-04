@@ -265,16 +265,106 @@ describe('BS-CONF-01: Subscriptions Entitlement Security Lockdown Suite', () => 
       assert.equal(data[0].plan, 'free', 'Plan must be free')
     })
 
-    it('3.6. Cross-tenant isolation: User A CANNOT view User B subscription', async (t) => {
+    it('3.6. Cross-tenant isolation: User A CANNOT view or modify User B subscription', async (t) => {
       if (!hasRemoteKeys) return t.skip('No live env')
 
       const foreignProfileId = '00000000-0000-0000-0000-000000000001'
-      const { data, error } = await testUserClient.from('subscriptions').select('*').eq('profile_id', foreignProfileId)
-      assert.equal(error, null)
-      assert.deepEqual(data, [], 'User A must see 0 rows for User B')
+      const { data: viewData, error: viewError } = await testUserClient.from('subscriptions').select('*').eq('profile_id', foreignProfileId)
+      assert.equal(viewError, null)
+      assert.deepEqual(viewData, [], 'User A must see 0 rows for User B')
+
+      const { data: updateData, error: updateError } = await testUserClient.from('subscriptions').update({
+        plan: 'pro'
+      }).eq('profile_id', foreignProfileId).select()
+      assert.equal(updateData, null)
+      assert.ok(updateError, 'User A must not be able to update User B subscription')
+      assert.equal(updateError.code, '42501', 'Must fail with 42501 permission denied')
     })
 
-    it('3.7. Concurrent race condition: 10 simultaneous unauthorized UPDATE requests all fail', async (t) => {
+    it('3.7. Specific field manipulation attempts (plan, status, expires_at, is_cancelled, payment_ref) all fail', async (t) => {
+      if (!hasRemoteKeys) return t.skip('No live env')
+
+      const fieldAttempts = [
+        { plan: 'pro' },
+        { status: 'active' },
+        { expires_at: '2099-01-01T00:00:00Z' },
+        { is_cancelled: false },
+        { payment_ref: 'FORGED_REF_123' },
+      ]
+
+      for (const patch of fieldAttempts) {
+        const { data, error } = await testUserClient
+          .from('subscriptions')
+          .update(patch)
+          .eq('profile_id', testUserId)
+          .select()
+
+        assert.equal(data, null, `Patch ${JSON.stringify(patch)} must not return data`)
+        assert.ok(error, `Patch ${JSON.stringify(patch)} must error`)
+        assert.equal(error.code, '42501', 'Must be error code 42501')
+      }
+    })
+
+    it('3.8. Admin RPC access control: Normal user CANNOT call admin_cancel_subscription', async (t) => {
+      if (!hasRemoteKeys) return t.skip('No live env')
+
+      const { data, error } = await testUserClient.rpc('admin_cancel_subscription', {
+        p_subscription_id: '00000000-0000-0000-0000-000000000000',
+        p_reason: 'Malicious normal user attempt',
+      })
+
+      assert.equal(data, null, 'Normal user must not be able to execute admin_cancel_subscription')
+      assert.ok(error, 'Admin RPC call by normal user must error')
+      assert.equal(error.code, '42501', 'Must fail with 42501 unauthorized')
+    })
+
+    it('3.9. Legitimate trusted server activation & lifecycle verification', async (t) => {
+      if (!hasRemoteKeys) return t.skip('No live env')
+
+      // 1. Trusted server (service_role / webhook) activates subscription
+      const futureDate = new Date(Date.now() + 30 * 86400000).toISOString()
+      const { error: activateErr } = await adminClient.from('subscriptions').update({
+        plan: 'pro',
+        status: 'active',
+        expires_at: futureDate,
+        is_cancelled: false,
+      }).eq('profile_id', testUserId)
+
+      assert.equal(activateErr, null, 'Server-side activation must succeed')
+
+      // 2. Verify server-side entitlement RPC recognises PRO
+      const { data: isProActive, error: rpcErr } = await adminClient.rpc('is_user_subscription_active', {
+        p_user_id: testUserId,
+      })
+      assert.equal(rpcErr, null)
+      assert.equal(isProActive, true, 'User must now be verified PRO via server RPC')
+
+      // 3. User attempts fake direct update even after activation -> must be blocked
+      const { data: fakeUpdate, error: fakeErr } = await testUserClient.from('subscriptions').update({
+        expires_at: '2099-12-31T23:59:59Z',
+      }).eq('profile_id', testUserId).select()
+
+      assert.equal(fakeUpdate, null)
+      assert.ok(fakeErr)
+      assert.equal(fakeErr.code, '42501')
+
+      // 4. Legitimate cancellation via cancel_subscription_atomic RPC
+      const { data: cancelRes, error: cancelErr } = await testUserClient.rpc('cancel_subscription_atomic', {
+        p_business_id: null,
+        p_reason: 'User test cancellation',
+      })
+
+      assert.equal(cancelErr, null, 'Cancellation RPC must execute cleanly')
+      assert.equal(cancelRes?.success, true, 'Cancellation response must indicate success')
+
+      // 5. Verify entitlement immediately reflects cancellation
+      const { data: isStillPro } = await adminClient.rpc('is_user_subscription_active', {
+        p_user_id: testUserId,
+      })
+      assert.equal(isStillPro, false, 'User must no longer have active PRO entitlement after cancellation')
+    })
+
+    it('3.10. Concurrent race condition: 10 simultaneous unauthorized UPDATE requests all fail', async (t) => {
       if (!hasRemoteKeys) return t.skip('No live env')
 
       const attempts = Array.from({ length: 10 }).map(() =>
@@ -292,10 +382,10 @@ describe('BS-CONF-01: Subscriptions Entitlement Security Lockdown Suite', () => 
       assert.equal(successCount, 0, 'Zero race attempts must succeed')
       assert.equal(deniedCount, 10, 'All 10 race attempts must be denied with 42501')
 
-      // Verify row state in DB
-      const { data: dbRow } = await adminClient.from('subscriptions').select('plan, status').eq('profile_id', testUserId).single()
-      assert.equal(dbRow.plan, 'free', 'Plan must remain free')
-      assert.equal(dbRow.status, 'inactive', 'Status must remain inactive')
+      // Verify row state in DB remained cancelled/safe
+      const { data: dbRow } = await adminClient.from('subscriptions').select('plan, status, is_cancelled').eq('profile_id', testUserId).single()
+      assert.equal(dbRow.status, 'cancelled', 'Status must remain cancelled')
+      assert.equal(dbRow.is_cancelled, true, 'is_cancelled must remain true')
     })
   })
 })
