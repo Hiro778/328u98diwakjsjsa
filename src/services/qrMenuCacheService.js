@@ -23,12 +23,33 @@ export const SWR_WINDOW_MS = 5 * 60 * 1000 // 5 minutes stale-while-revalidate w
 const STORAGE_PREFIX = 'bs_menu_bundle_'
 
 /**
+ * Normalizes a raw business identifier from URL params, QR scans, or router props.
+ * Handles URL decoding, whitespace trimming, trailing slashes, and query/hash stripping.
+ *
+ * @param {string} rawId
+ * @returns {string} Clean canonical business ID
+ */
+export function normalizeBusinessId(rawId) {
+  if (!rawId || typeof rawId !== 'string') return ''
+  let cleaned = String(rawId).trim()
+  try {
+    cleaned = decodeURIComponent(cleaned)
+  } catch {}
+  if (cleaned.includes('?')) cleaned = cleaned.split('?')[0]
+  if (cleaned.includes('#')) cleaned = cleaned.split('#')[0]
+  cleaned = cleaned.replace(/[/\s]+$/, '').replace(/^[/\s]+/, '')
+  return cleaned
+}
+
+/**
  * Safely reads from sessionStorage (L2 Cache).
  */
 function readStorageCache(businessId) {
   if (typeof sessionStorage === 'undefined') return null
+  const id = normalizeBusinessId(businessId)
+  if (!id) return null
   try {
-    const raw = sessionStorage.getItem(`${STORAGE_PREFIX}${businessId}`)
+    const raw = sessionStorage.getItem(`${STORAGE_PREFIX}${id}`)
     if (!raw) return null
     const parsed = JSON.parse(raw)
     if (parsed && typeof parsed === 'object' && parsed.timestamp) {
@@ -45,9 +66,11 @@ function readStorageCache(businessId) {
  */
 function writeStorageCache(businessId, data, timestamp) {
   if (typeof sessionStorage === 'undefined') return
+  const id = normalizeBusinessId(businessId)
+  if (!id) return
   try {
     sessionStorage.setItem(
-      `${STORAGE_PREFIX}${businessId}`,
+      `${STORAGE_PREFIX}${id}`,
       JSON.stringify({ data, timestamp })
     )
   } catch {
@@ -65,11 +88,12 @@ export function invalidateMenuBundleCache(businessId) {
     inFlightRequests.clear()
     return
   }
-  l1Cache.delete(businessId)
-  inFlightRequests.delete(businessId)
+  const id = normalizeBusinessId(businessId)
+  l1Cache.delete(id)
+  inFlightRequests.delete(id)
   if (typeof sessionStorage !== 'undefined') {
     try {
-      sessionStorage.removeItem(`${STORAGE_PREFIX}${businessId}`)
+      sessionStorage.removeItem(`${STORAGE_PREFIX}${id}`)
     } catch {}
   }
 }
@@ -79,19 +103,20 @@ export function invalidateMenuBundleCache(businessId) {
  * Useful for instant render without showing a blank spinner.
  */
 export function getCachedMenuBundle(businessId) {
-  if (!businessId) return null
+  const id = normalizeBusinessId(businessId)
+  if (!id) return null
 
   // 1. Check L1 Memory
-  const mem = l1Cache.get(businessId)
+  const mem = l1Cache.get(id)
   if (mem && (Date.now() - mem.timestamp < SWR_WINDOW_MS)) {
     return mem.data
   }
 
   // 2. Check L2 Storage
-  const sto = readStorageCache(businessId)
+  const sto = readStorageCache(id)
   if (sto && (Date.now() - sto.timestamp < SWR_WINDOW_MS)) {
     // Populate L1 from L2
-    l1Cache.set(businessId, sto)
+    l1Cache.set(id, sto)
     return sto.data
   }
 
@@ -103,7 +128,8 @@ export function getCachedMenuBundle(businessId) {
  * Used by PublicProductDetailPage for instant 0ms transition.
  */
 export function getCachedProduct(businessId, productId) {
-  const bundle = getCachedMenuBundle(businessId)
+  const id = normalizeBusinessId(businessId)
+  const bundle = getCachedMenuBundle(id)
   if (!bundle || !Array.isArray(bundle.products)) return null
   return bundle.products.find((p) => p.id === productId) || null
 }
@@ -213,7 +239,7 @@ async function fetchParallelFallback(businessId, client = supabase) {
  * falling back cleanly to parallel queries.
  */
 async function executeFetch(businessId, client = supabase) {
-  const cleanId = typeof businessId === 'string' ? businessId.trim() : businessId
+  const cleanId = normalizeBusinessId(businessId)
   try {
     // 1. Try Unified High-Performance RPC
     const { data: rpcData, error: rpcErr } = await client.rpc('get_public_menu_bundle', {
@@ -288,13 +314,13 @@ async function executeFetch(businessId, client = supabase) {
  */
 export async function getPublicMenuBundle(businessId, options = {}) {
   const { forceRefresh = false, client = supabase } = options
-  const cleanId = typeof businessId === 'string' ? businessId.trim() : businessId
+  const cleanId = normalizeBusinessId(businessId)
 
   if (!cleanId) {
     return {
       success: false,
       error: 'INVALID_ID',
-      message: 'business_id tidak valid.',
+      message: 'Bisnis tidak ditemukan.',
     }
   }
 
@@ -310,12 +336,12 @@ export async function getPublicMenuBundle(businessId, options = {}) {
   if (!forceRefresh && l1Entry && now - l1Entry.timestamp < SWR_WINDOW_MS) {
     // If not already revalidating, trigger background revalidation
     if (!inFlightRequests.has(cleanId)) {
-      const bgPromise = executeFetch(businessId, client)
+      const bgPromise = executeFetch(cleanId, client)
         .then((fresh) => {
           if (fresh && fresh.success) {
             const ts = Date.now()
-            l1Cache.set(businessId, { data: fresh, timestamp: ts })
-            writeStorageCache(businessId, fresh, ts)
+            l1Cache.set(cleanId, { data: fresh, timestamp: ts })
+            writeStorageCache(cleanId, fresh, ts)
           }
           return fresh
         })
@@ -323,9 +349,9 @@ export async function getPublicMenuBundle(businessId, options = {}) {
           console.warn('[qrMenuCacheService] SWR background revalidation error:', err)
         })
         .finally(() => {
-          inFlightRequests.delete(businessId)
+          inFlightRequests.delete(cleanId)
         })
-      inFlightRequests.set(businessId, bgPromise)
+      inFlightRequests.set(cleanId, bgPromise)
     }
     // Return stale data immediately for instant responsive UX
     return { ...l1Entry.data, fromCache: true, isStale: true }
@@ -333,33 +359,33 @@ export async function getPublicMenuBundle(businessId, options = {}) {
 
   // 3. Check L2 Storage Cache
   if (!forceRefresh) {
-    const l2Entry = readStorageCache(businessId)
+    const l2Entry = readStorageCache(cleanId)
     if (l2Entry && now - l2Entry.timestamp < CACHE_TTL_MS) {
-      l1Cache.set(businessId, l2Entry)
+      l1Cache.set(cleanId, l2Entry)
       return { ...l2Entry.data, fromCache: true, isStale: false }
     }
   }
 
   // 4. Single-Flight Request Coalescing
   // If 1,000 users arrive at the same time, they all wait on this exact same pending Promise.
-  if (inFlightRequests.has(businessId)) {
-    return inFlightRequests.get(businessId)
+  if (inFlightRequests.has(cleanId)) {
+    return inFlightRequests.get(cleanId)
   }
 
-  const fetchPromise = executeFetch(businessId, client)
+  const fetchPromise = executeFetch(cleanId, client)
     .then((result) => {
       if (result && result.success) {
         const ts = Date.now()
-        l1Cache.set(businessId, { data: result, timestamp: ts })
-        writeStorageCache(businessId, result, ts)
+        l1Cache.set(cleanId, { data: result, timestamp: ts })
+        writeStorageCache(cleanId, result, ts)
       }
       return result
     })
     .finally(() => {
-      inFlightRequests.delete(businessId)
+      inFlightRequests.delete(cleanId)
     })
 
-  inFlightRequests.set(businessId, fetchPromise)
+  inFlightRequests.set(cleanId, fetchPromise)
   return fetchPromise
 }
 

@@ -6,7 +6,7 @@ import { formatCurrency } from '../../lib/orderNumber'
 import { hasRequiredVariants } from '../../lib/productMetadata'
 import { getDesignSettings, DEFAULT_DESIGN_SETTINGS } from '../../services/qrMenuDesignService'
 import { getSecureQrisUrl, getPublicQrisSettings, sanitizePublicCheckoutError } from '../../services/qrisPaymentService'
-import { getPublicMenuBundle, getCachedMenuBundle } from '../../services/qrMenuCacheService'
+import { getPublicMenuBundle, getCachedMenuBundle, normalizeBusinessId } from '../../services/qrMenuCacheService'
 import PublicMenuRenderer from '../../components/pos/PublicMenuRenderer'
 import PublicMenuSkeleton from '../../components/pos/PublicMenuSkeleton'
 import OrderChatModal from '../../components/pos/OrderChatModal'
@@ -16,7 +16,8 @@ import { subscribeOrderStatus, getPublicOrder, mapCustomerOrderStatus } from '..
 
 export default function PublicMenuPage() {
   const { isPosEnabled, isQrisEnabled, posMaxItems, isMaintenance } = usePlatformSettings()
-  const { businessId } = useParams()
+  const { businessId: rawBusinessId } = useParams()
+  const businessId = normalizeBusinessId(rawBusinessId)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const tableParam = searchParams.get('table') || ''

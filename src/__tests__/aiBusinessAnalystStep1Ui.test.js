@@ -14,7 +14,11 @@ describe('AI Business Analyst — Step 1 UI & Routing Specification Suite', () =
     assert.ok(fs.existsSync(appPath), 'App.jsx must exist')
     const appContent = fs.readFileSync(appPath, 'utf8')
     assert.ok(appContent.includes("path: '/ai'"), 'App.jsx must declare path: \'/ai\'')
-    assert.ok(appContent.includes("import AiBusinessAnalystPage from './pages/ai/AiBusinessAnalystPage'"))
+    assert.ok(
+      appContent.includes("import AiBusinessAnalystPage from './pages/ai/AiBusinessAnalystPage'") ||
+      appContent.includes("import('./pages/ai/AiBusinessAnalystPage')"),
+      'App.jsx must import AiBusinessAnalystPage'
+    )
   })
 
   // 2. Unauthenticated user cannot open AI

@@ -306,5 +306,37 @@ describe('Public QR Menu High Concurrency & Scale Suite (Phase 11)', () => {
     assert.equal(trimmedRes.success, true)
     assert.equal(trimmedRes.business.id, 'biz-1')
   })
+
+  it('H. QR URL Normalization, Trailing Slash, & Cache Key Consistency', async () => {
+    const { normalizeBusinessId } = await import('../services/qrMenuCacheService.js')
+
+    // Test URL format resilience
+    assert.equal(normalizeBusinessId('b51fdc7e-6b7d-4207-8b30-d5f02275f686/'), 'b51fdc7e-6b7d-4207-8b30-d5f02275f686')
+    assert.equal(normalizeBusinessId('b51fdc7e-6b7d-4207-8b30-d5f02275f686%2F'), 'b51fdc7e-6b7d-4207-8b30-d5f02275f686')
+    assert.equal(normalizeBusinessId('  b51fdc7e-6b7d-4207-8b30-d5f02275f686/?table=1#cart  '), 'b51fdc7e-6b7d-4207-8b30-d5f02275f686')
+
+    // Verify cache key consistency across formats
+    const mockClient = createInstrumentedMockClient()
+    const rawId = 'biz-cache-test'
+    invalidateMenuBundleCache(rawId)
+
+    // First request with trailing slash
+    const res1 = await getPublicMenuBundle(`${rawId}/`, { client: mockClient })
+    assert.equal(res1.success, true)
+    assert.equal(res1.fromCache, undefined)
+    assert.equal(mockClient.rpcCallCount, 1)
+
+    // Second request with clean ID hits cache
+    const res2 = await getPublicMenuBundle(rawId, { client: mockClient })
+    assert.equal(res2.success, true)
+    assert.equal(res2.fromCache, true)
+    assert.equal(mockClient.rpcCallCount, 1) // zero additional DB calls!
+
+    // Synchronous getter also resolves immediately
+    const synchronousData = getCachedMenuBundle(`${rawId}%2F`)
+    assert.ok(synchronousData)
+    assert.equal(synchronousData.business.id, rawId)
+  })
 })
+
 

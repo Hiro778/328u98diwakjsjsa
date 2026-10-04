@@ -5,10 +5,12 @@ import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../lib/orderNumber'
 import { parseProductMetadata, calculateProductPrice } from '../../lib/productMetadata'
 import { getDesignSettings, DEFAULT_DESIGN_SETTINGS } from '../../services/qrMenuDesignService'
-import { getCachedMenuBundle, getCachedProduct } from '../../services/qrMenuCacheService'
+import { getCachedMenuBundle, getCachedProduct, normalizeBusinessId } from '../../services/qrMenuCacheService'
 
 export default function PublicProductDetailPage() {
-  const { businessId, productId } = useParams()
+  const { businessId: rawBusinessId, productId: rawProductId } = useParams()
+  const businessId = normalizeBusinessId(rawBusinessId)
+  const productId = normalizeBusinessId(rawProductId)
   const navigate = useNavigate()
 
   const [business, setBusiness] = useState(null)
