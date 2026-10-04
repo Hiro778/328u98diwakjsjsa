@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { Outlet, Link } from 'react-router'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { usePlatformSettings } from '../hooks/usePlatformSettings'
+import LoadingScreen from './LoadingScreen'
 import SidebarNav from './SidebarNav'
 import AccountDropdown from './AccountDropdown'
 import SubscriptionCard from './SubscriptionCard'
@@ -154,7 +155,9 @@ export default function DashboardLayout() {
 
         {/* Page content */}
         <main className="flex-1 p-3 sm:p-6 lg:p-8 w-full max-w-7xl mx-auto min-w-0">
-          <Outlet />
+          <Suspense fallback={<LoadingScreen />}>
+            <Outlet />
+          </Suspense>
         </main>
 
         {/* Floating Customer Support Widget (Atlas Cloud Style UX) */}

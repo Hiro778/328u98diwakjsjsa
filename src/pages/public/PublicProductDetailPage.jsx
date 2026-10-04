@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../lib/orderNumber'
 import { parseProductMetadata, calculateProductPrice } from '../../lib/productMetadata'
 import { getDesignSettings, DEFAULT_DESIGN_SETTINGS } from '../../services/qrMenuDesignService'
+import { getCachedMenuBundle, getCachedProduct } from '../../services/qrMenuCacheService'
 
 export default function PublicProductDetailPage() {
   const { businessId, productId } = useParams()
@@ -41,58 +42,86 @@ export default function PublicProductDetailPage() {
   // Feedback notification
   const [addedToast, setAddedToast] = useState(false)
 
+  // Instant synchronous cache check (L1 memory / L2 storage) for 0ms First Contentful Paint
+  useEffect(() => {
+    if (!businessId || !productId) return
+    const cachedProd = getCachedProduct(businessId, productId)
+    const cachedBundle = getCachedMenuBundle(businessId)
+
+    if (cachedBundle?.business && cachedProd) {
+      setBusiness(cachedBundle.business)
+      if (cachedBundle.designSettings) setDesignSettings(cachedBundle.designSettings)
+      setProduct(cachedProd)
+      const parsed = parseProductMetadata(cachedProd)
+      setMeta(parsed)
+      setLoading(false)
+    }
+  }, [businessId, productId])
+
   useEffect(() => {
     loadProductDetail()
   }, [businessId, productId])
 
   async function loadProductDetail() {
-    setLoading(true)
     setError('')
 
-    // 1. Load business and verify it is published
-    const { data: biz, error: bizErr } = await supabase
-      .from('businesses')
-      .select('id, name, slogan, description, cover_url, logo_url, is_menu_published')
-      .eq('id', businessId)
-      .single()
-
-    if (bizErr || !biz) {
-      setError('Bisnis tidak ditemukan.')
-      setLoading(false)
-      return
-    }
-
-    if (!biz.is_menu_published) {
-      setError('Menu bisnis ini belum dipublikasikan.')
-      setLoading(false)
-      return
-    }
-
-    setBusiness(biz)
-
-    // Load custom QR Menu design settings for consistent theme propagation (qr.md Section 8)
+    // 1. Parallel loading of business, design, product, and inventory
     try {
-      const design = await getDesignSettings(biz.id)
-      setDesignSettings(design)
-    } catch (err) {
-      console.warn('[PublicProductDetailPage] Could not load design settings:', err)
-    }
+      const cachedBundle = getCachedMenuBundle(businessId)
+      let biz = cachedBundle?.business
 
-    // 2. Load product and ensure tenant isolation (must belong to this business)
-    const { data: prod, error: prodErr } = await supabase
-      .from('products')
-      .select('*')
-      .eq('id', productId)
-      .eq('business_id', biz.id)
-      .eq('is_available', true)
-      .eq('is_active', true)
-      .single()
+      if (!biz) {
+        const { data: fetchedBiz, error: bizErr } = await supabase
+          .from('businesses')
+          .select('id, name, slogan, description, cover_url, logo_url, is_menu_published')
+          .eq('id', businessId)
+          .single()
 
-    if (prodErr || !prod) {
-      setError('Produk tidak ditemukan atau tidak tersedia.')
-      setLoading(false)
-      return
-    }
+        if (bizErr || !fetchedBiz) {
+          setError('Bisnis tidak ditemukan.')
+          setLoading(false)
+          return
+        }
+        biz = fetchedBiz
+      }
+
+      if (!biz.is_menu_published) {
+        setError('Menu bisnis ini belum dipublikasikan.')
+        setLoading(false)
+        return
+      }
+
+      setBusiness(biz)
+
+      // Parallelize design settings and product query
+      const designPromise = cachedBundle?.designSettings
+        ? Promise.resolve(cachedBundle.designSettings)
+        : getDesignSettings(biz.id).catch(() => DEFAULT_DESIGN_SETTINGS)
+
+      const cachedProd = getCachedProduct(businessId, productId)
+      const prodPromise = cachedProd
+        ? Promise.resolve({ data: cachedProd, error: null })
+        : supabase
+            .from('products')
+            .select('*')
+            .eq('id', productId)
+            .eq('business_id', biz.id)
+            .eq('is_available', true)
+            .eq('is_active', true)
+            .single()
+
+      const [design, { data: prod, error: prodErr }] = await Promise.all([
+        designPromise,
+        prodPromise,
+      ])
+
+      if (design) setDesignSettings(design)
+
+      if (prodErr || !prod) {
+        setError('Produk tidak ditemukan atau tidak tersedia.')
+        setLoading(false)
+        return
+      }
 
     // 3. Load product inventory stock
     const { data: inv } = await supabase
@@ -130,7 +159,12 @@ export default function PublicProductDetailPage() {
       setSelectedVariantImage(initialOptImage)
     }
     setLoading(false)
+  } catch (err) {
+    console.warn('[PublicProductDetailPage] Load detail error:', err)
+    setError('Gagal memuat detail produk.')
+    setLoading(false)
   }
+}
 
   // Calculate selected variant options
   const selectedOptionsList = meta?.variantGroups?.map(group => {
@@ -502,6 +536,7 @@ export default function PublicProductDetailPage() {
                 }}
                 className="relative aspect-square w-full overflow-hidden rounded-2xl border shadow-sm"
               >
+                <div className="absolute inset-0 bg-black/5 animate-pulse" />
                 <AnimatePresence mode="wait">
                   {activeImage ? (
                     <motion.img
@@ -517,7 +552,9 @@ export default function PublicProductDetailPage() {
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.98 }}
                       transition={{ duration: 0.2, ease: 'easeOut' }}
-                      className="h-full w-full object-cover"
+                      className="relative z-10 h-full w-full object-cover"
+                      decoding="async"
+                      fetchPriority="high"
                     />
                   ) : (
                     <div className="flex h-full w-full flex-col items-center justify-center opacity-40">

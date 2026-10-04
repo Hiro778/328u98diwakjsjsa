@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { Outlet, NavLink, Link } from 'react-router'
 import { useAuth } from '../../context/AuthContext'
 import { useAdminAuth } from '../../hooks/useAdminAuth.js'
+import LoadingScreen from '../LoadingScreen'
 
 const ADMIN_NAV_ITEMS = [
   {
@@ -385,7 +386,9 @@ export default function AdminLayout() {
 
         {/* Content Outlet */}
         <main className="flex-1 p-3 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto min-w-0">
-          <Outlet />
+          <Suspense fallback={<LoadingScreen />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

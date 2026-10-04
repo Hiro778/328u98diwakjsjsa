@@ -152,9 +152,29 @@ export function deriveQrisStoragePath(businessId, ext = 'png') {
   return `${businessId}/qris.${cleanExt || 'png'}`
 }
 
+const qrisSettingsCache = new Map()
+const inFlightQrisRequests = new Map()
+const secureUrlCache = new Map()
+const inFlightUrlRequests = new Map()
+
+export function invalidateQrisPaymentCache(businessId) {
+  if (businessId) {
+    qrisSettingsCache.delete(businessId)
+    inFlightQrisRequests.delete(businessId)
+    secureUrlCache.delete(businessId)
+    inFlightUrlRequests.delete(businessId)
+  } else {
+    qrisSettingsCache.clear()
+    inFlightQrisRequests.clear()
+    secureUrlCache.clear()
+    inFlightUrlRequests.clear()
+  }
+}
+
 /**
  * Fetches QRIS payment settings for a given business.
  * Tenant-isolated via Supabase RLS.
+ * Includes in-memory caching and request coalescing for high concurrency.
  *
  * @param {string} businessId
  * @param {object} [client=supabase]
@@ -168,35 +188,61 @@ export async function getBusinessQrisSettings(businessId, client = supabase) {
     }
   }
 
-  try {
-    const { data, error } = await client
-      .from('business_payment_settings')
-      .select('business_id, qris_image_url, qris_enabled, created_at, updated_at')
-      .eq('business_id', businessId)
-      .maybeSingle()
-
-    if (error) {
-      return { data: null, error: normalizeQrisError(error, 'Gagal mengambil pengaturan QRIS.') }
+  const isDefaultClient = client === supabase
+  if (isDefaultClient) {
+    const cached = qrisSettingsCache.get(businessId)
+    if (cached && Date.now() - cached.timestamp < 60000) {
+      return { data: cached.data ? { ...cached.data } : null, error: null }
     }
 
-    if (!data) {
-      // Default fallback if row does not exist yet
-      return {
-        data: {
+    if (inFlightQrisRequests.has(businessId)) {
+      return inFlightQrisRequests.get(businessId)
+    }
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const { data, error } = await client
+        .from('business_payment_settings')
+        .select('business_id, qris_image_url, qris_enabled, created_at, updated_at')
+        .eq('business_id', businessId)
+        .maybeSingle()
+
+      if (error) {
+        return { data: null, error: normalizeQrisError(error, 'Gagal mengambil pengaturan QRIS.') }
+      }
+
+      if (!data) {
+        const fallback = {
           business_id: businessId,
           qris_image_url: null,
           qris_enabled: false,
           created_at: null,
           updated_at: null,
-        },
-        error: null,
+        }
+        if (isDefaultClient) {
+          qrisSettingsCache.set(businessId, { data: fallback, timestamp: Date.now() })
+        }
+        return { data: fallback, error: null }
+      }
+
+      if (isDefaultClient) {
+        qrisSettingsCache.set(businessId, { data, timestamp: Date.now() })
+      }
+      return { data, error: null }
+    } catch (err) {
+      return { data: null, error: normalizeQrisError(err, 'Gagal mengambil pengaturan QRIS.') }
+    } finally {
+      if (isDefaultClient) {
+        inFlightQrisRequests.delete(businessId)
       }
     }
+  })()
 
-    return { data, error: null }
-  } catch (err) {
-    return { data: null, error: normalizeQrisError(err, 'Gagal mengambil pengaturan QRIS.') }
+  if (isDefaultClient) {
+    inFlightQrisRequests.set(businessId, fetchPromise)
   }
+  return fetchPromise
 }
 
 /**
@@ -238,6 +284,7 @@ export async function upsertBusinessQrisSettings(
       return { data: null, error: normalizeQrisError(error, 'Gagal menyimpan pengaturan QRIS.') }
     }
 
+    invalidateQrisPaymentCache(businessId)
     return { data, error: null }
   } catch (err) {
     return { data: null, error: normalizeQrisError(err, 'Gagal menyimpan pengaturan QRIS.') }
@@ -331,6 +378,8 @@ export async function uploadBusinessQris(businessId, file, options = {}, client 
       }
     }
 
+    invalidateQrisPaymentCache(businessId)
+
     return {
       data: settingsData,
       publicUrl,
@@ -385,6 +434,7 @@ export async function deleteBusinessQris(businessId, client = supabase) {
       }
     }
 
+    invalidateQrisPaymentCache(businessId)
     return { success: true, error: null }
   } catch (err) {
     return {
@@ -452,6 +502,7 @@ export async function setBusinessQrisEnabled(businessId, enabled, client = supab
       }
     }
 
+    invalidateQrisPaymentCache(businessId)
     return { data, error: null }
   } catch (err) {
     return {
@@ -479,63 +530,91 @@ export async function getSecureQrisUrl(businessId, client = supabase, expiresIn 
     }
   }
 
-  try {
-    // 1. Fetch settings to ensure QRIS exists and derive extension
-    const { data: settings, error: fetchErr } = await getBusinessQrisSettings(businessId, client)
-    if (fetchErr) {
-      return { data: null, error: fetchErr }
+  const isDefaultClient = client === supabase
+  if (isDefaultClient) {
+    const cached = secureUrlCache.get(businessId)
+    if (cached && Date.now() - cached.timestamp < 3000 * 1000) {
+      return { data: { ...cached.data }, error: null }
     }
 
-    if (!settings || !settings.qris_image_url) {
-      return { data: null, error: null }
+    if (inFlightUrlRequests.has(businessId)) {
+      return inFlightUrlRequests.get(businessId)
     }
+  }
 
-    // 2. Extract extension safely from stored URL / filename
-    let ext = 'png'
-    const cleanUrl = String(settings.qris_image_url).split('?')[0]
-    const extMatch = cleanUrl.match(/\.([a-zA-Z0-9]+)$/)
-    if (extMatch && ALLOWED_QRIS_EXTENSIONS.includes(extMatch[1].toLowerCase())) {
-      ext = extMatch[1].toLowerCase()
-    }
-    if (ext === 'jpg') ext = 'jpeg'
-
-    // 3. Derive canonical, strict storage path: {businessId}/qris.{ext}
-    const storagePath = deriveQrisStoragePath(businessId, ext)
-
-    // Defense-in-depth: Reject any path traversal attempt or non-matching business path
-    if (storagePath.includes('..') || !storagePath.startsWith(`${businessId}/`)) {
-      return {
-        data: null,
-        error: new Error('Akses ditolak: Path penyimpanan tidak valid.'),
+  const fetchPromise = (async () => {
+    try {
+      // 1. Fetch settings to ensure QRIS exists and derive extension
+      const { data: settings, error: fetchErr } = await getBusinessQrisSettings(businessId, client)
+      if (fetchErr) {
+        return { data: null, error: fetchErr }
       }
-    }
 
-    // 4. Generate signed URL from private bucket
-    const { data: signedData, error: signError } = await client.storage
-      .from(QRIS_STORAGE_BUCKET)
-      .createSignedUrl(storagePath, expiresIn)
-
-    if (signError) {
-      return {
-        data: null,
-        error: normalizeQrisError(signError, 'Gagal membuat URL akses aman untuk QRIS.'),
+      if (!settings || !settings.qris_image_url) {
+        return { data: null, error: null }
       }
-    }
 
-    return {
-      data: {
+      // 2. Extract extension safely from stored URL / filename
+      let ext = 'png'
+      const cleanUrl = String(settings.qris_image_url).split('?')[0]
+      const extMatch = cleanUrl.match(/\.([a-zA-Z0-9]+)$/)
+      if (extMatch && ALLOWED_QRIS_EXTENSIONS.includes(extMatch[1].toLowerCase())) {
+        ext = extMatch[1].toLowerCase()
+      }
+      if (ext === 'jpg') ext = 'jpeg'
+
+      // 3. Derive canonical, strict storage path: {businessId}/qris.{ext}
+      const storagePath = deriveQrisStoragePath(businessId, ext)
+
+      // Defense-in-depth: Reject any path traversal attempt or non-matching business path
+      if (storagePath.includes('..') || !storagePath.startsWith(`${businessId}/`)) {
+        return {
+          data: null,
+          error: new Error('Akses ditolak: Path penyimpanan tidak valid.'),
+        }
+      }
+
+      // 4. Generate signed URL from private bucket
+      const { data: signedData, error: signError } = await client.storage
+        .from(QRIS_STORAGE_BUCKET)
+        .createSignedUrl(storagePath, expiresIn)
+
+      if (signError) {
+        return {
+          data: null,
+          error: normalizeQrisError(signError, 'Gagal membuat URL akses aman untuk QRIS.'),
+        }
+      }
+
+      const result = {
         signedUrl: signedData?.signedUrl || signedData,
         storagePath,
         expiresIn,
-      },
-      error: null,
+      }
+      if (isDefaultClient) {
+        secureUrlCache.set(businessId, { data: result, timestamp: Date.now() })
+      }
+
+      return {
+        data: result,
+        error: null,
+      }
+    } catch (err) {
+      return {
+        data: null,
+        error: normalizeQrisError(err, 'Gagal memproses akses QRIS aman.'),
+      }
+    } finally {
+      if (isDefaultClient) {
+        inFlightUrlRequests.delete(businessId)
+      }
     }
-  } catch (err) {
-    return {
-      data: null,
-      error: normalizeQrisError(err, 'Gagal memproses akses QRIS aman.'),
-    }
+  })()
+
+  if (isDefaultClient) {
+    inFlightUrlRequests.set(businessId, fetchPromise)
   }
+  return fetchPromise
 }
 
 /**

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router'
 import { ThemeProvider } from './context/ThemeContext'
 import { AuthProvider } from './context/AuthContext'
@@ -8,83 +9,86 @@ import AuthCallbackPage from './pages/AuthCallbackPage'
 import OnboardingPage from './pages/OnboardingPage'
 import PricingPage from './pages/PricingPage'
 import DashboardLayout from './components/DashboardLayout'
-import DashboardHome from './pages/dashboard/DashboardHome'
-import ProfilePage from './pages/dashboard/ProfilePage'
-import CategoryPage from './pages/dashboard/CategoryPage'
-import AllToolsPage from './pages/dashboard/AllToolsPage'
-import ExportCenterPage from './pages/dashboard/ExportCenterPage'
-import HelpCenterPage from './pages/dashboard/HelpCenterPage'
 import RequireAuth from './components/RequireAuth'
 import RequireAdmin from './components/RequireAdmin'
 import AdminLayout from './components/admin/AdminLayout'
-import AdminDashboardOverview from './pages/admin/AdminDashboardOverview'
-import AdminUsersPage from './pages/admin/AdminUsersPage'
-import AdminUserDetailPage from './pages/admin/AdminUserDetailPage'
-import AdminBusinessesPage from './pages/admin/AdminBusinessesPage'
-import AdminBusinessDetailPage from './pages/admin/AdminBusinessDetailPage'
-import AdminSubscriptionsPage from './pages/admin/AdminSubscriptionsPage'
-import AdminSubscriptionDetailPage from './pages/admin/AdminSubscriptionDetailPage'
-import AdminActivationCodesPage from './pages/admin/AdminActivationCodesPage'
-import AdminAIUsagePage from './pages/admin/AdminAIUsagePage'
-import AdminSupportPage from './pages/admin/AdminSupportPage'
-import AdminSupportDetailPage from './pages/admin/AdminSupportDetailPage'
-import AdminPaymentsPage from './pages/admin/AdminPaymentsPage'
-import AdminPaymentDetailPage from './pages/admin/AdminPaymentDetailPage'
-import AdminAuditLogsPage from './pages/admin/AdminAuditLogsPage'
-import AdminSettingsPage from './pages/admin/AdminSettingsPage'
-import AdminFooterSocialLinksPage from './pages/admin/AdminFooterSocialLinksPage'
-import AdminPlaceholderPage from './pages/admin/AdminPlaceholderPage'
-import AdminCreditActivationsPage from './pages/admin/AdminCreditActivationsPage'
+import LoadingScreen from './components/LoadingScreen'
 import ActivateCreditPage from './pages/ActivateCreditPage'
 import TentangKamiPage from './pages/TentangKamiPage'
 import RequireOnboarding from './components/RequireOnboarding'
 import RequireSubscription from './components/RequireSubscription'
 import MaintenanceGate from './components/MaintenanceGate'
 import NotFoundPage from './pages/NotFoundPage'
-
-// POS / QR Menu pages
-import QRMenuPage from './pages/dashboard/pos/QRMenuPage'
-import QRMenuPublishedPage from './pages/dashboard/pos/QRMenuPublishedPage'
-import QRMenuDesignerPage from './pages/dashboard/pos/QRMenuDesignerPage'
-import ProductManager from './pages/dashboard/pos/ProductManager'
-import CategoryManager from './pages/dashboard/pos/CategoryManager'
-import TableManager from './pages/dashboard/pos/TableManager'
-import POSPage from './pages/dashboard/pos/PosPage'
-import OrderHistory from './pages/dashboard/pos/OrderHistory'
-import ReceiptSettingsPage from './pages/dashboard/pos/ReceiptSettingsPage'
 import PublicMenuPage from './pages/public/PublicMenuPage'
 import PublicProductDetailPage from './pages/public/PublicProductDetailPage'
-import HPPCalculator from './pages/dashboard/keuangan/HPPCalculator'
-import MarginAnalysis from './pages/dashboard/keuangan/MarginAnalysis'
-import BEPCalculator from './pages/dashboard/keuangan/BepCalculator'
-import CashFlowForecastPage from './pages/dashboard/keuangan/CashFlowForecastPage'
-import TaxPlanning from './pages/dashboard/keuangan/TaxPlanning'
-import FinancialReports from './pages/dashboard/keuangan/FinancialReports'
-import AnomalyDetection from './pages/dashboard/keuangan/AnomalyDetection'
-import FinancialHealthScore from './pages/dashboard/keuangan/FinancialHealthScore'
-import LoanSimulation from './pages/dashboard/keuangan/LoanSimulation'
-import CustomerCRM from './pages/dashboard/penjualan/CustomerCRM'
-import InvoiceFollowUp from './pages/dashboard/penjualan/InvoiceFollowUp'
-import LoyaltyProgram from './pages/dashboard/penjualan/LoyaltyProgram'
-import WhatsAppSalesTracker from './pages/dashboard/penjualan/WhatsAppSalesTracker'
-import LegalitasPage from './pages/dashboard/legalitas/LegalitasPage'
-import InventoryPage from './pages/dashboard/operasional/InventoryPage'
-import SupplierDatabasePage from './pages/dashboard/operasional/SupplierDatabasePage'
-import ProductionCapacityPlanner from './pages/dashboard/operasional/ProductionCapacityPlanner'
-import TelegramOperasionalPage from './pages/dashboard/operasional/TelegramOperasionalPage'
-import ExcelPenjualanPage from './pages/dashboard/operasional/ExcelPenjualanPage'
-import WhatsAppOperasionalPage from './pages/dashboard/operasional/WhatsAppOperasionalPage'
-import CreativeStudioPage from './pages/dashboard/marketing/CreativeStudioPage'
-import CreativeCreditsPage from './pages/dashboard/marketing/CreativeCreditsPage'
-import CompetitorAnalysisPage from './pages/dashboard/marketing/CompetitorAnalysisPage'
-import AdsPage from './pages/dashboard/marketing/AdsPage'
-import SeoOptimizerPage from './pages/dashboard/marketing/SeoOptimizerPage'
-import ContentCalendarPage from './pages/dashboard/marketing/ContentCalendarPage'
-import ABTestingPage from './pages/dashboard/marketing/ABTestingPage'
-import RealtimeDashboard from './pages/dashboard/analytics/RealtimeDashboard'
-import BenchmarkingPage from './pages/dashboard/analytics/BenchmarkingPage'
-import WeeklyRecapPage from './pages/dashboard/analytics/WeeklyRecapPage'
-import AiBusinessAnalystPage from './pages/ai/AiBusinessAnalystPage'
+
+// ── Lazy-loaded Admin Pages ──
+const AdminDashboardOverview = lazy(() => import('./pages/admin/AdminDashboardOverview'))
+const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage'))
+const AdminUserDetailPage = lazy(() => import('./pages/admin/AdminUserDetailPage'))
+const AdminBusinessesPage = lazy(() => import('./pages/admin/AdminBusinessesPage'))
+const AdminBusinessDetailPage = lazy(() => import('./pages/admin/AdminBusinessDetailPage'))
+const AdminSubscriptionsPage = lazy(() => import('./pages/admin/AdminSubscriptionsPage'))
+const AdminSubscriptionDetailPage = lazy(() => import('./pages/admin/AdminSubscriptionDetailPage'))
+const AdminActivationCodesPage = lazy(() => import('./pages/admin/AdminActivationCodesPage'))
+const AdminAIUsagePage = lazy(() => import('./pages/admin/AdminAIUsagePage'))
+const AdminSupportPage = lazy(() => import('./pages/admin/AdminSupportPage'))
+const AdminSupportDetailPage = lazy(() => import('./pages/admin/AdminSupportDetailPage'))
+const AdminPaymentsPage = lazy(() => import('./pages/admin/AdminPaymentsPage'))
+const AdminPaymentDetailPage = lazy(() => import('./pages/admin/AdminPaymentDetailPage'))
+const AdminAuditLogsPage = lazy(() => import('./pages/admin/AdminAuditLogsPage'))
+const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage'))
+const AdminFooterSocialLinksPage = lazy(() => import('./pages/admin/AdminFooterSocialLinksPage'))
+const AdminPlaceholderPage = lazy(() => import('./pages/admin/AdminPlaceholderPage'))
+const AdminCreditActivationsPage = lazy(() => import('./pages/admin/AdminCreditActivationsPage'))
+
+// ── Lazy-loaded Dashboard Pages ──
+const DashboardHome = lazy(() => import('./pages/dashboard/DashboardHome'))
+const ProfilePage = lazy(() => import('./pages/dashboard/ProfilePage'))
+const CategoryPage = lazy(() => import('./pages/dashboard/CategoryPage'))
+const AllToolsPage = lazy(() => import('./pages/dashboard/AllToolsPage'))
+const ExportCenterPage = lazy(() => import('./pages/dashboard/ExportCenterPage'))
+const HelpCenterPage = lazy(() => import('./pages/dashboard/HelpCenterPage'))
+const QRMenuPage = lazy(() => import('./pages/dashboard/pos/QRMenuPage'))
+const QRMenuPublishedPage = lazy(() => import('./pages/dashboard/pos/QRMenuPublishedPage'))
+const QRMenuDesignerPage = lazy(() => import('./pages/dashboard/pos/QRMenuDesignerPage'))
+const ProductManager = lazy(() => import('./pages/dashboard/pos/ProductManager'))
+const CategoryManager = lazy(() => import('./pages/dashboard/pos/CategoryManager'))
+const TableManager = lazy(() => import('./pages/dashboard/pos/TableManager'))
+const POSPage = lazy(() => import('./pages/dashboard/pos/PosPage'))
+const OrderHistory = lazy(() => import('./pages/dashboard/pos/OrderHistory'))
+const ReceiptSettingsPage = lazy(() => import('./pages/dashboard/pos/ReceiptSettingsPage'))
+const HPPCalculator = lazy(() => import('./pages/dashboard/keuangan/HPPCalculator'))
+const MarginAnalysis = lazy(() => import('./pages/dashboard/keuangan/MarginAnalysis'))
+const BEPCalculator = lazy(() => import('./pages/dashboard/keuangan/BepCalculator'))
+const CashFlowForecastPage = lazy(() => import('./pages/dashboard/keuangan/CashFlowForecastPage'))
+const TaxPlanning = lazy(() => import('./pages/dashboard/keuangan/TaxPlanning'))
+const FinancialReports = lazy(() => import('./pages/dashboard/keuangan/FinancialReports'))
+const AnomalyDetection = lazy(() => import('./pages/dashboard/keuangan/AnomalyDetection'))
+const FinancialHealthScore = lazy(() => import('./pages/dashboard/keuangan/FinancialHealthScore'))
+const LoanSimulation = lazy(() => import('./pages/dashboard/keuangan/LoanSimulation'))
+const CustomerCRM = lazy(() => import('./pages/dashboard/penjualan/CustomerCRM'))
+const InvoiceFollowUp = lazy(() => import('./pages/dashboard/penjualan/InvoiceFollowUp'))
+const LoyaltyProgram = lazy(() => import('./pages/dashboard/penjualan/LoyaltyProgram'))
+const WhatsAppSalesTracker = lazy(() => import('./pages/dashboard/penjualan/WhatsAppSalesTracker'))
+const LegalitasPage = lazy(() => import('./pages/dashboard/legalitas/LegalitasPage'))
+const InventoryPage = lazy(() => import('./pages/dashboard/operasional/InventoryPage'))
+const SupplierDatabasePage = lazy(() => import('./pages/dashboard/operasional/SupplierDatabasePage'))
+const ProductionCapacityPlanner = lazy(() => import('./pages/dashboard/operasional/ProductionCapacityPlanner'))
+const TelegramOperasionalPage = lazy(() => import('./pages/dashboard/operasional/TelegramOperasionalPage'))
+const ExcelPenjualanPage = lazy(() => import('./pages/dashboard/operasional/ExcelPenjualanPage'))
+const WhatsAppOperasionalPage = lazy(() => import('./pages/dashboard/operasional/WhatsAppOperasionalPage'))
+const CreativeStudioPage = lazy(() => import('./pages/dashboard/marketing/CreativeStudioPage'))
+const CreativeCreditsPage = lazy(() => import('./pages/dashboard/marketing/CreativeCreditsPage'))
+const CompetitorAnalysisPage = lazy(() => import('./pages/dashboard/marketing/CompetitorAnalysisPage'))
+const AdsPage = lazy(() => import('./pages/dashboard/marketing/AdsPage'))
+const SeoOptimizerPage = lazy(() => import('./pages/dashboard/marketing/SeoOptimizerPage'))
+const ContentCalendarPage = lazy(() => import('./pages/dashboard/marketing/ContentCalendarPage'))
+const ABTestingPage = lazy(() => import('./pages/dashboard/marketing/ABTestingPage'))
+const RealtimeDashboard = lazy(() => import('./pages/dashboard/analytics/RealtimeDashboard'))
+const BenchmarkingPage = lazy(() => import('./pages/dashboard/analytics/BenchmarkingPage'))
+const WeeklyRecapPage = lazy(() => import('./pages/dashboard/analytics/WeeklyRecapPage'))
+const AiBusinessAnalystPage = lazy(() => import('./pages/ai/AiBusinessAnalystPage'))
 
 const router = createBrowserRouter([
   // Authentication infrastructure required for admin recovery (@gas.md)
@@ -157,7 +161,9 @@ const router = createBrowserRouter([
         path: '/test-tools-view',
         element: (
           <div data-theme="dark" className="min-h-screen bg-[#0B0F19] text-[#F8FAFC] p-4 sm:p-8 max-w-7xl mx-auto">
-            <AllToolsPage />
+            <Suspense fallback={<LoadingScreen />}>
+              <AllToolsPage />
+            </Suspense>
           </div>
         ),
       },
@@ -305,8 +311,8 @@ const router = createBrowserRouter([
               {
                 element: <RequireSubscription requiredPlan="pro" featureName="AI Business Analyst" />,
                 children: [
-                  { index: true, element: <AiBusinessAnalystPage isStandalone={true} /> },
-                  { path: 'chat', element: <AiBusinessAnalystPage isStandalone={true} /> },
+                  { index: true, element: <Suspense fallback={<LoadingScreen />}><AiBusinessAnalystPage isStandalone={true} /></Suspense> },
+                  { path: 'chat', element: <Suspense fallback={<LoadingScreen />}><AiBusinessAnalystPage isStandalone={true} /></Suspense> },
                 ],
               },
             ],

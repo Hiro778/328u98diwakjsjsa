@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { formatCurrency } from '../../lib/orderNumber.js'
 import { hasRequiredVariants } from '../../lib/productMetadata.js'
@@ -126,7 +126,9 @@ function BannerCarousel({ banners = [], heightPreset = 'compact', overlayOpacity
             alt={b.title || 'Banner'}
             className={`h-full w-full object-cover ${getObjectPositionClass(b.imagePosition)}`}
             style={{ objectPosition: b.imagePosition || 'center' }}
-            loading="lazy"
+            loading={validIndex === 0 ? 'eager' : 'lazy'}
+            fetchPriority={validIndex === 0 ? 'high' : 'auto'}
+            decoding="async"
           />
 
           {/* Banner Content Overlay (ban.md Section 5) */}
@@ -767,7 +769,7 @@ export default function PublicMenuRenderer({
 // Sub-components for Product Layout Variants (Grid, List, Card)
 // ─────────────────────────────────────────────────────────────
 
-function ProductGridCard({
+const ProductGridCard = memo(function ProductGridCard({
   product,
   surfaceColor,
   primaryColor,
@@ -782,23 +784,33 @@ function ProductGridCard({
   const needsVariant = hasRequiredVariants(product)
   const imageUrl = getProductImageUrl(product)
   const [imgError, setImgError] = useState(false)
+  const [imgLoaded, setImgLoaded] = useState(false)
 
   return (
     <div
-      style={{ backgroundColor: surfaceColor }}
+      style={{ backgroundColor: surfaceColor, contentVisibility: 'auto', containIntrinsicSize: '240px' }}
       onClick={() => isInteractive && onSelectProduct(product)}
       className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-black/5 shadow-2xs hover:shadow-md transition-all cursor-pointer"
     >
       {/* 1. Image area proporsional — aspect-square, object-cover */}
       <div className="relative aspect-square w-full overflow-hidden bg-black/3">
         {imageUrl && !imgError ? (
-          <img
-            src={imageUrl}
-            alt={product.name}
-            onError={() => setImgError(true)}
-            className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
-            loading="lazy"
-          />
+          <>
+            {!imgLoaded && (
+              <div className="absolute inset-0 animate-pulse bg-black/5" />
+            )}
+            <img
+              src={imageUrl}
+              alt={product.name}
+              onLoad={() => setImgLoaded(true)}
+              onError={() => setImgError(true)}
+              className={`h-full w-full object-cover group-hover:scale-105 transition-all duration-300 ${
+                imgLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
+              loading="lazy"
+              decoding="async"
+            />
+          </>
         ) : (
           <div className="flex h-full w-full items-center justify-center text-xs opacity-40 font-medium">
             No Image
@@ -862,9 +874,9 @@ function ProductGridCard({
       </div>
     </div>
   )
-}
+})
 
-function ProductListCard({
+const ProductListCard = memo(function ProductListCard({
   product,
   surfaceColor,
   primaryColor,
@@ -879,23 +891,33 @@ function ProductListCard({
   const needsVariant = hasRequiredVariants(product)
   const imageUrl = getProductImageUrl(product)
   const [imgError, setImgError] = useState(false)
+  const [imgLoaded, setImgLoaded] = useState(false)
 
   return (
     <div
-      style={{ backgroundColor: surfaceColor }}
+      style={{ backgroundColor: surfaceColor, contentVisibility: 'auto', containIntrinsicSize: '90px' }}
       onClick={() => isInteractive && onSelectProduct(product)}
       className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-2xl border border-black/5 shadow-2xs hover:shadow-sm transition-all cursor-pointer group"
     >
       {/* Thumbnail */}
       <div className="relative h-16 w-16 sm:h-18 sm:w-18 shrink-0 overflow-hidden rounded-xl bg-black/3">
         {imageUrl && !imgError ? (
-          <img
-            src={imageUrl}
-            alt={product.name}
-            onError={() => setImgError(true)}
-            className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
-            loading="lazy"
-          />
+          <>
+            {!imgLoaded && (
+              <div className="absolute inset-0 animate-pulse bg-black/5" />
+            )}
+            <img
+              src={imageUrl}
+              alt={product.name}
+              onLoad={() => setImgLoaded(true)}
+              onError={() => setImgError(true)}
+              className={`h-full w-full object-cover group-hover:scale-105 transition-all duration-300 ${
+                imgLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
+              loading="lazy"
+              decoding="async"
+            />
+          </>
         ) : (
           <div className="flex h-full w-full items-center justify-center text-[10px] opacity-40">
             No Image
@@ -945,9 +967,9 @@ function ProductListCard({
       </motion.button>
     </div>
   )
-}
+})
 
-function ProductBigCard({
+const ProductBigCard = memo(function ProductBigCard({
   product,
   surfaceColor,
   primaryColor,
@@ -962,23 +984,33 @@ function ProductBigCard({
   const needsVariant = hasRequiredVariants(product)
   const imageUrl = getProductImageUrl(product)
   const [imgError, setImgError] = useState(false)
+  const [imgLoaded, setImgLoaded] = useState(false)
 
   return (
     <div
-      style={{ backgroundColor: surfaceColor }}
+      style={{ backgroundColor: surfaceColor, contentVisibility: 'auto', containIntrinsicSize: '300px' }}
       onClick={() => isInteractive && onSelectProduct(product)}
       className="overflow-hidden rounded-3xl border border-black/5 shadow-2xs hover:shadow-md transition-all cursor-pointer group"
     >
       {/* Wide hero image */}
       <div className="relative h-44 w-full overflow-hidden bg-black/3">
         {imageUrl && !imgError ? (
-          <img
-            src={imageUrl}
-            alt={product.name}
-            onError={() => setImgError(true)}
-            className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
-            loading="lazy"
-          />
+          <>
+            {!imgLoaded && (
+              <div className="absolute inset-0 animate-pulse bg-black/5" />
+            )}
+            <img
+              src={imageUrl}
+              alt={product.name}
+              onLoad={() => setImgLoaded(true)}
+              onError={() => setImgError(true)}
+              className={`h-full w-full object-cover group-hover:scale-105 transition-all duration-300 ${
+                imgLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
+              loading="lazy"
+              decoding="async"
+            />
+          </>
         ) : (
           <div className="flex h-full w-full items-center justify-center text-sm opacity-40">
             No Image
@@ -1037,7 +1069,7 @@ function ProductBigCard({
       </div>
     </div>
   )
-}
+})
 
 // ─────────────────────────────────────────────────────────────
 // Social Media Icon & Link Button Helpers (qr.md)

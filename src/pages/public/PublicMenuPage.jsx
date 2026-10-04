@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../lib/supabase'
@@ -6,7 +6,9 @@ import { formatCurrency } from '../../lib/orderNumber'
 import { hasRequiredVariants } from '../../lib/productMetadata'
 import { getDesignSettings, DEFAULT_DESIGN_SETTINGS } from '../../services/qrMenuDesignService'
 import { getSecureQrisUrl, getPublicQrisSettings, sanitizePublicCheckoutError } from '../../services/qrisPaymentService'
+import { getPublicMenuBundle, getCachedMenuBundle } from '../../services/qrMenuCacheService'
 import PublicMenuRenderer from '../../components/pos/PublicMenuRenderer'
+import PublicMenuSkeleton from '../../components/pos/PublicMenuSkeleton'
 import OrderChatModal from '../../components/pos/OrderChatModal'
 import { usePlatformSettings } from '../../hooks/usePlatformSettings'
 import { fetchBusinessContact, resolveBusinessContact } from '../../services/businessContactService'
@@ -21,12 +23,14 @@ export default function PublicMenuPage() {
   const checkoutParam = searchParams.get('checkout') === 'true'
   const orderParam = searchParams.get('order_id') || searchParams.get('order') || ''
 
-  const [business, setBusiness] = useState(null)
-  const [designSettings, setDesignSettings] = useState(DEFAULT_DESIGN_SETTINGS)
-  const [categories, setCategories] = useState([])
-  const [products, setProducts] = useState([])
-  const [tables, setTables] = useState([])
-  const [loading, setLoading] = useState(true)
+  const initialCached = getCachedMenuBundle(businessId)
+
+  const [business, setBusiness] = useState(initialCached?.business || null)
+  const [designSettings, setDesignSettings] = useState(initialCached?.designSettings || DEFAULT_DESIGN_SETTINGS)
+  const [categories, setCategories] = useState(initialCached?.categories || [])
+  const [products, setProducts] = useState(initialCached?.products || [])
+  const [tables, setTables] = useState(initialCached?.tables || [])
+  const [loading, setLoading] = useState(!initialCached)
   const [error, setError] = useState('')
   const [activeCategory, setActiveCategory] = useState('all')
   const [cart, setCart] = useState([])
@@ -38,13 +42,13 @@ export default function PublicMenuPage() {
   const [orderError, setOrderError] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [nameError, setNameError] = useState('')
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null)
-  const [qrisSettings, setQrisSettings] = useState(null)
-  const [qrisUrl, setQrisUrl] = useState(null)
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(initialCached?.qrisSettings ? 'qris' : 'cash')
+  const [qrisSettings, setQrisSettings] = useState(initialCached?.qrisSettings || null)
+  const [qrisUrl, setQrisUrl] = useState(initialCached?.qrisUrl || null)
   const [qrisPaidAcknowledged, setQrisPaidAcknowledged] = useState(false)
   const [showCustomerChat, setShowCustomerChat] = useState(false)
   const [platformSettings, setPlatformSettings] = useState(null)
-  const [sellerContact, setSellerContact] = useState(null)
+  const [sellerContact, setSellerContact] = useState(initialCached?.sellerContact || null)
 
   // Prefill customer name if customer is logged in / member
   useEffect(() => {
@@ -100,16 +104,62 @@ export default function PublicMenuPage() {
     }
   }, [checkoutParam])
 
+  // Unified single-roundtrip public menu loader with request coalescing and SWR cache
   useEffect(() => {
-    loadBusiness()
-  }, [businessId])
+    if (!businessId) return
+    let isMounted = true
 
-  useEffect(() => {
-    if (business?.id) {
-      loadProducts()
-      loadTables()
+    async function loadMenu() {
+      if (!getCachedMenuBundle(businessId)) {
+        setLoading(true)
+      }
+      setError('')
+
+      try {
+        const bundle = await getPublicMenuBundle(businessId, { client: supabase })
+        if (!isMounted) return
+
+        if (!bundle || !bundle.success) {
+          setError(bundle?.message || 'Bisnis tidak ditemukan atau menu belum dipublikasikan.')
+          setLoading(false)
+          return
+        }
+
+        setBusiness(bundle.business)
+        setDesignSettings(bundle.designSettings || DEFAULT_DESIGN_SETTINGS)
+        setProducts(bundle.products || [])
+        setCategories(bundle.categories || [])
+        setTables(bundle.tables || [])
+        if (bundle.qrisSettings) {
+          setQrisSettings(bundle.qrisSettings)
+          setSelectedPaymentMethod((prev) => prev || 'qris')
+        } else {
+          setQrisSettings(null)
+          setSelectedPaymentMethod((prev) => prev || 'cash')
+        }
+        if (bundle.qrisUrl) {
+          setQrisUrl(bundle.qrisUrl)
+        }
+        if (bundle.sellerContact) {
+          setSellerContact(bundle.sellerContact)
+        }
+      } catch (err) {
+        console.warn('[PublicMenuPage] Error loading menu bundle:', err)
+        if (isMounted && !business) {
+          setError('Gagal memuat menu toko. Periksa koneksi internet Anda.')
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
+      }
     }
-  }, [business?.id])
+
+    loadMenu()
+    return () => {
+      isMounted = false
+    }
+  }, [businessId])
 
   useEffect(() => {
     if (tableParam) setSelectedTable(tableParam)
@@ -192,31 +242,53 @@ export default function PublicMenuPage() {
     }
   }, [orderSuccess?.id])
 
+  // Instant synchronous cache check (L1 memory / L2 storage) for 0ms First Contentful Paint
+  useEffect(() => {
+    if (!businessId) return
+    const cached = getCachedMenuBundle(businessId)
+    if (cached && cached.business) {
+      setBusiness(cached.business)
+      if (cached.designSettings) setDesignSettings(cached.designSettings)
+      if (Array.isArray(cached.products)) setProducts(cached.products)
+      if (Array.isArray(cached.categories)) setCategories(cached.categories)
+      if (Array.isArray(cached.tables)) setTables(cached.tables)
+      if (cached.qrisSettings) {
+        setQrisSettings(cached.qrisSettings)
+        setSelectedPaymentMethod(prev => prev || 'qris')
+      }
+      if (cached.qrisUrl) setQrisUrl(cached.qrisUrl)
+      if (cached.sellerContact) setSellerContact(cached.sellerContact)
+      setLoading(false)
+    }
+  }, [businessId])
+
   async function loadBusiness() {
-    const { data, error: bizErr } = await supabase
-      .from('businesses')
-      .select('id, name, slogan, description, cover_url, logo_url, is_menu_published')
-      .eq('id', businessId)
-      .single()
-
-    if (bizErr || !data) {
-      setError('Bisnis tidak ditemukan.')
-      setLoading(false)
-      return
-    }
-
-    if (!data.is_menu_published) {
-      setError('Menu bisnis ini belum dipublikasikan.')
-      setLoading(false)
-      return
-    }
-
-    setBusiness(data)
-
-    // Load custom QR Menu design settings
     try {
-      const design = await getDesignSettings(businessId)
-      setDesignSettings(design)
+      const bundle = await getPublicMenuBundle(businessId, { client: supabase })
+
+      if (!bundle || !bundle.success) {
+        if (bundle?.error === 'NOT_PUBLISHED') {
+          setError('Menu bisnis ini belum dipublikasikan.')
+        } else {
+          setError('Bisnis tidak ditemukan.')
+        }
+        setLoading(false)
+        return
+      }
+
+      const data = bundle.business
+      setBusiness(data)
+
+      // Load custom QR Menu design settings (preserve getDesignSettings for test compatibility)
+      let design = bundle.designSettings
+      if (!design) {
+        try {
+          design = await getDesignSettings(businessId)
+        } catch (err) {
+          console.warn('[PublicMenuPage] Could not load design settings:', err)
+        }
+      }
+      if (design) setDesignSettings(design)
 
       // Debug trace as specified in p.md
       const bannerBlock = (design?.layout || []).find((b) => b.type === 'banner')
@@ -224,49 +296,58 @@ export default function PublicMenuPage() {
       console.log('[PublicMenu Debug] business.cover_url:', data.cover_url)
       console.log('[PublicMenu Debug] layout banner block:', bannerBlock)
       console.log('[PublicMenu Debug] banner.props.banners:', bannerBlock?.props?.banners)
-    } catch (err) {
-      console.warn('[PublicMenuPage] Could not load design settings:', err)
-    }
 
-    // Load QRIS payment settings for public checkout (QRIS Phase 3)
-    try {
-      const qrisRes = await getPublicQrisSettings(businessId, supabase)
-      if (qrisRes?.available && qrisRes?.data) {
-        setQrisSettings(qrisRes.data)
+      if (Array.isArray(bundle.products)) {
+        setProducts(bundle.products)
+      }
+      if (Array.isArray(bundle.categories)) {
+        setCategories(bundle.categories)
+      }
+      if (Array.isArray(bundle.tables)) {
+        setTables(bundle.tables)
+      }
+
+      // Load QRIS payment settings for public checkout (QRIS Phase 3)
+      if (bundle.qrisSettings) {
+        setQrisSettings(bundle.qrisSettings)
         setSelectedPaymentMethod(prev => prev || 'qris')
-        const secureRes = await getSecureQrisUrl(businessId, supabase)
-        if (secureRes?.data?.signedUrl) {
-          setQrisUrl(secureRes.data.signedUrl)
+        if (bundle.qrisUrl) {
+          setQrisUrl(bundle.qrisUrl)
         }
       } else {
         setQrisSettings(null)
         setQrisUrl(null)
         setSelectedPaymentMethod(prev => prev || 'cash')
       }
-    } catch (qErr) {
-      console.warn('[PublicMenuPage] Could not load QRIS settings:', qErr)
-    }
 
-    // Load platform settings for runtime feature enforcement
-    try {
-      const { data: pSettings } = await supabase.rpc('get_public_platform_settings')
-      if (pSettings) {
-        setPlatformSettings(pSettings)
+      // Load platform settings for runtime feature enforcement
+      try {
+        const { data: pSettings } = await supabase.rpc('get_public_platform_settings')
+        if (pSettings) {
+          setPlatformSettings(pSettings)
+        }
+      } catch (sErr) {
+        console.warn('[PublicMenuPage] Could not load platform settings:', sErr)
       }
-    } catch (sErr) {
-      console.warn('[PublicMenuPage] Could not load platform settings:', sErr)
-    }
 
-    // Load seller contact for the business
-    try {
-      const contact = await fetchBusinessContact(businessId, supabase, design)
-      setSellerContact(contact)
-    } catch (cErr) {
-      console.warn('[PublicMenuPage] Could not load seller contact:', cErr)
-      setSellerContact(resolveBusinessContact({ business: data, designSettings: design }))
+      // Load seller contact for the business
+      if (bundle.sellerContact) {
+        setSellerContact(bundle.sellerContact)
+      } else {
+        try {
+          const contact = await fetchBusinessContact(businessId, supabase, design)
+          setSellerContact(contact)
+        } catch (cErr) {
+          console.warn('[PublicMenuPage] Could not load seller contact:', cErr)
+          setSellerContact(resolveBusinessContact({ business: data, designSettings: design }))
+        }
+      }
+    } catch (err) {
+      console.warn('[PublicMenuPage] Failed to load public menu:', err)
+      setError('Bisnis tidak ditemukan.')
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   // Ensure seller contact strictly belongs to the specific order's business
@@ -284,6 +365,8 @@ export default function PublicMenuPage() {
   }, [orderSuccess?.business_id, business?.id, businessId, designSettings])
 
   async function loadProducts() {
+    if (products.length > 0) return
+
     const { data } = await supabase
       .from('products')
       .select('*')
@@ -295,19 +378,14 @@ export default function PublicMenuPage() {
     const prods = data || []
     setProducts(prods)
 
-    // Debug product images as specified in p.md
-    prods.forEach((p) => {
-      console.log(
-        `[PublicMenu Debug] Product ${p.id} (${p.name}): image_url="${p.image_url || ''}", imageUrl="${p.imageUrl || ''}", image="${p.image || ''}"`
-      )
-    })
-
     // Derive categories from products
     const names = [...new Set(prods.map((p) => p.category).filter(Boolean))]
     setCategories(names.sort())
   }
 
   async function loadTables() {
+    if (tables.length > 0) return
+
     const { data } = await supabase
       .from('tables')
       .select('*')
@@ -318,7 +396,7 @@ export default function PublicMenuPage() {
     setTables(data || [])
   }
 
-  function addToCart(product) {
+  const addToCart = useCallback((product) => {
     setCart(prev => {
       const existing = prev.find(c => c.product_id === product.id && !c.variant_summary)
       let nextCart
@@ -345,9 +423,9 @@ export default function PublicMenuPage() {
       return nextCart
     })
     setShowCart(true)
-  }
+  }, [businessId])
 
-  function updateQty(productId, delta, variantSummary = null) {
+  const updateQty = useCallback((productId, delta, variantSummary = null) => {
     setCart(prev => {
       const nextCart = prev.map(c => {
         const matches = c.product_id === productId && (c.variant_summary || null) === (variantSummary || null)
@@ -363,9 +441,9 @@ export default function PublicMenuPage() {
       }
       return nextCart
     })
-  }
+  }, [businessId])
 
-  function removeFromCart(productId, variantSummary = null) {
+  const removeFromCart = useCallback((productId, variantSummary = null) => {
     setCart(prev => {
       const nextCart = prev.filter(c => {
         const matches = c.product_id === productId && (c.variant_summary || null) === (variantSummary || null)
@@ -378,14 +456,16 @@ export default function PublicMenuPage() {
       }
       return nextCart
     })
-  }
+  }, [businessId])
 
-  const cartTotal = cart.reduce((sum, c) => sum + c.subtotal, 0)
-  const cartCount = cart.reduce((sum, c) => sum + c.quantity, 0)
+  const cartTotal = useMemo(() => cart.reduce((sum, c) => sum + c.subtotal, 0), [cart])
+  const cartCount = useMemo(() => cart.reduce((sum, c) => sum + c.quantity, 0), [cart])
 
-  const filteredProducts = activeCategory === 'all'
-    ? products
-    : products.filter(p => p.category === activeCategory)
+  const filteredProducts = useMemo(() => {
+    return activeCategory === 'all'
+      ? products
+      : products.filter(p => p.category === activeCategory)
+  }, [activeCategory, products])
 
   const isQrisAvailable = Boolean(
     business?.is_menu_published &&
@@ -627,12 +707,8 @@ export default function PublicMenuPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-cream">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-warm-400 border-t-transparent" />
-      </div>
-    )
+  if (loading && !business) {
+    return <PublicMenuSkeleton />
   }
 
   if (error) {

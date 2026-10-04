@@ -329,36 +329,77 @@ export function normalizeDesignSettings(stored = {}) {
   }
 }
 
+const designCache = new Map()
+const inFlightDesignRequests = new Map()
+
+export function invalidateDesignSettingsCache(businessId) {
+  if (businessId) {
+    designCache.delete(businessId)
+    inFlightDesignRequests.delete(businessId)
+  } else {
+    designCache.clear()
+    inFlightDesignRequests.clear()
+  }
+}
+
 /**
  * Loads the QR Menu design settings for a business.
  * If not customized yet, returns the default settings.
+ * Includes in-memory caching and single-flight coalescing for high concurrency.
  */
-export async function getDesignSettings(businessId) {
+export async function getDesignSettings(businessId, client = supabase) {
   if (!businessId) {
     return JSON.parse(JSON.stringify(DEFAULT_DESIGN_SETTINGS))
   }
 
-  try {
-    const { data, error } = await supabase
-      .from('qr_menu_design_settings')
-      .select('*')
-      .eq('business_id', businessId)
-      .maybeSingle()
-
-    if (error) {
-      console.warn('[qrMenuDesignService] Error reading design settings:', error.message)
-      return JSON.parse(JSON.stringify(DEFAULT_DESIGN_SETTINGS))
+  const isDefaultClient = client === supabase
+  if (isDefaultClient) {
+    const cached = designCache.get(businessId)
+    if (cached && Date.now() - cached.timestamp < 60000) {
+      return JSON.parse(JSON.stringify(cached.data))
     }
 
-    if (!data) {
-      return JSON.parse(JSON.stringify(DEFAULT_DESIGN_SETTINGS))
+    if (inFlightDesignRequests.has(businessId)) {
+      return inFlightDesignRequests.get(businessId)
     }
-
-    return normalizeDesignSettings(data)
-  } catch (err) {
-    console.error('[qrMenuDesignService] Failed to load design settings:', err)
-    return JSON.parse(JSON.stringify(DEFAULT_DESIGN_SETTINGS))
   }
+
+  const fetchPromise = (async () => {
+    try {
+      const { data, error } = await client
+        .from('qr_menu_design_settings')
+        .select('*')
+        .eq('business_id', businessId)
+        .maybeSingle()
+
+      if (error) {
+        console.warn('[qrMenuDesignService] Error reading design settings:', error.message)
+        return JSON.parse(JSON.stringify(DEFAULT_DESIGN_SETTINGS))
+      }
+
+      if (!data) {
+        return JSON.parse(JSON.stringify(DEFAULT_DESIGN_SETTINGS))
+      }
+
+      const normalized = normalizeDesignSettings(data)
+      if (isDefaultClient) {
+        designCache.set(businessId, { data: normalized, timestamp: Date.now() })
+      }
+      return normalized
+    } catch (err) {
+      console.error('[qrMenuDesignService] Failed to load design settings:', err)
+      return JSON.parse(JSON.stringify(DEFAULT_DESIGN_SETTINGS))
+    } finally {
+      if (isDefaultClient) {
+        inFlightDesignRequests.delete(businessId)
+      }
+    }
+  })()
+
+  if (isDefaultClient) {
+    inFlightDesignRequests.set(businessId, fetchPromise)
+  }
+  return fetchPromise
 }
 
 /**
@@ -389,6 +430,8 @@ export async function saveDesignSettings(businessId, settings) {
     console.error('[qrMenuDesignService] Upsert error:', error)
     throw new Error(error.message || 'Gagal menyimpan pengaturan desain menu.')
   }
+
+  invalidateDesignSettingsCache(businessId)
 
   return {
     success: true,

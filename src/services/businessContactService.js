@@ -206,8 +206,22 @@ export function resolveBusinessContact({ business = {}, designSettings = null, e
   }
 }
 
+const contactCache = new Map()
+const inFlightContactRequests = new Map()
+
+export function invalidateBusinessContactCache(businessId) {
+  if (businessId) {
+    contactCache.delete(businessId)
+    inFlightContactRequests.delete(businessId)
+  } else {
+    contactCache.clear()
+    inFlightContactRequests.clear()
+  }
+}
+
 /**
  * Fetches contact info from Supabase for a specific business, ensuring strict tenant isolation.
+ * Includes in-memory caching and request coalescing for high concurrency.
  *
  * @param {string} businessId
  * @param {object} supabaseClient
@@ -219,63 +233,82 @@ export async function fetchBusinessContact(businessId, supabaseClient, designSet
     return resolveBusinessContact({ designSettings })
   }
 
-  let extraContact = {}
-
-  try {
-    // 1. Try public RPC if available
-    const { data: rpcData, error: rpcErr } = await supabaseClient.rpc('get_public_business_contact', {
-      p_business_id: businessId,
-    })
-
-    if (!rpcErr && rpcData && typeof rpcData === 'object') {
-      extraContact = {
-        business_name: rpcData.business_name || '',
-        whatsapp: rpcData.whatsapp || '',
-        phone: rpcData.phone || '',
-      }
-    } else {
-      // 2. Direct query fallback: pos_receipt_settings
-      const { data: receiptData } = await supabaseClient
-        .from('pos_receipt_settings')
-        .select('store_phone, store_name')
-        .eq('business_id', businessId)
-        .maybeSingle()
-
-      if (receiptData?.store_phone) {
-        extraContact.phone = receiptData.store_phone
-        if (receiptData.store_name) extraContact.business_name = receiptData.store_name
-      }
-
-      // 3. Direct query fallback: whatsapp_business_connections
-      const { data: waData } = await supabaseClient
-        .from('whatsapp_business_connections')
-        .select('display_phone_number')
-        .eq('business_id', businessId)
-        .eq('status', 'connected')
-        .maybeSingle()
-
-      if (waData?.display_phone_number) {
-        extraContact.whatsapp = waData.display_phone_number
-      }
-    }
-  } catch (err) {
-    console.warn('[businessContactService] Query notice:', err?.message || err)
+  const cached = contactCache.get(businessId)
+  if (cached && Date.now() - cached.timestamp < 60000) {
+    return { ...cached.data }
   }
 
-  // Get business name if not already set
-  let business = {}
-  try {
-    const { data: bizData } = await supabaseClient
-      .from('businesses')
-      .select('id, name')
-      .eq('id', businessId)
-      .maybeSingle()
-    if (bizData) business = bizData
-  } catch {}
+  if (inFlightContactRequests.has(businessId)) {
+    return inFlightContactRequests.get(businessId)
+  }
 
-  return resolveBusinessContact({
-    business,
-    designSettings,
-    extraContact,
+  const fetchPromise = (async () => {
+    let extraContact = {}
+
+    try {
+      // 1. Try public RPC if available
+      const { data: rpcData, error: rpcErr } = await supabaseClient.rpc('get_public_business_contact', {
+        p_business_id: businessId,
+      })
+
+      if (!rpcErr && rpcData && typeof rpcData === 'object') {
+        extraContact = {
+          business_name: rpcData.business_name || '',
+          whatsapp: rpcData.whatsapp || '',
+          phone: rpcData.phone || '',
+        }
+      } else {
+        // 2. Direct query fallback: pos_receipt_settings
+        const { data: receiptData } = await supabaseClient
+          .from('pos_receipt_settings')
+          .select('store_phone, store_name')
+          .eq('business_id', businessId)
+          .maybeSingle()
+
+        if (receiptData?.store_phone) {
+          extraContact.phone = receiptData.store_phone
+          if (receiptData.store_name) extraContact.business_name = receiptData.store_name
+        }
+
+        // 3. Direct query fallback: whatsapp_business_connections
+        const { data: waData } = await supabaseClient
+          .from('whatsapp_business_connections')
+          .select('display_phone_number')
+          .eq('business_id', businessId)
+          .eq('status', 'connected')
+          .maybeSingle()
+
+        if (waData?.display_phone_number) {
+          extraContact.whatsapp = waData.display_phone_number
+        }
+      }
+    } catch (err) {
+      console.warn('[businessContactService] Query notice:', err?.message || err)
+    }
+
+    // Get business name if not already set
+    let business = {}
+    try {
+      const { data: bizData } = await supabaseClient
+        .from('businesses')
+        .select('id, name')
+        .eq('id', businessId)
+        .maybeSingle()
+      if (bizData) business = bizData
+    } catch {}
+
+    const resolved = resolveBusinessContact({
+      business,
+      designSettings,
+      extraContact,
+    })
+
+    contactCache.set(businessId, { data: resolved, timestamp: Date.now() })
+    return resolved
+  })().finally(() => {
+    inFlightContactRequests.delete(businessId)
   })
+
+  inFlightContactRequests.set(businessId, fetchPromise)
+  return fetchPromise
 }
