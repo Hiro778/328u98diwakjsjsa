@@ -88,35 +88,16 @@ Deno.serve(async (req) => {
     // Bind authoritative businessId
     auth.businessId = campaign.business_id;
 
-    // Check credit balance
+    // Pre-check credit balance
     const { data: credits } = await supabaseAdmin
       .from("creative_credits")
       .select("available, reserved, consumed, total_earned")
       .eq("business_id", auth.businessId)
-      .single();
+      .maybeSingle();
 
     if (!credits || credits.available < 1) {
       return errorResponse("Insufficient credits for PRD revision", 400);
     }
-
-    // Reserve 1 credit
-    const creditIdempotencyKey = `${auth.businessId}:prd_revision:${prd_id}:${Date.now()}`;
-
-    await supabaseAdmin.from("creative_credits").update({
-      available: credits.available - 1,
-      reserved: credits.reserved + 1,
-      updated_at: new Date().toISOString(),
-    }).eq("business_id", auth.businessId);
-
-    await supabaseAdmin.from("credit_ledger").insert({
-      business_id: auth.businessId,
-      type: "reserve",
-      credits: 1,
-      balance_after: (credits.available - 1) + (credits.reserved + 1) + credits.consumed,
-      reference_type: "generation",
-      description: "Credit reserved for PRD revision",
-      idempotency_key: creditIdempotencyKey,
-    });
 
     // Build revision prompt
     const currentPrd = existingPrd.prd_content;
@@ -175,23 +156,6 @@ Generate the revised JSON PRD now.`;
         throw new Error("Empty response from Gemini API");
       }
     } catch (llmError: any) {
-      // Refund on failure
-      await supabaseAdmin.from("creative_credits").update({
-        available: credits.available,
-        reserved: credits.reserved,
-        updated_at: new Date().toISOString(),
-      }).eq("business_id", auth.businessId);
-
-      await supabaseAdmin.from("credit_ledger").insert({
-        business_id: auth.businessId,
-        type: "refund",
-        credits: 1,
-        balance_after: credits.available + credits.reserved + credits.consumed,
-        reference_type: "generation",
-        description: "Credit refunded due to LLM failure during revision",
-        idempotency_key: `${creditIdempotencyKey}:refund`,
-      });
-
       return errorResponse(`PRD revision failed: ${llmError.message}`, 500);
     }
 
@@ -205,29 +169,31 @@ Generate the revised JSON PRD now.`;
         jsonStr = jsonStr.replace(/```\s*/g, "").replace(/```\s*/g, "");
       }
       revisedPrd = JSON.parse(jsonStr.trim());
-    } catch (parseError) {
-      // Refund on invalid JSON
-      await supabaseAdmin.from("creative_credits").update({
-        available: credits.available,
-        reserved: credits.reserved,
-        updated_at: new Date().toISOString(),
-      }).eq("business_id", auth.businessId);
-
-      await supabaseAdmin.from("credit_ledger").insert({
-        business_id: auth.businessId,
-        type: "refund",
-        credits: 1,
-        balance_after: credits.available + credits.reserved + credits.consumed,
-        reference_type: "generation",
-        description: "Credit refunded due to invalid JSON response",
-        idempotency_key: `${creditIdempotencyKey}:refund:json`,
-      });
-
+    } catch (_parseError) {
       return errorResponse("PRD revision failed: Invalid response format", 500);
     }
 
     // Ensure product_snapshot is preserved
     revisedPrd.product_snapshot = productSnapshot;
+
+    // Atomic Credit Debit (Only after successful revision and validation)
+    const requestId = `PRD-REV-${crypto.randomUUID()}`;
+    const { data: debitResult, error: debitErr } = await supabaseAdmin.rpc("deduct_creative_credits_atomic", {
+      p_business_id: auth.businessId,
+      p_credits: 1,
+      p_operation: "REVISE_PRD",
+      p_request_id: requestId,
+      p_metadata: { prd_id, revision_instructions: revision_instructions.substring(0, 100) },
+    });
+
+    if (debitErr || !debitResult?.success) {
+      return errorResponse(
+        debitResult?.error === "INSUFFICIENT_CREDITS"
+          ? "Creative Credits tidak cukup. Silakan top up untuk melanjutkan."
+          : "Gagal memproses saldo kredit.",
+        400
+      );
+    }
 
     // Create new PRD version
     const { data: newPrd, error: createError } = await supabaseAdmin
@@ -251,33 +217,21 @@ Generate the revised JSON PRD now.`;
       status: "superseded",
     }).eq("id", prd_id);
 
-    // Consume credit
-    await supabaseAdmin.from("creative_credits").update({
-      reserved: credits.reserved,
-      consumed: credits.consumed + 1,
-      updated_at: new Date().toISOString(),
-    }).eq("business_id", auth.businessId);
-
-    await supabaseAdmin.from("credit_ledger").insert({
-      business_id: auth.businessId,
-      type: "consume",
-      credits: 1,
-      balance_after: credits.available + credits.reserved + credits.consumed + 1 - 1,
-      reference_type: "generation",
-      reference_id: newPrd.id,
-      description: "Credit consumed for PRD revision",
-      idempotency_key: `${creditIdempotencyKey}:consume`,
-    });
+    const { data: finalCredits } = await supabaseAdmin
+      .from("creative_credits")
+      .select("available, reserved, consumed")
+      .eq("business_id", auth.businessId)
+      .maybeSingle();
 
     return jsonResponse({
       status: "ok",
       prdId: newPrd.id,
       prdContent: revisedPrd,
       version: newPrd.version,
-      credits: {
-        available: credits.available,
-        reserved: credits.reserved,
-        consumed: credits.consumed + 1,
+      credits: finalCredits || {
+        available: (credits?.available ?? 1) - 1,
+        reserved: credits?.reserved ?? 0,
+        consumed: (credits?.consumed ?? 0) + 1,
       },
     });
 
