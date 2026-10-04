@@ -9,7 +9,75 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=bisnissehat-1" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Platform bisnis UMKM Indonesia — kelola keuangan, stok, penjualan, legalitas, sampai ekspor dalam satu tempat." />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Bisnis Sehat — Platform UMKM & Ekspor Indonesia</title>
+    <script>
+      (function() {
+        var CK = 'bs_chunk_retry_timestamp';
+        var CC = 'bs_chunk_retry_count';
+        var MAX = 1;
+        var CD = 15000;
+        function canReload() {
+          try {
+            var last = Number(sessionStorage.getItem(CK) || 0);
+            var cnt = Number(sessionStorage.getItem(CC) || 0);
+            var now = Date.now();
+            if (now - last > CD) return true;
+            return cnt < MAX;
+          } catch(e) { return true; }
+        }
+        function doReload() {
+          try {
+            var last = Number(sessionStorage.getItem(CK) || 0);
+            var cnt = Number(sessionStorage.getItem(CC) || 0);
+            var now = Date.now();
+            if (now - last > CD) {
+              sessionStorage.setItem(CC, '1');
+            } else {
+              sessionStorage.setItem(CC, String(cnt + 1));
+            }
+            sessionStorage.setItem(CK, String(now));
+          } catch(e) {}
+          window.location.reload();
+        }
+        function isChunk(err) {
+          if (!err) return false;
+          var e = err.reason || err.payload || err;
+          var msg = String(e && (e.message || e.name || e) || '').toLowerCase();
+          return msg.indexOf('dynamically imported module') !== -1 ||
+                 msg.indexOf('loading chunk') !== -1 ||
+                 msg.indexOf('importing a module script failed') !== -1 ||
+                 msg.indexOf('unable to preload css') !== -1 ||
+                 msg.indexOf('load failed') !== -1 ||
+                 msg.indexOf('mime type') !== -1 ||
+                 msg.indexOf("unexpected token '<'") !== -1 ||
+                 msg.indexOf('chunkloaderror') !== -1;
+        }
+        window.addEventListener('vite:preloadError', function(event) {
+          if (canReload()) {
+            if (event && typeof event.preventDefault === 'function') event.preventDefault();
+            doReload();
+          }
+        });
+        window.addEventListener('unhandledrejection', function(event) {
+          if (isChunk(event) && canReload()) {
+            if (event && typeof event.preventDefault === 'function') event.preventDefault();
+            doReload();
+          }
+        });
+        window.addEventListener('error', function(event) {
+          var t = event && event.target;
+          if (t && (t.tagName === 'SCRIPT' || t.tagName === 'LINK')) {
+            var src = t.src || t.href || '';
+            if ((src.indexOf('/assets/') !== -1 || src.indexOf('.js') !== -1 || src.indexOf('.css') !== -1) && canReload()) {
+              doReload();
+            }
+          }
+        }, true);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
