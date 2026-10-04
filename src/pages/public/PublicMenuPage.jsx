@@ -12,7 +12,7 @@ import PublicMenuSkeleton from '../../components/pos/PublicMenuSkeleton'
 import OrderChatModal from '../../components/pos/OrderChatModal'
 import { usePlatformSettings } from '../../hooks/usePlatformSettings'
 import { fetchBusinessContact, resolveBusinessContact } from '../../services/businessContactService'
-import { subscribeOrderStatus, getPublicOrder, mapCustomerOrderStatus } from '../../services/posService'
+import { subscribeOrderStatus, subscribeOrderMessages, getPublicOrder, mapCustomerOrderStatus } from '../../services/posService'
 
 export default function PublicMenuPage() {
   const { isPosEnabled, isQrisEnabled, posMaxItems, isMaintenance } = usePlatformSettings()
@@ -48,6 +48,7 @@ export default function PublicMenuPage() {
   const [qrisUrl, setQrisUrl] = useState(initialCached?.qrisUrl || null)
   const [qrisPaidAcknowledged, setQrisPaidAcknowledged] = useState(false)
   const [showCustomerChat, setShowCustomerChat] = useState(false)
+  const [unreadChatCount, setUnreadChatCount] = useState(0)
   const [platformSettings, setPlatformSettings] = useState(null)
   const [sellerContact, setSellerContact] = useState(initialCached?.sellerContact || null)
 
@@ -242,6 +243,28 @@ export default function PublicMenuPage() {
       }
     }
   }, [orderSuccess?.id])
+
+  // Real-time chat messages notification for active customer order
+  useEffect(() => {
+    if (!orderSuccess?.id) return
+
+    const channel = subscribeOrderMessages(
+      orderSuccess.id,
+      (newMsg) => {
+        if (!newMsg) return
+        if (newMsg.sender_type === 'merchant' && !showCustomerChat) {
+          setUnreadChatCount((prev) => prev + 1)
+        }
+      },
+      supabase
+    )
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
+    }
+  }, [orderSuccess?.id, showCustomerChat])
 
   // Instant synchronous cache check (L1 memory / L2 storage) for 0ms First Contentful Paint
   useEffect(() => {
@@ -1092,19 +1115,27 @@ export default function PublicMenuPage() {
               </motion.button>
             )}
 
-            {/* Chat Penjual Button: Available during processing and completed */}
-            {(isProcessing || (qrisPaidAcknowledged && isCompleted)) && (
+            {/* Chat Penjual Button: Available after QRIS payment acknowledged, during processing, or completed */}
+            {(!isCancelled && (qrisPaidAcknowledged || isProcessing || isCompleted || !isQris)) && (
               <motion.button
                 type="button"
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => setShowCustomerChat(true)}
+                onClick={() => {
+                  setShowCustomerChat(true)
+                  setUnreadChatCount(0)
+                }}
                 className={`w-full py-3.5 text-sm font-bold transition hover:opacity-90 active:scale-[0.98] flex items-center justify-center gap-2 border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-xs ${qrBtnRadius}`}
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
                 <span>Chat Penjual</span>
+                {unreadChatCount > 0 && (
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-600 px-1.5 text-[10px] font-bold text-white shadow-xs animate-bounce">
+                    {unreadChatCount}
+                  </span>
+                )}
               </motion.button>
             )}
 

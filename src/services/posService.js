@@ -493,15 +493,36 @@ export async function sendOrderMessage(
     return { success: false, error: new Error('Pesan tidak boleh kosong.') }
   }
 
+  const cleanMsg = message.trim()
+  const cleanName = senderName || (senderType === 'merchant' ? 'Penjual' : 'Pelanggan')
+
   try {
     const { data, error } = await client.rpc('send_order_message', {
       p_order_id: orderId,
       p_sender_type: senderType,
-      p_sender_name: senderName || '',
-      p_message: message.trim(),
+      p_sender_name: cleanName,
+      p_message: cleanMsg,
     })
 
     if (error) {
+      // Resilient fallback: direct table insert if RPC experiences schema mismatch
+      if (typeof client.from === 'function') {
+        const { data: inserted, error: insertErr } = await client
+          .from('order_messages')
+          .insert({
+            order_id: orderId,
+            sender_type: senderType,
+            sender_name: cleanName,
+            message: cleanMsg,
+          })
+          .select()
+          .maybeSingle()
+
+        if (!insertErr && inserted) {
+          return { success: true, message: inserted }
+        }
+      }
+
       return { success: false, error: normalizeOrderError(error, 'Gagal mengirim pesan.') }
     }
 

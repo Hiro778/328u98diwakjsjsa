@@ -119,10 +119,30 @@ export default function POSPage() {
       )
       .subscribe()
 
+    const msgChannel = supabase
+      .channel('pos-order-messages-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'order_messages',
+          filter: `business_id=eq.${business.id}`,
+        },
+        (payload) => {
+          if (payload?.new && payload.new.sender_type === 'customer') {
+            const sender = payload.new.sender_name || 'Pelanggan'
+            showToast(`Pesan baru dari ${sender}: "${(payload.new.message || '').slice(0, 35)}..."`, 'info')
+          }
+        }
+      )
+      .subscribe()
+
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       supabase.removeChannel(channel)
       supabase.removeChannel(invChannel)
+      supabase.removeChannel(msgChannel)
     }
   }, [business?.id])
 
@@ -846,8 +866,8 @@ function OrderCard({ order, onStatusChange, onProcess, onComplete, onOpenChat, o
       <div className="mt-2 flex items-center justify-between border-t border-border pt-2">
         <p className="text-xs font-bold text-warm-500">{formatCurrency(order.total)}</p>
         <div className="flex gap-1 flex-wrap justify-end">
-          {/* BARU / PENDING: Merchant clicks Proses → atomic payment confirmation + processing via RPC */}
-          {order.order_status === 'pending' && (
+          {/* BARU / PENDING: Merchant clicks Proses, Chat Pembeli, or Batal */}
+          {(order.order_status === 'pending' || order.order_status === 'baru') && (
             <>
               <button
                 onClick={() => onProcess(order.id)}
@@ -855,6 +875,13 @@ function OrderCard({ order, onStatusChange, onProcess, onComplete, onOpenChat, o
                 title="Proses pesanan"
               >
                 Proses
+              </button>
+              <button
+                onClick={() => onOpenChat(order)}
+                className="rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-1 text-[9px] font-bold text-indigo-600 transition-colors flex items-center gap-1"
+                title="Chat dengan pembeli"
+              >
+                Chat Pembeli
               </button>
               <button
                 onClick={() => onStatusChange(order.id, 'dibatalkan')}
@@ -912,6 +939,17 @@ function OrderCard({ order, onStatusChange, onProcess, onComplete, onOpenChat, o
               className="rounded-lg bg-emerald-600 px-2 py-1 text-[9px] font-bold text-white"
             >
               Selesai
+            </button>
+          )}
+
+          {/* View chat history for completed orders */}
+          {(order.order_status === 'selesai' || order.order_status === 'completed') && (
+            <button
+              onClick={() => onOpenChat(order)}
+              className="rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200 px-2 py-1 text-[9px] font-bold text-gray-600 transition-colors"
+              title="Lihat riwayat obrolan"
+            >
+              Chat
             </button>
           )}
 
