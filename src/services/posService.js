@@ -760,7 +760,7 @@ export async function getPublicOrder(businessId, identifier, client = supabase) 
     })
 
     if (!error && data?.success && data?.order) {
-      return { success: true, order: data.order }
+      return { success: true, order: data.order, items: data.items || [] }
     }
     if (data && !data.success && data.message) {
       return { success: false, error: { message: data.message } }
@@ -769,13 +769,13 @@ export async function getPublicOrder(businessId, identifier, client = supabase) 
     // Fallback to direct query
   }
 
-  // Direct select fallback
+  // Direct select fallback (operational columns only)
   try {
     const cleanIdent = String(identifier).trim()
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanIdent)
     let query = client
       .from('orders')
-      .select('id, business_id, order_number, customer_name, total, payment_method, payment_status, order_status, created_at, notes, table_id')
+      .select('id, business_id, order_number, order_status, payment_status, created_at')
       .eq('business_id', businessId)
 
     if (isUuid) {
@@ -798,7 +798,7 @@ export async function getPublicOrder(businessId, identifier, client = supabase) 
       return { success: false, error: { message: qErr?.message || 'Pesanan tidak ditemukan.' } }
     }
 
-    return { success: true, order: orderData }
+    return { success: true, order: orderData, items: [] }
   } catch (err) {
     return { success: false, error: { message: err.message || 'Gagal memuat pesanan.' } }
   }

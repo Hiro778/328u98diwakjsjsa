@@ -188,6 +188,7 @@ export default function PublicMenuPage() {
           setOrderSuccess((prev) => ({
             ...(prev || {}),
             ...ord,
+            items: res.items?.length ? res.items : (prev?.items || []),
             payment_method: ord.payment_method || prev?.payment_method || 'qris',
             payment_status: ord.payment_status || prev?.payment_status || 'pending',
             order_status: ord.order_status || prev?.order_status || 'baru',
