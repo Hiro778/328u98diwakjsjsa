@@ -216,27 +216,27 @@ describe('Supabase Realtime Channel Lifecycle & Concurrency Audit', () => {
   // ═════════════════════════════════════════════════════════════════════════
 
   describe('4. Global Codebase Static Architecture Audit', () => {
-    it('OrderChatModal imports supabase and cleanly removes channel on unmount', () => {
-      const src = fs.readFileSync(path.resolve('src/components/pos/OrderChatModal.jsx'), 'utf8')
-      assert.ok(src.includes("import { supabase } from '../../lib/supabase'"), 'Must import supabase')
-      assert.ok(src.includes('supabase.removeChannel(activeChannel)'), 'Must call supabase.removeChannel')
-      assert.ok(src.includes('activeChannel = null'), 'Must set activeChannel to null on cleanup')
+    it('OrderChatModal is removed from active components and not rendered in PublicMenuPage or PosPage', () => {
+      assert.strictEqual(fs.existsSync(path.resolve('src/components/pos/OrderChatModal.jsx')), false, 'OrderChatModal.jsx must be removed')
+      const menuSrc = fs.readFileSync(path.resolve('src/pages/public/PublicMenuPage.jsx'), 'utf8')
+      assert.ok(!menuSrc.includes('OrderChatModal'), 'PublicMenuPage must NOT import or render OrderChatModal')
+      const posSrc = fs.readFileSync(path.resolve('src/pages/dashboard/pos/PosPage.jsx'), 'utf8')
+      assert.ok(!posSrc.includes('OrderChatModal'), 'PosPage must NOT import or render OrderChatModal')
     })
 
-    it('PublicMenuPage does NOT create order-chat subscription while modal is open', () => {
+    it('PublicMenuPage does NOT create order-chat subscription at all', () => {
       const src = fs.readFileSync(path.resolve('src/pages/public/PublicMenuPage.jsx'), 'utf8')
-      assert.ok(src.includes('!orderSuccess?.id || showCustomerChat'), 'Must prevent duplicate chat channel when modal is open')
-      assert.ok(src.includes('supabase.removeChannel(activeChannel)'), 'Must remove activeChannel on cleanup')
+      assert.ok(!src.includes('order-chat-'), 'PublicMenuPage must NOT create order-chat- channel')
+      assert.ok(!src.includes('subscribeOrderMessages'), 'PublicMenuPage must NOT call subscribeOrderMessages')
     })
 
-    it('PosPage cleans up stale channels before subscribing to POS channels', () => {
+    it('PosPage cleans up stale channels before subscribing to POS channels and does not subscribe to order messages', () => {
       const src = fs.readFileSync(path.resolve('src/pages/dashboard/pos/PosPage.jsx'), 'utf8')
       assert.ok(src.includes('pos-orders'), 'PosPage must handle pos-orders')
       assert.ok(src.includes('pos-inventory-realtime'), 'PosPage must handle pos-inventory-realtime')
-      assert.ok(src.includes('pos-order-messages-realtime'), 'PosPage must handle pos-order-messages-realtime')
+      assert.ok(!src.includes('pos-order-messages-realtime'), 'PosPage must NOT create pos-order-messages-realtime')
       assert.ok(src.includes('supabase.removeChannel(channel)'), 'PosPage must remove channel on cleanup')
       assert.ok(src.includes('supabase.removeChannel(invChannel)'), 'PosPage must remove invChannel on cleanup')
-      assert.ok(src.includes('supabase.removeChannel(msgChannel)'), 'PosPage must remove msgChannel on cleanup')
     })
 
     it('AuthContext profile-status channel cleans up existing before subscribing and on unmount', () => {

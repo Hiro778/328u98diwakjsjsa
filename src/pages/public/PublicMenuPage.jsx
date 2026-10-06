@@ -9,10 +9,9 @@ import { getSecureQrisUrl, getPublicQrisSettings, sanitizePublicCheckoutError } 
 import { getPublicMenuBundle, getCachedMenuBundle, normalizeBusinessId } from '../../services/qrMenuCacheService'
 import PublicMenuRenderer from '../../components/pos/PublicMenuRenderer'
 import PublicMenuSkeleton from '../../components/pos/PublicMenuSkeleton'
-import OrderChatModal from '../../components/pos/OrderChatModal'
 import { usePlatformSettings } from '../../hooks/usePlatformSettings'
-import { fetchBusinessContact, resolveBusinessContact } from '../../services/businessContactService'
-import { subscribeOrderStatus, subscribeOrderMessages, getPublicOrder, mapCustomerOrderStatus } from '../../services/posService'
+import { fetchBusinessContact, resolveBusinessContact, getWhatsAppUrl, normalizePhoneForWhatsApp } from '../../services/businessContactService'
+import { subscribeOrderStatus, getPublicOrder, mapCustomerOrderStatus } from '../../services/posService'
 
 export default function PublicMenuPage() {
   const { isPosEnabled, isQrisEnabled, posMaxItems, isMaintenance } = usePlatformSettings()
@@ -47,8 +46,6 @@ export default function PublicMenuPage() {
   const [qrisSettings, setQrisSettings] = useState(initialCached?.qrisSettings || null)
   const [qrisUrl, setQrisUrl] = useState(initialCached?.qrisUrl || null)
   const [qrisPaidAcknowledged, setQrisPaidAcknowledged] = useState(false)
-  const [showCustomerChat, setShowCustomerChat] = useState(false)
-  const [unreadChatCount, setUnreadChatCount] = useState(0)
   const [platformSettings, setPlatformSettings] = useState(null)
   const [sellerContact, setSellerContact] = useState(initialCached?.sellerContact || null)
 
@@ -253,38 +250,6 @@ export default function PublicMenuPage() {
       }
     }
   }, [orderSuccess?.id])
-
-  // Real-time chat messages notification for active customer order
-  // Subscribes ONLY when chat modal is closed to track unread badge count without duplicate channel collisions
-  useEffect(() => {
-    if (!orderSuccess?.id || showCustomerChat) return
-
-    let activeChannel = null
-
-    try {
-      activeChannel = subscribeOrderMessages(
-        orderSuccess.id,
-        (newMsg) => {
-          if (!newMsg) return
-          if (newMsg.sender_type === 'merchant') {
-            setUnreadChatCount((prev) => prev + 1)
-          }
-        },
-        supabase
-      )
-    } catch (err) {
-      console.warn('[PublicMenuPage] subscribeOrderMessages error (graceful fallback):', err)
-    }
-
-    return () => {
-      if (activeChannel) {
-        try {
-          supabase.removeChannel(activeChannel)
-        } catch {}
-        activeChannel = null
-      }
-    }
-  }, [orderSuccess?.id, showCustomerChat])
 
   // Instant synchronous cache check (L1 memory / L2 storage) for 0ms First Contentful Paint
   useEffect(() => {
@@ -783,6 +748,7 @@ export default function PublicMenuPage() {
   const qrSurface = qrTheme.surface || '#FFFFFF'
   const qrText = qrTheme.text || '#1E2A5E'
   const qrBtn = qrTheme.button || qrPrimary
+  const qrBgImage = qrTheme.backgroundImage || business?.menu_background_url || ''
   const qrBorder = `color-mix(in srgb, ${qrText} 12%, transparent)`
   const qrBtnRadius =
     qrTheme.buttonStyle === 'square'
@@ -827,6 +793,13 @@ export default function PublicMenuPage() {
       designSettings,
     })
 
+    const rawWhatsApp = (activeSellerContact?.type === 'whatsapp' ? (activeSellerContact?.rawContact || activeSellerContact?.phone) : '') || business?.whatsapp || ''
+    const normalizedWhatsApp = normalizePhoneForWhatsApp(rawWhatsApp)
+    const hasWhatsApp = Boolean(normalizedWhatsApp && normalizedWhatsApp.length >= 7)
+    const orderNumberForWa = orderSuccess?.order_number || (orderSuccess?.id ? String(orderSuccess.id).slice(0, 8) : '')
+    const waPrefilledMessage = orderNumberForWa ? `Halo, saya ingin menanyakan pesanan #${orderNumberForWa}.` : ''
+    const waUrl = hasWhatsApp ? getWhatsAppUrl(normalizedWhatsApp, waPrefilledMessage) : ''
+
     // Compute active title and message based on flow (@3.md & @2.md)
     let statusTitle = statusMeta.title
     let statusDesc = statusMeta.desc
@@ -834,18 +807,33 @@ export default function PublicMenuPage() {
 
     return (
       <div
+        data-theme="light"
         style={{
           ...drawerThemeStyles,
-          backgroundColor: qrBg,
+          backgroundColor: qrBgImage ? 'transparent' : qrBg,
           color: qrText,
         }}
-        className="flex min-h-screen items-center justify-center px-5 py-12"
+        className="relative min-h-screen flex items-center justify-center px-5 py-12"
       >
+        {qrBgImage && (
+          <div
+            aria-hidden="true"
+            className="fixed inset-0 pointer-events-none z-0 overflow-hidden"
+            style={{
+              backgroundImage: `url("${qrBgImage}")`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+            }}
+          >
+            <div className="absolute inset-0 bg-white/85 backdrop-blur-[2px]" />
+          </div>
+        )}
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: 'easeOut' }}
-          className="w-full max-w-sm"
+          className="relative z-10 w-full max-w-sm"
         >
           {/* Status Icon */}
           <div className="flex flex-col items-center text-center">
@@ -965,7 +953,7 @@ export default function PublicMenuPage() {
                 Penjual telah mengonfirmasi pembayaran dan sedang memproses pesanan.
               </p>
               <p className="text-[11px] text-blue-700/90 mt-0.5">
-                Anda dapat menggunakan tombol <strong>Chat Penjual</strong> di bawah untuk berkomunikasi langsung.
+                Anda dapat menggunakan tombol <strong>WhatsApp Penjual</strong> di bawah untuk berkomunikasi langsung.
               </p>
             </div>
           )}
@@ -1140,27 +1128,37 @@ export default function PublicMenuPage() {
               </motion.button>
             )}
 
-            {/* Chat Penjual Button: Prominently available for customer on active order screen */}
+            {/* WhatsApp Penjual Button */}
             {Boolean(orderSuccess) && (
-              <motion.button
-                type="button"
-                data-testid="buyer-chat-penjual-btn"
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => {
-                  setShowCustomerChat(true)
-                  setUnreadChatCount(0)
-                }}
-                className={`w-full py-3.5 text-sm font-bold transition hover:opacity-90 active:scale-[0.98] flex items-center justify-center gap-2 border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-xs ${qrBtnRadius}`}
-              >
-                <span className="text-base leading-none">💬</span>
-                <span>Chat Penjual</span>
-                {unreadChatCount > 0 && (
-                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-600 px-1.5 text-[10px] font-bold text-white shadow-xs animate-bounce">
-                    {unreadChatCount}
-                  </span>
-                )}
-              </motion.button>
+              hasWhatsApp && waUrl ? (
+                <motion.button
+                  type="button"
+                  data-testid="buyer-whatsapp-penjual-btn"
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    window.open(waUrl, '_blank', 'noopener,noreferrer')
+                  }}
+                  className={`w-full py-3.5 text-sm font-bold transition hover:opacity-90 active:scale-[0.98] flex items-center justify-center gap-2 border border-emerald-500 bg-emerald-600 text-white shadow-xs ${qrBtnRadius}`}
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+                  </svg>
+                  <span>WhatsApp Penjual</span>
+                </motion.button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  data-testid="buyer-whatsapp-penjual-btn"
+                  className={`w-full py-3.5 text-sm font-bold opacity-60 cursor-not-allowed flex items-center justify-center gap-2 border border-gray-300 bg-gray-100 text-gray-500 shadow-xs ${qrBtnRadius}`}
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+                  </svg>
+                  <span>WhatsApp belum tersedia</span>
+                </button>
+              )
             )}
 
             {/* Kembali ke Menu Button */}
@@ -1193,23 +1191,12 @@ export default function PublicMenuPage() {
             </motion.button>
           </div>
         </motion.div>
-
-        {/* Customer Order Chat Modal */}
-        {orderSuccess && (
-          <OrderChatModal
-            isOpen={showCustomerChat}
-            onClose={() => setShowCustomerChat(false)}
-            order={orderSuccess}
-            senderType="customer"
-            senderName={orderSuccess.customer_name || customerName || 'Pelanggan'}
-          />
-        )}
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen">
+    <div data-theme="light" className="min-h-screen">
       {/* Brand-First QR Menu Presentation Layer */}
       <PublicMenuRenderer
         business={business}
@@ -1243,6 +1230,7 @@ export default function PublicMenuPage() {
             onClick={() => setShowCart(false)}
           >
             <motion.div
+              data-theme="light"
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
@@ -1441,6 +1429,7 @@ export default function PublicMenuPage() {
             onClick={() => setShowCheckout(false)}
           >
             <motion.div
+              data-theme="light"
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}

@@ -9,7 +9,6 @@ import { canDeleteOrder, deleteCompletedOrder, createPosOrder, merchantProcessOr
 // confirmQrisPayment removed — QRIS payment confirmation now handled atomically by merchantProcessOrder RPC (@11.md)
 import { getReceiptSettings } from '../../../services/receiptSettingsService'
 import ReceiptView from '../../../components/pos/ReceiptView'
-import OrderChatModal from '../../../components/pos/OrderChatModal'
 import BusinessQrisSettings from '../../../components/pos/BusinessQrisSettings'
 import useToast from '../../../hooks/useToast'
 import Toast from '../../../components/Toast'
@@ -55,7 +54,6 @@ export default function POSPage() {
   const [deleteLoading, setDeleteLoading] = useState(false)
   // PAYMENT AUTHORITY (@11.md): qrisConfirmOrder/qrisConfirmLoading state removed.
   // QRIS payment is confirmed atomically via merchantProcessOrder RPC when POS/Kasir clicks "Proses".
-  const [chatOrder, setChatOrder] = useState(null)
   const [showQrisSettingsModal, setShowQrisSettingsModal] = useState(false)
   const [mobileTab, setMobileTab] = useState('catalog') // 'catalog' | 'cart'
 
@@ -84,7 +82,7 @@ export default function POSPage() {
     // Clean up any stale channels before subscribing to avoid 'cannot add postgres_changes callbacks after subscribe()'
     if (typeof supabase.getChannels === 'function') {
       const channels = supabase.getChannels() || []
-      ;['pos-orders', 'pos-inventory-realtime', 'pos-order-messages-realtime'].forEach((name) => {
+      ;['pos-orders', 'pos-inventory-realtime'].forEach((name) => {
         const existing = channels.find(
           (c) => c && (c.topic === `realtime:${name}` || c.topic === name || c.subTopic === name)
         )
@@ -115,7 +113,6 @@ export default function POSPage() {
 
     let channel = null
     let invChannel = null
-    let msgChannel = null
 
     try {
       channel = supabase
@@ -155,25 +152,6 @@ export default function POSPage() {
           }
         )
         .subscribe()
-
-      msgChannel = supabase
-        .channel('pos-order-messages-realtime')
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'order_messages',
-            filter: `business_id=eq.${business.id}`,
-          },
-          (payload) => {
-            if (payload?.new && payload.new.sender_type === 'customer') {
-              const sender = payload.new.sender_name || 'Pelanggan'
-              showToast(`Pesan baru dari ${sender}: "${(payload.new.message || '').slice(0, 35)}..."`, 'info')
-            }
-          }
-        )
-        .subscribe()
     } catch (realtimeErr) {
       console.warn('[PosPage] Realtime subscription error (graceful fallback):', realtimeErr)
     }
@@ -188,11 +166,6 @@ export default function POSPage() {
       if (invChannel) {
         try {
           supabase.removeChannel(invChannel)
-        } catch {}
-      }
-      if (msgChannel) {
-        try {
-          supabase.removeChannel(msgChannel)
         } catch {}
       }
     }
@@ -737,7 +710,6 @@ export default function POSPage() {
                   onStatusChange={updateOrderStatus}
                   onProcess={handleProcessOrder}
                   onComplete={handleCompleteOrder}
-                  onOpenChat={setChatOrder}
                   onViewReceipt={setShowReceipt}
                   onDeleteOrder={setDeletingOrder}
                 />
@@ -746,17 +718,6 @@ export default function POSPage() {
           </div>
         </div>
       </div>
-
-      {/* Order Chat Modal */}
-      {chatOrder && (
-        <OrderChatModal
-          isOpen={Boolean(chatOrder)}
-          onClose={() => setChatOrder(null)}
-          order={chatOrder}
-          senderType="merchant"
-          senderName={business?.name || 'Penjual'}
-        />
-      )}
 
       {/* Receipt Modal */}
       <AnimatePresence>
@@ -851,7 +812,7 @@ export default function POSPage() {
   )
 }
 
-function OrderCard({ order, onStatusChange, onProcess, onComplete, onOpenChat, onViewReceipt, onDeleteOrder }) {
+function OrderCard({ order, onStatusChange, onProcess, onComplete, onViewReceipt, onDeleteOrder }) {
   const statusColors = {
     pending: 'bg-yellow-50 text-yellow-600 border-yellow-200',
     diproses: 'bg-blue-50 text-blue-600 border-blue-200',
@@ -918,7 +879,7 @@ function OrderCard({ order, onStatusChange, onProcess, onComplete, onOpenChat, o
       <div className="mt-2 flex items-center justify-between border-t border-border pt-2">
         <p className="text-xs font-bold text-warm-500">{formatCurrency(order.total)}</p>
         <div className="flex gap-1 flex-wrap justify-end">
-          {/* BARU / PENDING: Merchant clicks Proses, Chat Pembeli, or Batal */}
+          {/* BARU / PENDING: Merchant clicks Proses or Batal */}
           {(order.order_status === 'pending' || order.order_status === 'baru') && (
             <>
               <button
@@ -929,22 +890,15 @@ function OrderCard({ order, onStatusChange, onProcess, onComplete, onOpenChat, o
                 Proses
               </button>
               <button
-                onClick={() => onOpenChat(order)}
-                className="rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-1 text-[9px] font-bold text-indigo-600 transition-colors flex items-center gap-1"
-                title="Chat dengan pembeli"
-              >
-                Chat Pembeli
-              </button>
-              <button
                 onClick={() => onStatusChange(order.id, 'dibatalkan')}
-                className="rounded-lg bg-red-50 hover:bg-red-100 px-2 py-1 text-[9px] font-bold text-red-500 transition-colors"
+                className="rounded-lg bg-red-50 hover:bg-red-100 px-2.5 py-1 text-[9px] font-bold text-red-500 transition-colors"
               >
                 Batal
               </button>
             </>
           )}
 
-          {/* DIPROSES: Merchant clicks Selesai, Chat Pembeli, or Batal */}
+          {/* DIPROSES: Merchant clicks Selesai or Batal */}
           {order.order_status === 'diproses' && (
             <>
               <button
@@ -954,14 +908,8 @@ function OrderCard({ order, onStatusChange, onProcess, onComplete, onOpenChat, o
                 Selesai
               </button>
               <button
-                onClick={() => onOpenChat(order)}
-                className="rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-1 text-[9px] font-bold text-indigo-600 transition-colors"
-              >
-                Chat Pembeli
-              </button>
-              <button
                 onClick={() => onStatusChange(order.id, 'dibatalkan')}
-                className="rounded-lg bg-red-50 hover:bg-red-100 px-2 py-1 text-[9px] font-bold text-red-500 transition-colors"
+                className="rounded-lg bg-red-50 hover:bg-red-100 px-2.5 py-1 text-[9px] font-bold text-red-500 transition-colors"
               >
                 Batal
               </button>
@@ -991,17 +939,6 @@ function OrderCard({ order, onStatusChange, onProcess, onComplete, onOpenChat, o
               className="rounded-lg bg-emerald-600 px-2 py-1 text-[9px] font-bold text-white"
             >
               Selesai
-            </button>
-          )}
-
-          {/* View chat history for completed orders */}
-          {(order.order_status === 'selesai' || order.order_status === 'completed') && (
-            <button
-              onClick={() => onOpenChat(order)}
-              className="rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200 px-2 py-1 text-[9px] font-bold text-gray-600 transition-colors"
-              title="Lihat riwayat obrolan"
-            >
-              Chat
             </button>
           )}
 

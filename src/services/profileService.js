@@ -181,10 +181,10 @@ export async function updateUserProfile(userId, { fullName }) {
  *
  * @param {string} businessId
  * @param {string} userId
- * @param {{ name: string, businessType: string, businessCategory: string, location: string }} data
+ * @param {{ name: string, businessType: string, businessCategory: string, location: string, whatsapp?: string }} data
  * @returns {Promise<object>}
  */
-export async function updateUserBusiness(businessId, userId, { name, businessType, businessCategory, location }) {
+export async function updateUserBusiness(businessId, userId, { name, businessType, businessCategory, location, whatsapp }) {
   if (!userId) {
     throw new Error('User ID wajib disertakan.')
   }
@@ -195,6 +195,10 @@ export async function updateUserBusiness(businessId, userId, { name, businessTyp
     business_category: businessCategory || '',
     location: (location || '').trim(),
     updated_at: new Date().toISOString(),
+  }
+
+  if (whatsapp !== undefined) {
+    payload.whatsapp = (whatsapp || '').trim()
   }
 
   if (businessId) {

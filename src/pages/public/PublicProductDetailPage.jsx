@@ -438,6 +438,7 @@ export default function PublicProductDetailPage() {
   const buttonStyle = theme.buttonStyle || 'pill'
   const fontHeading = theme.fontHeading || 'Inter'
   const fontBody = theme.fontBody || 'Inter'
+  const backgroundImage = theme.backgroundImage || business?.menu_background_url || ''
 
   const buttonRadiusClass =
     buttonStyle === 'square'
@@ -447,7 +448,7 @@ export default function PublicProductDetailPage() {
       : 'rounded-full'
 
   const containerStyles = {
-    backgroundColor: bgColor,
+    backgroundColor: backgroundImage ? 'transparent' : bgColor,
     color: textColor,
     fontFamily: `'${fontBody}', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`,
     '--qr-primary': primaryColor,
@@ -492,51 +493,71 @@ export default function PublicProductDetailPage() {
 
   return (
     <div
+      data-theme="light"
       style={containerStyles}
-      className="min-h-screen antialiased pb-28 sm:pb-16 transition-colors duration-200"
+      className="relative min-h-screen antialiased pb-28 sm:pb-16 transition-colors duration-200"
     >
-      {/* Top Header / Breadcrumbs with QR theme propagation */}
-      <header
-        style={{
-          backgroundColor: surfaceColor,
-          borderColor: 'var(--qr-border)',
-        }}
-        className="sticky top-0 z-30 border-b backdrop-blur-md bg-opacity-95"
-      >
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-          <Link
-            to={`/menu/${businessId}`}
-            className="group flex items-center gap-2 text-xs font-semibold transition hover:opacity-80"
-            style={{ color: 'color-mix(in srgb, var(--qr-text) 75%, transparent)' }}
-          >
-            <span
-              style={{
-                backgroundColor: 'color-mix(in srgb, var(--qr-surface) 90%, var(--qr-text) 10%)',
-                borderColor: 'var(--qr-border)',
-              }}
-              className="flex h-7 w-7 items-center justify-center rounded-lg border text-sm transition group-hover:scale-105"
-            >
-              ←
-            </span>
-            <span className="truncate">Kembali ke Menu {business?.name ? `(${business.name})` : ''}</span>
-          </Link>
-
-          {/* Cart link */}
-          <Link
-            to={`/menu/${businessId}`}
-            className="flex items-center gap-2 text-xs font-bold transition hover:opacity-80 shrink-0"
-            style={{ color: primaryColor }}
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121 0 2.09-.773 2.34-1.872l1.836-8.046A1.125 1.125 0 0018.963 3H5.106" />
-            </svg>
-            <span>Lihat Keranjang</span>
-          </Link>
+      {/* Merchant Background Image Layer */}
+      {backgroundImage && (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 pointer-events-none z-0 overflow-hidden"
+          style={{
+            backgroundImage: `url("${backgroundImage}")`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+          }}
+        >
+          {/* Luminous light overlay for crystal-clear readability */}
+          <div className="absolute inset-0 bg-white/85 backdrop-blur-[2px]" />
         </div>
-      </header>
+      )}
 
-      {/* Main Content Layout (Desktop: 2 Columns, Mobile: Stacked) */}
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      {/* Main Header & Content Flow in relative z-10 */}
+      <div className="relative z-10">
+        {/* Top Header / Breadcrumbs with QR theme propagation */}
+        <header
+          style={{
+            backgroundColor: surfaceColor,
+            borderColor: 'var(--qr-border)',
+          }}
+          className="sticky top-0 z-30 border-b backdrop-blur-md bg-opacity-95 shadow-2xs"
+        >
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+            <Link
+              to={`/menu/${businessId}`}
+              className="group flex items-center gap-2 text-xs font-semibold transition hover:opacity-80"
+              style={{ color: 'color-mix(in srgb, var(--qr-text) 75%, transparent)' }}
+            >
+              <span
+                style={{
+                  backgroundColor: 'color-mix(in srgb, var(--qr-surface) 90%, var(--qr-text) 10%)',
+                  borderColor: 'var(--qr-border)',
+                }}
+                className="flex h-7 w-7 items-center justify-center rounded-lg border text-sm transition group-hover:scale-105"
+              >
+                ←
+              </span>
+              <span className="truncate">Kembali ke Menu {business?.name ? `(${business.name})` : ''}</span>
+            </Link>
+
+            {/* Cart link */}
+            <Link
+              to={`/menu/${businessId}`}
+              className="flex items-center gap-2 text-xs font-bold transition hover:opacity-80 shrink-0"
+              style={{ color: primaryColor }}
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121 0 2.09-.773 2.34-1.872l1.836-8.046A1.125 1.125 0 0018.963 3H5.106" />
+              </svg>
+              <span>Lihat Keranjang</span>
+            </Link>
+          </div>
+        </header>
+
+        {/* Main Content Layout (Desktop: 2 Columns, Mobile: Stacked) */}
+        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
 
           {/* ══════════════════════════════════════════════════════════
@@ -769,15 +790,15 @@ export default function PublicProductDetailPage() {
               </div>
             )}
 
-            {/* Desktop Action Area: Quantity, Subtotal & Dual CTA (Section 9 & 10) */}
+            {/* Action Area: Quantity, Subtotal & Dual CTA (Visible on both desktop and mobile in-flow) */}
             <div
               style={{
                 backgroundColor: surfaceColor,
                 borderColor: 'var(--qr-border)',
               }}
-              className="hidden sm:block rounded-2xl border p-5 space-y-5 shadow-xs"
+              className="rounded-2xl border p-4 sm:p-5 space-y-4 shadow-xs"
             >
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider opacity-60">Atur Jumlah</p>
                   <div className="mt-2.5 flex items-center gap-3">
@@ -798,7 +819,7 @@ export default function PublicProductDetailPage() {
                           borderColor: 'var(--qr-border)',
                           color: textColor,
                         }}
-                        className="flex h-10 w-10 items-center justify-center border-r text-xl font-light transition hover:opacity-75 disabled:cursor-not-allowed disabled:opacity-30"
+                        className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center border-r text-xl font-light transition hover:opacity-75 disabled:cursor-not-allowed disabled:opacity-30"
                         aria-label="Kurangi jumlah"
                       >
                         −
@@ -814,7 +835,7 @@ export default function PublicProductDetailPage() {
                         onFocus={(e) => e.target.select()}
                         disabled={isOutOfStock}
                         style={{ color: textColor }}
-                        className="h-10 w-14 bg-transparent text-center text-base font-bold tabular-nums outline-none transition focus:bg-black/5 dark:focus:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
+                        className="h-10 w-14 sm:h-11 sm:w-16 bg-transparent text-center text-base font-bold tabular-nums outline-none transition focus:bg-black/5 dark:focus:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
                         aria-label="Jumlah quantity"
                       />
                       <motion.button
@@ -826,7 +847,7 @@ export default function PublicProductDetailPage() {
                           borderColor: 'var(--qr-border)',
                           color: textColor,
                         }}
-                        className="flex h-10 w-10 items-center justify-center border-l text-xl font-light transition hover:opacity-75 disabled:cursor-not-allowed disabled:opacity-30"
+                        className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center border-l text-xl font-light transition hover:opacity-75 disabled:cursor-not-allowed disabled:opacity-30"
                         aria-label="Tambah jumlah"
                       >
                         +
@@ -849,9 +870,9 @@ export default function PublicProductDetailPage() {
                 </div>
               </div>
 
-              {/* Dual CTA Buttons */}
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                {/* "+ Keranjang": Outlined */}
+              {/* Dual CTA Buttons: Primary Belanja Langsung (prominent filled) & Secondary Tambah ke Keranjang (distinct outlined) */}
+              <div className="flex flex-col sm:grid sm:grid-cols-2 gap-3 pt-1">
+                {/* Secondary CTA: "+ Keranjang" */}
                 <motion.button
                   type="button"
                   onClick={handleAddToCart}
@@ -863,15 +884,15 @@ export default function PublicProductDetailPage() {
                     color: primaryColor,
                     backgroundColor: `color-mix(in srgb, ${primaryColor} 8%, transparent)`,
                   }}
-                  className={`flex items-center justify-center gap-2 border py-3 min-h-[48px] text-sm font-bold transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${buttonRadiusClass}`}
+                  className={`order-2 sm:order-1 flex items-center justify-center gap-2 border-2 py-3.5 min-h-[48px] text-sm font-bold transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${buttonRadiusClass}`}
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                   </svg>
-                  + Keranjang
+                  Tambah ke Keranjang
                 </motion.button>
 
-                {/* "Beli Langsung": Filled */}
+                {/* Primary CTA: "Belanja Langsung" */}
                 <motion.button
                   type="button"
                   onClick={handleBuyNow}
@@ -883,9 +904,9 @@ export default function PublicProductDetailPage() {
                     color: '#FFFFFF',
                     boxShadow: `0 4px 14px color-mix(in srgb, ${buttonColor} 30%, transparent)`,
                   }}
-                  className={`flex items-center justify-center py-3 min-h-[48px] text-sm font-bold shadow-md transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${buttonRadiusClass}`}
+                  className={`order-1 sm:order-2 flex items-center justify-center py-3.5 min-h-[48px] text-sm font-bold shadow-md transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${buttonRadiusClass}`}
                 >
-                  Beli Langsung
+                  Belanja Langsung
                 </motion.button>
               </div>
 
@@ -893,7 +914,7 @@ export default function PublicProductDetailPage() {
                 <motion.div
                   initial={{ opacity: 0, y: -5 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-center text-xs font-bold text-emerald-500"
+                  className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-center text-xs font-bold text-emerald-600"
                 >
                   ✓ Produk berhasil ditambahkan ke keranjang!
                 </motion.div>
@@ -1050,7 +1071,8 @@ export default function PublicProductDetailPage() {
 
           </div>
         </div>
-      </main>
+        </main>
+      </div>
 
       {/* ══════════════════════════════════════════════════════════
           MOBILE STICKY ACTION BAR (Section 14)
@@ -1060,27 +1082,27 @@ export default function PublicProductDetailPage() {
           backgroundColor: surfaceColor,
           borderColor: 'var(--qr-border)',
         }}
-        className="sm:hidden fixed bottom-0 left-0 right-0 z-40 border-t backdrop-blur-md bg-opacity-95 shadow-lg"
+        className="sm:hidden fixed bottom-0 left-0 right-0 z-40 border-t backdrop-blur-md bg-opacity-95 shadow-lg max-w-full overflow-hidden"
       >
         {/* Toast notification */}
         {addedToast && (
-          <div className="border-b border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-center text-[11px] font-bold text-emerald-500">
+          <div className="border-b border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-center text-[11px] font-bold text-emerald-600">
             ✓ Ditambahkan ke keranjang!
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-3 p-3">
-          <div className="min-w-0">
-            <p className="text-[10px] uppercase font-bold opacity-60">Total Harga</p>
+        <div className="flex items-center justify-between gap-2 p-3 max-w-full">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] uppercase font-bold opacity-60">Total</p>
             <p
               style={{ color: primaryColor }}
-              className="text-lg font-black truncate tabular-nums"
+              className="text-base font-black truncate tabular-nums"
             >
               {formatCurrency(priceCalculation.finalPrice * quantity)}
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             {/* Mobile "+ Keranjang" — minimum 44px touch target */}
             <motion.button
               type="button"
@@ -1092,7 +1114,7 @@ export default function PublicProductDetailPage() {
                 color: primaryColor,
                 backgroundColor: `color-mix(in srgb, ${primaryColor} 8%, transparent)`,
               }}
-              className={`flex min-h-[44px] items-center justify-center border px-3.5 text-xs font-bold transition hover:opacity-85 disabled:opacity-40 ${buttonRadiusClass}`}
+              className={`flex min-h-[44px] items-center justify-center border px-2.5 text-xs font-bold transition hover:opacity-85 disabled:opacity-40 shrink-0 ${buttonRadiusClass}`}
             >
               + Keranjang
             </motion.button>
@@ -1107,7 +1129,7 @@ export default function PublicProductDetailPage() {
                 backgroundColor: buttonColor,
                 color: '#FFFFFF',
               }}
-              className={`flex min-h-[44px] items-center justify-center px-4 text-xs font-bold text-white shadow-md transition hover:opacity-90 disabled:opacity-40 ${buttonRadiusClass}`}
+              className={`flex min-h-[44px] items-center justify-center px-3 text-xs font-bold text-white shadow-md transition hover:opacity-90 disabled:opacity-40 shrink-0 ${buttonRadiusClass}`}
             >
               Beli Langsung
             </motion.button>

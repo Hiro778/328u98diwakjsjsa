@@ -258,7 +258,19 @@ export async function fetchBusinessContact(businessId, supabaseClient, designSet
           phone: rpcData.phone || '',
         }
       } else {
-        // 2. Direct query fallback: pos_receipt_settings
+        // 2. Direct query fallback: businesses.whatsapp (merchant configured)
+        const { data: bizContactData } = await supabaseClient
+          .from('businesses')
+          .select('id, name, whatsapp')
+          .eq('id', businessId)
+          .maybeSingle()
+
+        if (bizContactData?.whatsapp) {
+          extraContact.whatsapp = bizContactData.whatsapp
+          if (bizContactData.name) extraContact.business_name = bizContactData.name
+        }
+
+        // 3. Direct query fallback: pos_receipt_settings
         const { data: receiptData } = await supabaseClient
           .from('pos_receipt_settings')
           .select('store_phone, store_name')
@@ -267,31 +279,33 @@ export async function fetchBusinessContact(businessId, supabaseClient, designSet
 
         if (receiptData?.store_phone) {
           extraContact.phone = receiptData.store_phone
-          if (receiptData.store_name) extraContact.business_name = receiptData.store_name
+          if (receiptData.store_name && !extraContact.business_name) extraContact.business_name = receiptData.store_name
         }
 
-        // 3. Direct query fallback: whatsapp_business_connections
-        const { data: waData } = await supabaseClient
-          .from('whatsapp_business_connections')
-          .select('display_phone_number')
-          .eq('business_id', businessId)
-          .eq('status', 'connected')
-          .maybeSingle()
+        // 4. Direct query fallback: whatsapp_business_connections
+        if (!extraContact.whatsapp) {
+          const { data: waData } = await supabaseClient
+            .from('whatsapp_business_connections')
+            .select('display_phone_number')
+            .eq('business_id', businessId)
+            .eq('status', 'connected')
+            .maybeSingle()
 
-        if (waData?.display_phone_number) {
-          extraContact.whatsapp = waData.display_phone_number
+          if (waData?.display_phone_number) {
+            extraContact.whatsapp = waData.display_phone_number
+          }
         }
       }
     } catch (err) {
       console.warn('[businessContactService] Query notice:', err?.message || err)
     }
 
-    // Get business name if not already set
+    // Get business name and whatsapp if not already set
     let business = {}
     try {
       const { data: bizData } = await supabaseClient
         .from('businesses')
-        .select('id, name')
+        .select('id, name, whatsapp')
         .eq('id', businessId)
         .maybeSingle()
       if (bizData) business = bizData

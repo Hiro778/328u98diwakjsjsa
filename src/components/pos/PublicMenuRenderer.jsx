@@ -263,6 +263,7 @@ export default function PublicMenuRenderer({
   const buttonStyle = theme.buttonStyle || 'pill'
   const fontHeading = theme.fontHeading || 'Inter'
   const fontBody = theme.fontBody || 'Inter'
+  const backgroundImage = theme.backgroundImage || business?.menu_background_url || ''
 
   const cartCount = useMemo(() => {
     return (cart || []).reduce((sum, item) => sum + (item.quantity || 1), 0)
@@ -289,7 +290,7 @@ export default function PublicMenuRenderer({
 
   // Generate CSS style variables
   const containerStyles = {
-    backgroundColor: bgColor,
+    backgroundColor: backgroundImage ? 'transparent' : bgColor,
     color: textColor,
     fontFamily: `'${fontBody}', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`,
     '--theme-primary': primaryColor,
@@ -668,56 +669,77 @@ export default function PublicMenuRenderer({
 
   return (
     <div
+      data-theme="light"
       style={containerStyles}
-      className={`min-h-screen transition-colors duration-200 ${
+      className={`relative min-h-screen transition-colors duration-200 ${
         cartCount > 0 ? (isSimulator ? 'pb-24' : 'pb-28') : 'pb-6'
       }`}
     >
-      {/* Sticky Top Header Bar */}
-      <div
-        style={{
-          backgroundColor: surfaceColor,
-          borderColor: 'rgba(0,0,0,0.06)',
-        }}
-        className="sticky top-0 z-30 flex items-center justify-between px-4 py-2.5 shadow-2xs border-b backdrop-blur-md bg-opacity-90"
-      >
-        <div className="flex items-center gap-2.5 min-w-0">
-          {business?.logo_url ? (
-            <img
-              src={business.logo_url}
-              alt=""
-              className="h-8 w-8 rounded-full object-cover shrink-0 border border-black/5"
-            />
-          ) : (
-            <div
-              style={{ backgroundColor: primaryColor }}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white shrink-0"
+      {/* Merchant Background Image Layer */}
+      {backgroundImage && (
+        <div
+          aria-hidden="true"
+          className={`${isSimulator ? 'absolute' : 'fixed'} inset-0 pointer-events-none z-0 overflow-hidden`}
+          style={{
+            backgroundImage: `url("${backgroundImage}")`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+          }}
+        >
+          {/* Luminous light overlay for crystal-clear readability */}
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px]" />
+        </div>
+      )}
+
+      {/* Main Content Flow */}
+      <div className="relative z-10">
+        {/* Sticky Top Header Bar */}
+        <div
+          style={{
+            backgroundColor: surfaceColor,
+            borderColor: 'color-mix(in srgb, var(--qr-text, #1E2A5E) 10%, transparent)',
+          }}
+          className="sticky top-0 z-30 flex items-center justify-between px-4 py-2.5 shadow-2xs border-b backdrop-blur-md bg-opacity-95"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            {business?.logo_url ? (
+              <img
+                src={business.logo_url}
+                alt=""
+                className="h-8 w-8 rounded-full object-cover shrink-0 border border-black/5"
+              />
+            ) : (
+              <div
+                style={{ backgroundColor: primaryColor }}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white shrink-0"
+              >
+                {(business?.name || 'K')[0]}
+              </div>
+            )}
+            <span
+              style={{ fontFamily: `'${fontHeading}', sans-serif` }}
+              className="text-sm font-bold truncate leading-tight"
             >
-              {(business?.name || 'K')[0]}
+              {business?.name || 'Menu Toko'}
+            </span>
+          </div>
+
+          {/* Table Badge if selected */}
+          {selectedTable && (
+            <div
+              style={{ backgroundColor: `${primaryColor}18`, color: primaryColor }}
+              className="px-2.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 flex items-center gap-1"
+            >
+              <span>Meja {selectedTable}</span>
             </div>
           )}
-          <span
-            style={{ fontFamily: `'${fontHeading}', sans-serif` }}
-            className="text-sm font-bold truncate leading-tight"
-          >
-            {business?.name || 'Menu Toko'}
-          </span>
         </div>
 
-        {/* Table Badge if selected */}
-        {selectedTable && (
-          <div
-            style={{ backgroundColor: `${primaryColor}18`, color: primaryColor }}
-            className="px-2.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 flex items-center gap-1"
-          >
-            <span>Meja {selectedTable}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Render Layout Sections */}
-      <div className="space-y-1">
-        {layout.map((block) => renderBlock(block))}
+        {/* Render Layout Sections */}
+        <div className="space-y-1">
+          {layout.map((block) => renderBlock(block))}
+        </div>
       </div>
 
       {/* Sticky Bottom Cart Bar */}

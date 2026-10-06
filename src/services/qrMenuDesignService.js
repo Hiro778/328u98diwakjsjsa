@@ -223,6 +223,8 @@ export const DEFAULT_DESIGN_SETTINGS = {
     primary: '#F5A623',
     secondary: '#1E2A5E',
     background: '#FFF9F4',
+    backgroundImage: '',
+    backgroundOverlay: 0,
     surface: '#FFFFFF',
     text: '#1E2A5E',
     button: '#F5A623',
@@ -432,6 +434,11 @@ export async function saveDesignSettings(businessId, settings) {
   }
 
   invalidateDesignSettingsCache(businessId)
+  if (typeof sessionStorage !== 'undefined' && businessId) {
+    try {
+      sessionStorage.removeItem(`bs_menu_bundle_${businessId}`)
+    } catch {}
+  }
 
   return {
     success: true,
@@ -467,7 +474,7 @@ export async function uploadDesignAsset(businessId, file, type = 'logo') {
     throw new Error('Ekstensi file tidak diizinkan. Gunakan jpg, jpeg, png, webp, atau svg.')
   }
 
-  const sanitizedType = type === 'banner' ? 'banner' : 'logo'
+  const sanitizedType = type === 'banner' ? 'banner' : type === 'background' ? 'background' : 'logo'
   const filePath = `qr-menu/${businessId}/${sanitizedType}/${Date.now()}.${ext}`
 
   const { error: uploadError } = await supabase.storage
@@ -484,5 +491,34 @@ export async function uploadDesignAsset(businessId, file, type = 'logo') {
 
   const { data } = supabase.storage.from('product-images').getPublicUrl(filePath)
   return data.publicUrl
+}
+
+/**
+ * Updates the public menu background image for a business.
+ * Persists directly into qr_menu_design_settings.theme.backgroundImage.
+ */
+export async function updateMenuBackground(businessId, backgroundUrl) {
+  if (!businessId) {
+    throw new Error('business_id diperlukan untuk menyimpan background menu.')
+  }
+
+  const currentSettings = await getDesignSettings(businessId)
+  const updatedSettings = {
+    ...currentSettings,
+    theme: {
+      ...currentSettings.theme,
+      backgroundImage: backgroundUrl || '',
+    },
+  }
+
+  const result = await saveDesignSettings(businessId, updatedSettings)
+  return result
+}
+
+/**
+ * Removes the public menu background image for a business.
+ */
+export async function removeMenuBackground(businessId) {
+  return updateMenuBackground(businessId, '')
 }
 

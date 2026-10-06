@@ -228,46 +228,53 @@ describe('Bidirectional Buyer ↔ Seller Chat After QRIS Payment Suite', () => {
     )
   })
 
-  it('7. PublicMenuPage renders Chat Penjual button prominently for buyer on active order screen', () => {
+  it('7. PublicMenuPage renders WhatsApp Penjual button (replaces Chat Penjual) for buyer on active order screen', () => {
     const menuPath = path.resolve(process.cwd(), 'src/pages/public/PublicMenuPage.jsx')
     const menuContent = fs.readFileSync(menuPath, 'utf8')
 
-    // Must show Chat Penjual button on active order screen
+    // Must show WhatsApp Penjual button and NOT internal chat
     assert.ok(
-      menuContent.includes('buyer-chat-penjual-btn'),
-      'PublicMenuPage must render buyer-chat-penjual-btn on active order'
+      menuContent.includes('buyer-whatsapp-penjual-btn'),
+      'PublicMenuPage must render buyer-whatsapp-penjual-btn on active order'
     )
     assert.ok(
-      menuContent.includes('Chat Penjual'),
-      'PublicMenuPage must render Chat Penjual button label'
+      menuContent.includes('WhatsApp Penjual'),
+      'PublicMenuPage must render WhatsApp Penjual button label'
     )
     assert.ok(
-      menuContent.includes('OrderChatModal'),
-      'PublicMenuPage must include OrderChatModal component'
+      !menuContent.includes('OrderChatModal'),
+      'PublicMenuPage must NOT include OrderChatModal component'
     )
     assert.ok(
-      menuContent.includes('subscribeOrderMessages'),
-      'PublicMenuPage must subscribe to order messages in real-time'
+      !menuContent.includes('subscribeOrderMessages'),
+      'PublicMenuPage must NOT subscribe to order chat messages in real-time'
+    )
+    assert.ok(
+      !menuContent.includes('Chat Penjual'),
+      'PublicMenuPage must NOT render Chat Penjual label'
     )
   })
 
-  it('8. PosPage renders Chat Pembeli button for pending/baru orders in OrderCard and listens to messages', () => {
+  it('8. PosPage removes internal Chat Pembeli and does not create order chat realtime channel', () => {
     const posPath = path.resolve(process.cwd(), 'src/pages/dashboard/pos/PosPage.jsx')
     const posContent = fs.readFileSync(posPath, 'utf8')
 
-    // Must show Chat Pembeli in pending / baru
+    // Must handle pending and baru orders
     assert.ok(
       posContent.includes("order.order_status === 'pending' || order.order_status === 'baru'"),
       'PosPage OrderCard must handle pending and baru orders'
     )
     assert.ok(
-      posContent.includes('Chat Pembeli'),
-      'PosPage must render Chat Pembeli button for pending orders'
+      !posContent.includes('Chat Pembeli'),
+      'PosPage must NOT render Chat Pembeli button'
     )
-    // Must subscribe to order_messages in real-time
     assert.ok(
-      posContent.includes('pos-order-messages-realtime'),
-      'PosPage must subscribe to pos-order-messages-realtime'
+      !posContent.includes('pos-order-messages-realtime'),
+      'PosPage must NOT subscribe to pos-order-messages-realtime'
+    )
+    assert.ok(
+      !posContent.includes('OrderChatModal'),
+      'PosPage must NOT render OrderChatModal'
     )
   })
 })
