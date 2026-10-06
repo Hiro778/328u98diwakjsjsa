@@ -76,7 +76,7 @@ function AmortizationTable({ schedule }) {
   )
 }
 
-export default function LoanSimulationResults({ result, comparison, onSave, saving, errors }) {
+export default function LoanSimulationResults({ result, comparison, onSave, saving, errors, saveMessage }) {
   return (
     <div className="space-y-5">
       {/* Disclaimer */}
@@ -160,6 +160,11 @@ export default function LoanSimulationResults({ result, comparison, onSave, savi
           >
             {saving ? 'Menyimpan...' : 'Simpan Simulasi'}
           </button>
+          {saveMessage && (
+            <p className="mt-2 text-center text-xs font-semibold text-emerald-600">
+              {saveMessage}
+            </p>
+          )}
         </div>
       )}
     </div>

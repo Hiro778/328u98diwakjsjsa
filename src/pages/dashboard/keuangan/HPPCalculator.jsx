@@ -7,6 +7,7 @@ import { calculateHPP } from '../../../sections/HPPCalculator/calculateHPP'
 import HPPInputForm from '../../../sections/HPPCalculator/HPPInputForm'
 import HPPResults from '../../../sections/HPPCalculator/HPPResults'
 import BackButton from '../../../components/BackButton'
+import { saveCalculationHistory, SUCCESS_HISTORY_MESSAGE } from '../../../lib/calculationHistoryService'
 
 const EMPTY_FORM = {
   productId: '',
@@ -45,6 +46,7 @@ export default function HPPCalculator() {
   const [applying, setApplying] = useState(false)
   const [errors, setErrors] = useState([])
   const [supabaseError, setSupabaseError] = useState('')
+  const [saveMessage, setSaveMessage] = useState('')
   const [activeTab, setActiveTab] = useState('calculator')
   const [historySearch, setHistorySearch] = useState('')
   const [historyFilter, setHistoryFilter] = useState('all')
@@ -236,9 +238,16 @@ export default function HPPCalculator() {
       },
     }
 
-    const { error } = await supabase.from('hpp_calculations').insert(payload)
+    const saveResult = await saveCalculationHistory(supabase, {
+      table: 'hpp_calculations',
+      toolType: 'hpp_calculation',
+      businessId: business.id,
+      payload,
+      existingHistory: history,
+    })
 
-    if (error) {
+    if (!saveResult.success) {
+      const error = saveResult.error || {}
       // Log EXACT Supabase error for debugging — never swallow
       console.error('[HPP] Save error:', JSON.stringify({
         code: error.code,
@@ -259,8 +268,6 @@ export default function HPPCalculator() {
         setSupabaseError('Referensi data tidak valid. Pastikan produk atau bisnis yang dipilih masih ada.')
       } else if (code === '23502' || msg.includes('violates not-null') || msg.includes('not-null')) {
         setSupabaseError('Data tidak lengkap. Pastikan semua field wajib terisi.')
-      } else if (code === '23505' || msg.includes('duplicate key') || msg.includes('unique')) {
-        setSupabaseError('Data kalkulasi serupa sudah ada.')
       } else if (code === '22P02' || msg.includes('invalid input') || msg.includes('invalid text')) {
         setSupabaseError('Format data tidak valid. Periksa input angka dan teks Anda.')
       } else if (msg.includes('auth') || msg.includes('session') || msg.includes('jwt')) {
@@ -275,6 +282,8 @@ export default function HPPCalculator() {
 
     setSaving(false)
     setErrors([])
+    setSaveMessage(saveResult.message || SUCCESS_HISTORY_MESSAGE)
+    setTimeout(() => setSaveMessage(''), 4000)
     loadHistory()
     setActiveTab('history')
   }
@@ -461,7 +470,7 @@ export default function HPPCalculator() {
         </button>
       </div>
 
-      {/* Supabase error */}
+      {/* Supabase error / success banner */}
       <AnimatePresence>
         {supabaseError && (
           <motion.div
@@ -471,6 +480,23 @@ export default function HPPCalculator() {
             className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600"
           >
             {supabaseError}
+          </motion.div>
+        )}
+        {saveMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mt-4 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700"
+          >
+            <span>{saveMessage}</span>
+            <button
+              type="button"
+              onClick={() => setSaveMessage('')}
+              className="text-xs text-emerald-700 hover:text-emerald-900"
+            >
+              ✕
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

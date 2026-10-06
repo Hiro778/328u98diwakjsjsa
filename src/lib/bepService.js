@@ -10,6 +10,7 @@
  */
 
 import { supabase } from './supabase'
+import { saveCalculationHistory } from './calculationHistoryService.js'
 
 /**
  * Normalizes Supabase / PostgREST errors into descriptive user-safe error messages
@@ -63,7 +64,7 @@ export function sanitizeNumeric(value, fallback = 0) {
 /**
  * Save a new BEP calculation record to Supabase.
  */
-export async function saveBepCalculation(payload) {
+export async function saveBepCalculation(payload, existingHistory = []) {
   if (!payload?.business_id) {
     throw new Error('Business ID wajib disertakan.')
   }
@@ -99,20 +100,22 @@ export async function saveBepCalculation(payload) {
     required_revenue_for_target_profit: num(payload.required_revenue_for_target_profit),
   }
 
-  const { data, error } = await supabase
-    .from('bep_calculations')
-    .insert(sanitizedPayload)
-    .select()
-    .single()
+  const result = await saveCalculationHistory(supabase, {
+    table: 'bep_calculations',
+    toolType: 'bep_calculation',
+    businessId: sanitizedPayload.business_id,
+    payload: sanitizedPayload,
+    existingHistory,
+  })
 
-  if (error) {
-    const errorMsg = normalizeBepError(error)
+  if (!result.success) {
+    const errorMsg = normalizeBepError(result.error)
     const err = new Error(errorMsg)
-    err.raw = error
+    err.raw = result.error
     throw err
   }
 
-  return data
+  return result.record || { is_duplicate: true }
 }
 
 /**

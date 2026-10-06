@@ -10,6 +10,7 @@
  */
 
 import { supabase } from './supabase.js'
+import { saveCalculationHistory } from './calculationHistoryService.js'
 
 /**
  * Normalizes Supabase / PostgREST errors into descriptive user-safe error messages
@@ -90,7 +91,7 @@ export function validateNumeric(value, fieldName = 'Field', { min = 0, max = 999
 /**
  * Save a new Loan Simulation record to Supabase.
  */
-export async function saveLoanSimulation(payload) {
+export async function saveLoanSimulation(payload, existingHistory = []) {
   if (!payload?.business_id) {
     throw new Error('Business ID wajib disertakan.')
   }
@@ -131,20 +132,22 @@ export async function saveLoanSimulation(payload) {
     schedule: Array.isArray(payload.schedule) ? payload.schedule : [],
   }
 
-  const { data, error } = await supabase
-    .from('loan_simulations')
-    .insert(sanitizedPayload)
-    .select()
-    .single()
+  const saveRes = await saveCalculationHistory(supabase, {
+    table: 'loan_simulations',
+    toolType: 'loan_simulation',
+    businessId: payload.business_id,
+    payload: sanitizedPayload,
+    existingHistory,
+  })
 
-  if (error) {
-    const errorMsg = normalizeLoanSimulationError(error)
+  if (!saveRes.success) {
+    const errorMsg = normalizeLoanSimulationError(saveRes.error)
     const err = new Error(errorMsg)
-    err.raw = error
+    err.raw = saveRes.error
     throw err
   }
 
-  return data
+  return saveRes.data
 }
 
 /**

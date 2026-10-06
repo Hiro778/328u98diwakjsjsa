@@ -10,6 +10,7 @@
  */
 
 import { supabase } from './supabase'
+import { saveCalculationHistory } from './calculationHistoryService.js'
 
 /**
  * Normalizes Supabase / PostgREST errors into descriptive user-safe error messages
@@ -63,7 +64,7 @@ export function sanitizeNumeric(value, fallback = 0) {
 /**
  * Save a new Cash Flow Forecast record to Supabase.
  */
-export async function saveCashFlowForecast(payload) {
+export async function saveCashFlowForecast(payload, existingHistory = []) {
   if (!payload?.business_id) {
     throw new Error('Business ID wajib disertakan.')
   }
@@ -88,20 +89,22 @@ export async function saveCashFlowForecast(payload) {
     periods: Array.isArray(payload.periods) ? payload.periods : [],
   }
 
-  const { data, error } = await supabase
-    .from('cash_flow_forecasts')
-    .insert(sanitizedPayload)
-    .select()
-    .single()
+  const result = await saveCalculationHistory(supabase, {
+    table: 'cash_flow_forecasts',
+    toolType: 'cash_flow_forecast',
+    businessId: sanitizedPayload.business_id,
+    payload: sanitizedPayload,
+    existingHistory,
+  })
 
-  if (error) {
-    const errorMsg = normalizeCashFlowError(error)
+  if (!result.success) {
+    const errorMsg = normalizeCashFlowError(result.error)
     const err = new Error(errorMsg)
-    err.raw = error
+    err.raw = result.error
     throw err
   }
 
-  return data
+  return result.record || { is_duplicate: true }
 }
 
 /**

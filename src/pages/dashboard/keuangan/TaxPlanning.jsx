@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
+import { saveCalculationHistory, SUCCESS_HISTORY_MESSAGE } from '../../../lib/calculationHistoryService'
 import { useAuth } from '../../../context/AuthContext'
 import { formatCurrency } from '../../../lib/orderNumber'
 import { calculateTaxPlanning } from '../../../sections/TaxPlanning/calculateTaxPlanning'
@@ -29,6 +30,7 @@ export default function TaxPlanning() {
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState([])
   const [supabaseError, setSupabaseError] = useState('')
+  const [saveMessage, setSaveMessage] = useState('')
   const [showHistory, setShowHistory] = useState(true)
 
   // ── Load history ──
@@ -53,6 +55,7 @@ export default function TaxPlanning() {
     setForm(f => ({ ...f, [field]: value }))
     setErrors([])
     setSupabaseError('')
+    setSaveMessage('')
   }
 
   // ── Live calculation ──
@@ -96,6 +99,7 @@ export default function TaxPlanning() {
 
     setSaving(true)
     setSupabaseError('')
+    setSaveMessage('')
 
     const num = (v) => (Number.isFinite(v) ? v : 0)
 
@@ -118,21 +122,17 @@ export default function TaxPlanning() {
       notes: form.businessName || '',
     }
 
-    const { error, data } = await supabase.from('tax_plannings').insert(payload).select()
+    const saveRes = await saveCalculationHistory(supabase, {
+      table: 'tax_plannings',
+      toolType: 'tax_planning',
+      businessId: business.id,
+      payload,
+      existingHistory: history,
+    })
 
-    if (error) {
-      console.error('Tax planning save error:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-        query: error.query,
-        stack: error.stack,
-      })
-
-      // Debug: log payload being sent
-      console.error('Payload being sent:', JSON.stringify(payload, null, 2))
-
+    if (!saveRes.success) {
+      console.error('Tax planning save error:', saveRes.error)
+      const error = saveRes.error || {}
       if (error.code === '42P01' || error.message?.includes('does not exist')) {
         setSupabaseError('Tabel tax_plannings belum tersedia di database. Jalankan migration 012_tax_planning.sql di Supabase Dashboard → SQL Editor.')
       } else if (error.code === '42501') {
@@ -146,6 +146,7 @@ export default function TaxPlanning() {
     }
 
     setSaving(false)
+    setSaveMessage(SUCCESS_HISTORY_MESSAGE)
     loadHistory()
   }
 
@@ -180,6 +181,7 @@ export default function TaxPlanning() {
     setExpenses([])
     setErrors([])
     setSupabaseError('')
+    setSaveMessage('')
   }
 
   return (
@@ -201,7 +203,7 @@ export default function TaxPlanning() {
         </button>
       </div>
 
-      {/* Supabase error */}
+      {/* Supabase error / Success feedback */}
       <AnimatePresence>
         {supabaseError && (
           <motion.div
@@ -211,6 +213,16 @@ export default function TaxPlanning() {
             className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600"
           >
             {supabaseError}
+          </motion.div>
+        )}
+        {saveMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700"
+          >
+            {saveMessage}
           </motion.div>
         )}
       </AnimatePresence>
@@ -234,6 +246,7 @@ export default function TaxPlanning() {
             onSave={handleSave}
             saving={saving}
             errors={errors}
+            saveMessage={saveMessage}
           />
         </div>
       </div>

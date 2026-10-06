@@ -10,6 +10,7 @@ import MarginAnalysisResults from '../../../sections/MarginAnalysis/MarginAnalys
 import MarginAnalysisHistory from '../../../sections/MarginAnalysis/MarginAnalysisHistory'
 import MarginAnalysisDetail from '../../../sections/MarginAnalysis/MarginAnalysisDetail'
 import BackButton from '../../../components/BackButton'
+import { saveCalculationHistory, SUCCESS_HISTORY_MESSAGE } from '../../../lib/calculationHistoryService'
 
 const EMPTY_FORM = {
   productId: '',
@@ -38,6 +39,7 @@ export default function MarginAnalysis() {
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState([])
   const [supabaseError, setSupabaseError] = useState('')
+  const [saveMessage, setSaveMessage] = useState('')
   const [view, setView] = useState('calculator') // 'calculator' | 'history' | 'detail'
   const [selectedItem, setSelectedItem] = useState(null)
 
@@ -94,6 +96,7 @@ export default function MarginAnalysis() {
     setForm(f => ({ ...f, [field]: value }))
     setErrors([])
     setSupabaseError('')
+    setSaveMessage('')
   }
 
   function handleUseHPP() {
@@ -177,9 +180,16 @@ export default function MarginAnalysis() {
       notes: form.notes.trim(),
     }
 
-    const { error } = await supabase.from('margin_analyses').insert(payload)
+    const saveResult = await saveCalculationHistory(supabase, {
+      table: 'margin_analyses',
+      toolType: 'margin_analysis',
+      businessId: business.id,
+      payload,
+      existingHistory: history,
+    })
 
-    if (error) {
+    if (!saveResult.success) {
+      const error = saveResult.error || {}
       // Log full error details for debugging
       console.error('Margin Analysis save error:', {
         code: error.code,
@@ -212,6 +222,8 @@ export default function MarginAnalysis() {
     }
 
     setSaving(false)
+    setSaveMessage(saveResult.message || SUCCESS_HISTORY_MESSAGE)
+    setTimeout(() => setSaveMessage(''), 4000)
     loadHistory()
   }
 
@@ -256,6 +268,7 @@ export default function MarginAnalysis() {
     setForm({ ...EMPTY_FORM })
     setErrors([])
     setSupabaseError('')
+    setSaveMessage('')
     setLatestHPP(null)
   }
 
@@ -295,7 +308,7 @@ export default function MarginAnalysis() {
         )}
       </div>
 
-      {/* Supabase error */}
+      {/* Supabase error / success banner */}
       <AnimatePresence>
         {supabaseError && (
           <motion.div
@@ -305,6 +318,23 @@ export default function MarginAnalysis() {
             className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600"
           >
             {supabaseError}
+          </motion.div>
+        )}
+        {saveMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mt-4 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700"
+          >
+            <span>{saveMessage}</span>
+            <button
+              type="button"
+              onClick={() => setSaveMessage('')}
+              className="text-xs text-emerald-700 hover:text-emerald-900"
+            >
+              ✕
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -376,6 +406,7 @@ export default function MarginAnalysis() {
                 onSave={handleSave}
                 saving={saving}
                 errors={errors}
+                saveMessage={saveMessage}
               />
             </div>
           </div>

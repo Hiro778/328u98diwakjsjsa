@@ -81,7 +81,7 @@ function MonthRow({ month }) {
   )
 }
 
-export default function TaxPlanningResults({ result, onSave, saving, errors }) {
+export default function TaxPlanningResults({ result, onSave, saving, errors, saveMessage }) {
   return (
     <div className="space-y-5">
       {/* Disclaimer */}
@@ -196,6 +196,11 @@ export default function TaxPlanningResults({ result, onSave, saving, errors }) {
         >
           {saving ? 'Menyimpan...' : 'Simpan Tax Planning'}
         </button>
+        {saveMessage && (
+          <p className="mt-2 text-center text-xs font-semibold text-emerald-600">
+            {saveMessage}
+          </p>
+        )}
       </div>
     </div>
   )

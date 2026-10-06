@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
+import { saveCalculationHistory } from '../../../lib/calculationHistoryService'
 import { useAuth } from '../../../context/AuthContext'
 import BackButton from '../../../components/BackButton'
 import { getPeriodRange } from '../../../sections/FinancialReports/calculateFinancialReports'
@@ -203,26 +204,32 @@ export default function FinancialHealthScore() {
     if (prevScore === result.score) return // no change, don't duplicate
 
     async function saveSnapshot() {
-      await supabase.from('financial_health_scores').insert({
-        business_id: business.id,
-        analysis_period: '30_days',
-        period_start: start.toISOString().split('T')[0],
-        period_end: end.toISOString().split('T')[0],
-        score: result.score,
-        profitability_score: result.components.profitability?.score || 0,
-        cash_flow_score: result.components.cashFlow?.score || 0,
-        margin_score: result.components.margin?.score || 0,
-        break_even_score: result.components.breakEven?.score || 0,
-        stability_score: result.components.stability?.score || 0,
-        metrics: {
-          profitability: result.components.profitability?.metric,
-          cashFlow: result.components.cashFlow?.metric,
-          margin: result.components.margin?.metric,
-          breakEven: result.components.breakEven?.metric,
-          stability: result.components.stability?.metric,
+      await saveCalculationHistory(supabase, {
+        table: 'financial_health_scores',
+        toolType: 'financial_health_score',
+        businessId: business.id,
+        payload: {
+          business_id: business.id,
+          analysis_period: '30_days',
+          period_start: start.toISOString().split('T')[0],
+          period_end: end.toISOString().split('T')[0],
+          score: result.score,
+          profitability_score: result.components.profitability?.score || 0,
+          cash_flow_score: result.components.cashFlow?.score || 0,
+          margin_score: result.components.margin?.score || 0,
+          break_even_score: result.components.breakEven?.score || 0,
+          stability_score: result.components.stability?.score || 0,
+          metrics: {
+            profitability: result.components.profitability?.metric,
+            cashFlow: result.components.cashFlow?.metric,
+            margin: result.components.margin?.metric,
+            breakEven: result.components.breakEven?.metric,
+            stability: result.components.stability?.metric,
+          },
+          risks: result.risks,
+          positive_signals: result.positiveSignals,
         },
-        risks: result.risks,
-        positive_signals: result.positiveSignals,
+        existingHistory: history,
       })
       // Reload history
       const { data } = await supabase

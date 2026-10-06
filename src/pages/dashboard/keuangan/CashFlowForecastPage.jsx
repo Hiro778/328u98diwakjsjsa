@@ -27,6 +27,7 @@ export default function CashFlowForecastPage() {
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState([])
   const [supabaseError, setSupabaseError] = useState('')
+  const [saveMessage, setSaveMessage] = useState('')
   const [showHistory, setShowHistory] = useState(true)
 
   // ── Load history ──
@@ -145,8 +146,10 @@ export default function CashFlowForecastPage() {
     }
 
     try {
-      await saveCashFlowForecast(payload)
+      await saveCashFlowForecast(payload, history)
       setSaving(false)
+      setSaveMessage('History telah disimpan')
+      setTimeout(() => setSaveMessage(''), 4000)
       loadHistory()
     } catch (err) {
       setSupabaseError(err.message || 'Gagal menyimpan forecast. Silakan coba lagi.')
@@ -217,7 +220,7 @@ export default function CashFlowForecastPage() {
         </button>
       </div>
 
-      {/* Supabase error */}
+      {/* Supabase error / success banner */}
       <AnimatePresence>
         {supabaseError && (
           <motion.div
@@ -227,6 +230,23 @@ export default function CashFlowForecastPage() {
             className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600"
           >
             {supabaseError}
+          </motion.div>
+        )}
+        {saveMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mt-4 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700"
+          >
+            <span>{saveMessage}</span>
+            <button
+              type="button"
+              onClick={() => setSaveMessage('')}
+              className="text-xs text-emerald-700 hover:text-emerald-900"
+            >
+              ✕
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

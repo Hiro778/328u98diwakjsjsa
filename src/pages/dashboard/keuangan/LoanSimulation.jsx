@@ -32,6 +32,7 @@ export default function LoanSimulation() {
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState([])
   const [supabaseError, setSupabaseError] = useState('')
+  const [saveMessage, setSaveMessage] = useState('')
   const [showHistory, setShowHistory] = useState(true)
 
   // ── Load history ──
@@ -52,6 +53,7 @@ export default function LoanSimulation() {
     setForm(f => ({ ...f, [field]: value }))
     setErrors([])
     setSupabaseError('')
+    setSaveMessage('')
   }
 
   // ── Live calculation ──
@@ -99,6 +101,7 @@ export default function LoanSimulation() {
 
     setSaving(true)
     setSupabaseError('')
+    setSaveMessage('')
 
     try {
       const payload = {
@@ -118,7 +121,8 @@ export default function LoanSimulation() {
         schedule: result.amortizationSchedule,
       }
 
-      await saveLoanSimulation(payload)
+      await saveLoanSimulation(payload, history)
+      setSaveMessage('History telah disimpan')
       await loadHistory()
     } catch (err) {
       setSupabaseError(err.message || 'Gagal menyimpan simulasi. Silakan coba lagi.')
@@ -160,6 +164,7 @@ export default function LoanSimulation() {
     setForm({ ...EMPTY_FORM })
     setErrors([])
     setSupabaseError('')
+    setSaveMessage('')
   }
 
   return (
@@ -193,6 +198,16 @@ export default function LoanSimulation() {
             {supabaseError}
           </motion.div>
         )}
+        {saveMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700"
+          >
+            {saveMessage}
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* Main content */}
@@ -213,6 +228,7 @@ export default function LoanSimulation() {
             onSave={handleSave}
             saving={saving}
             errors={errors}
+            saveMessage={saveMessage}
           />
         </div>
       </div>

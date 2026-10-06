@@ -20,6 +20,7 @@ export default function MarginAnalysisResults({
   onSave,
   saving,
   errors,
+  saveMessage,
 }) {
   return (
     <div className="space-y-5">
@@ -160,6 +161,11 @@ export default function MarginAnalysisResults({
         >
           {saving ? 'Menyimpan...' : 'Simpan Analisis'}
         </button>
+        {saveMessage && (
+          <p className="mt-2 text-center text-xs font-semibold text-emerald-600">
+            {saveMessage}
+          </p>
+        )}
       </div>
     </div>
   )
