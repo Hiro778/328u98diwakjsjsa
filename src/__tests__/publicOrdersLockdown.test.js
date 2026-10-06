@@ -162,6 +162,7 @@ describe('Security Remediation: Priority #2 — Public QR Order & Customer Data 
       // Clean up
       await serviceClient.from('orders').delete().in('id', [ordA.id, ordB.id])
       await chanA.unsubscribe()
+      anonClient.removeChannel(chanA)
     })
 
     it('12. realtime_other_business_denied: subscriber to Biz A receives 0 events from foreign Biz', async () => {
@@ -191,6 +192,7 @@ describe('Security Remediation: Priority #2 — Public QR Order & Customer Data 
       // Clean up
       await serviceClient.from('orders').delete().eq('id', foreignOrder.id)
       await chan.unsubscribe()
+      anonClient.removeChannel(chan)
     })
 
     it('13. wildcard_realtime_denied: anon cannot receive sensitive columns via Realtime', async () => {
@@ -226,6 +228,7 @@ describe('Security Remediation: Priority #2 — Public QR Order & Customer Data 
       // Clean up
       await serviceClient.from('orders').delete().eq('id', testOrd.id)
       await chan.unsubscribe()
+      anonClient.removeChannel(chan)
     })
   })
 
@@ -302,7 +305,8 @@ describe('Security Remediation: Priority #2 — Public QR Order & Customer Data 
       await new Promise(r => setTimeout(r, 2000))
 
       assert.strictEqual(receivedStatus, 'diproses')
-      chan?.unsubscribe?.()
+      await chan?.unsubscribe?.()
+      if (chan) anonClient.removeChannel(chan)
     })
 
     it('19. merchant_can_list_own_orders: merchant POS can fetch own order list', async () => {
@@ -322,7 +326,7 @@ describe('Security Remediation: Priority #2 — Public QR Order & Customer Data 
       assert.strictEqual(data?.success, true)
     })
 
-    it('21. merchant_realtime_works: merchant can subscribe to pos orders channel', () => {
+    it('21. merchant_realtime_works: merchant can subscribe to pos orders channel', async () => {
       let subscribed = false
       const chan = merchantClient
         .channel('pos-orders-test')
@@ -331,7 +335,8 @@ describe('Security Remediation: Priority #2 — Public QR Order & Customer Data 
           if (status === 'SUBSCRIBED') subscribed = true
         })
       assert.ok(chan)
-      chan.unsubscribe()
+      await chan.unsubscribe()
+      merchantClient.removeChannel(chan)
     })
 
     it('22. admin_order_access_works: service_role has administrative order oversight', async () => {
@@ -396,4 +401,13 @@ describe('Security Remediation: Priority #2 — Public QR Order & Customer Data 
       }
     })
   })
+
+  after(async () => {
+    try {
+      if (anonClient?.removeAllChannels) await anonClient.removeAllChannels()
+      if (merchantClient?.removeAllChannels) await merchantClient.removeAllChannels()
+      if (serviceClient?.removeAllChannels) await serviceClient.removeAllChannels()
+    } catch (_) {}
+  })
 })
+

@@ -216,53 +216,72 @@ export default function PublicMenuPage() {
   useEffect(() => {
     if (!orderSuccess?.id) return
 
-    const channel = subscribeOrderStatus(
-      orderSuccess.id,
-      (updatedOrder) => {
-        if (!updatedOrder) return
-        setOrderSuccess((prev) => {
-          if (!prev || (prev.id && prev.id !== updatedOrder.id)) return prev
-          return {
-            ...prev,
-            ...updatedOrder,
-            payment_status: updatedOrder.payment_status || prev.payment_status,
-            order_status: updatedOrder.order_status || prev.order_status,
-          }
-        })
+    let activeChannel = null
 
-        const norm = String(updatedOrder.order_status || '').toLowerCase()
-        if (norm === 'diproses' || norm === 'selesai' || norm === 'dibatalkan' || updatedOrder.payment_status === 'paid') {
-          setQrisPaidAcknowledged(true)
-        }
-      },
-      supabase
-    )
+    try {
+      activeChannel = subscribeOrderStatus(
+        orderSuccess.id,
+        (updatedOrder) => {
+          if (!updatedOrder) return
+          setOrderSuccess((prev) => {
+            if (!prev || (prev.id && prev.id !== updatedOrder.id)) return prev
+            return {
+              ...prev,
+              ...updatedOrder,
+              payment_status: updatedOrder.payment_status || prev.payment_status,
+              order_status: updatedOrder.order_status || prev.order_status,
+            }
+          })
+
+          const norm = String(updatedOrder.order_status || '').toLowerCase()
+          if (norm === 'diproses' || norm === 'selesai' || norm === 'dibatalkan' || updatedOrder.payment_status === 'paid') {
+            setQrisPaidAcknowledged(true)
+          }
+        },
+        supabase
+      )
+    } catch (err) {
+      console.warn('[PublicMenuPage] subscribeOrderStatus error (graceful fallback):', err)
+    }
 
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel)
+      if (activeChannel) {
+        try {
+          supabase.removeChannel(activeChannel)
+        } catch {}
+        activeChannel = null
       }
     }
   }, [orderSuccess?.id])
 
   // Real-time chat messages notification for active customer order
+  // Subscribes ONLY when chat modal is closed to track unread badge count without duplicate channel collisions
   useEffect(() => {
-    if (!orderSuccess?.id) return
+    if (!orderSuccess?.id || showCustomerChat) return
 
-    const channel = subscribeOrderMessages(
-      orderSuccess.id,
-      (newMsg) => {
-        if (!newMsg) return
-        if (newMsg.sender_type === 'merchant' && !showCustomerChat) {
-          setUnreadChatCount((prev) => prev + 1)
-        }
-      },
-      supabase
-    )
+    let activeChannel = null
+
+    try {
+      activeChannel = subscribeOrderMessages(
+        orderSuccess.id,
+        (newMsg) => {
+          if (!newMsg) return
+          if (newMsg.sender_type === 'merchant') {
+            setUnreadChatCount((prev) => prev + 1)
+          }
+        },
+        supabase
+      )
+    } catch (err) {
+      console.warn('[PublicMenuPage] subscribeOrderMessages error (graceful fallback):', err)
+    }
 
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel)
+      if (activeChannel) {
+        try {
+          supabase.removeChannel(activeChannel)
+        } catch {}
+        activeChannel = null
       }
     }
   }, [orderSuccess?.id, showCustomerChat])
@@ -380,13 +399,18 @@ export default function PublicMenuPage() {
     const targetBizId = orderSuccess?.business_id || business?.id || businessId
     if (!targetBizId) return
 
+    let isMounted = true
     fetchBusinessContact(targetBizId, supabase, designSettings)
       .then((contact) => {
-        setSellerContact(contact)
+        if (isMounted) setSellerContact(contact)
       })
       .catch((err) => {
         console.warn('[PublicMenuPage] Failed to sync seller contact:', err)
       })
+
+    return () => {
+      isMounted = false
+    }
   }, [orderSuccess?.business_id, business?.id, businessId, designSettings])
 
   async function loadProducts() {

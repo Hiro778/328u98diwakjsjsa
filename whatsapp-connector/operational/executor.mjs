@@ -89,7 +89,7 @@ export async function executeOperationalCommand(command, { supabase, businessId,
         const message = [
           `🤖 *AI BisnisSehat — Asisten Cerdas untuk ${businessName}*`,
           '',
-          'Halo! Fitur AI BisnisSehat siap membantu mengembangkan usaha Anda dengan kapabilitas cerdas berbasis data langsung di aplikasi web:',
+          'Halo! Mode AI aktif. Fitur AI BisnisSehat siap membantu mengembangkan usaha Anda dengan kapabilitas cerdas berbasis data langsung di aplikasi web:',
           '',
           '✨ *Layanan In-App AI BisnisSehat:*',
           '1. 🎨 *Creative Studio AI*',

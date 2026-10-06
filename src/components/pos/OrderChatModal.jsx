@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { supabase } from '../../lib/supabase'
 import { getOrderMessages, sendOrderMessage, subscribeOrderMessages, normalizeOrderError } from '../../services/posService'
 
 export default function OrderChatModal({
@@ -21,40 +22,65 @@ export default function OrderChatModal({
   const isChatDisabled = isCompleted || isCancelled
 
   useEffect(() => {
-    if (!isOpen || !order?.id) return
+    if (!isOpen || !order?.id) {
+      setMessages([])
+      setError('')
+      return
+    }
 
     let isMounted = true
+    let activeChannel = null
     setLoading(true)
     setError('')
 
-    // 1. Fetch initial message history
+    // 1. Fetch initial message history safely
     async function fetchMessages() {
-      const res = await getOrderMessages(order.id)
-      if (isMounted) {
-        if (res.success) {
-          setMessages(res.messages || [])
-        } else if (res.error) {
-          setError(res.error.message)
+      try {
+        const res = await getOrderMessages(order.id)
+        if (isMounted) {
+          if (res?.success) {
+            setMessages(res.messages || [])
+          } else if (res?.error) {
+            setError(res.error.message || 'Gagal memuat pesan.')
+          }
+          setLoading(false)
         }
-        setLoading(false)
+      } catch (fetchErr) {
+        if (isMounted) {
+          setError(fetchErr.message || 'Gagal memuat pesan.')
+          setLoading(false)
+        }
       }
     }
     fetchMessages()
 
-    // 2. Realtime subscription for incoming messages
-    const channel = subscribeOrderMessages(order.id, (newMsg) => {
-      if (!isMounted || !newMsg) return
-      setMessages((prev) => {
-        // Prevent duplicate append if message already exists
-        if (prev.some((m) => m.id === newMsg.id)) return prev
-        return [...prev, newMsg]
+    // 2. Realtime subscription for incoming messages (never crashes UI)
+    try {
+      activeChannel = subscribeOrderMessages(order.id, (newMsg) => {
+        if (!isMounted || !newMsg) return
+        setMessages((prev) => {
+          // Prevent duplicate append if message already exists
+          if (prev.some((m) => m.id === newMsg.id)) return prev
+          return [...prev, newMsg]
+        })
       })
-    })
+    } catch (realtimeErr) {
+      console.warn('[OrderChatModal] Realtime subscription caught error (graceful fallback):', realtimeErr)
+    }
 
     return () => {
       isMounted = false
-      if (channel && channel.unsubscribe) {
-        channel.unsubscribe()
+      if (activeChannel) {
+        try {
+          if (typeof supabase.removeChannel === 'function') {
+            supabase.removeChannel(activeChannel)
+          } else if (activeChannel.unsubscribe) {
+            activeChannel.unsubscribe()
+          }
+        } catch (cleanupErr) {
+          console.warn('[OrderChatModal] Channel cleanup error:', cleanupErr)
+        }
+        activeChannel = null
       }
     }
   }, [isOpen, order?.id])

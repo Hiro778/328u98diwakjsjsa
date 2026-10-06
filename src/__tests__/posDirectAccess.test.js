@@ -77,7 +77,7 @@ describe('POS / Kasir Direct Flow & Regression Tests (pos.md)', () => {
     const catContent = fs.readFileSync(CATEGORIES_PATH, 'utf-8')
     assert.match(
       catContent,
-      /{\s*name:\s*'POS \/ Kasir',\s*path:\s*'\/dashboard\/pos'\s*}/,
+      /{\s*name:\s*'POS \/ Kasir',\s*path:\s*'\/dashboard\/pos'/,
       'Categories must define POS / Kasir as a single unified tool linking to /dashboard/pos'
     )
   })

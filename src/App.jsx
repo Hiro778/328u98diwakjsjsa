@@ -22,6 +22,7 @@ import MaintenanceGate from './components/MaintenanceGate'
 import NotFoundPage from './pages/NotFoundPage'
 import PublicMenuPage from './pages/public/PublicMenuPage'
 import PublicProductDetailPage from './pages/public/PublicProductDetailPage'
+import RouteErrorBoundary from './components/RouteErrorBoundary'
 
 // ── Lazy-loaded Admin Pages ──
 const AdminDashboardOverview = lazy(() => import('./pages/admin/AdminDashboardOverview'))
@@ -96,15 +97,18 @@ const router = createBrowserRouter([
   {
     path: '/auth',
     element: <AuthPage />,
+    errorElement: <RouteErrorBoundary />,
   },
   {
     path: '/auth/callback',
     element: <AuthCallbackPage />,
+    errorElement: <RouteErrorBoundary />,
   },
   // Admin Control Center (Protected by RequireAuth & RequireAdmin server verification)
   {
     path: '/admin',
     element: <RequireAuth />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         element: <RequireAdmin />,
@@ -145,6 +149,7 @@ const router = createBrowserRouter([
   // Centralized Global MaintenanceGate covering public and user application routes (@gas.md & @gl.md)
   {
     element: <MaintenanceGate />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         path: '/',
@@ -172,10 +177,12 @@ const router = createBrowserRouter([
       {
         path: '/menu/:businessId',
         element: <PublicMenuPage />,
+        errorElement: <RouteErrorBoundary />,
       },
       {
         path: '/menu/:businessId/product/:productId',
         element: <PublicProductDetailPage />,
+        errorElement: <RouteErrorBoundary />,
       },
       {
         path: '/onboarding',

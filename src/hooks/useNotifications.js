@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext'
 import {
   fetchNotifications,
@@ -73,7 +74,11 @@ export function useNotifications() {
 
     return () => {
       if (channel) {
-        channel.unsubscribe()
+        if (typeof supabase.removeChannel === 'function') {
+          supabase.removeChannel(channel)
+        } else if (channel.unsubscribe) {
+          channel.unsubscribe()
+        }
       }
     }
   }, [businessId, userId, loadData])

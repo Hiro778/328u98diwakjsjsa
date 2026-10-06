@@ -81,68 +81,120 @@ export default function POSPage() {
   useEffect(() => {
     if (!business?.id) return
 
-    const channel = supabase
-      .channel('pos-orders')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'orders',
-          filter: `business_id=eq.${business.id}`,
-        },
-        (payload) => {
-          if (debounceRef.current) clearTimeout(debounceRef.current)
-          debounceRef.current = setTimeout(() => {
-            loadOrders()
-            loadProducts()
-            if (payload.eventType === 'INSERT') {
-              showToast('Pesanan baru masuk!', 'info')
+    // Clean up any stale channels before subscribing to avoid 'cannot add postgres_changes callbacks after subscribe()'
+    if (typeof supabase.getChannels === 'function') {
+      const channels = supabase.getChannels() || []
+      ;['pos-orders', 'pos-inventory-realtime', 'pos-order-messages-realtime'].forEach((name) => {
+        const existing = channels.find(
+          (c) => c && (c.topic === `realtime:${name}` || c.topic === name || c.subTopic === name)
+        )
+        if (existing) {
+          try {
+            if (typeof supabase.removeChannel === 'function') {
+              supabase.removeChannel(existing)
             }
-          }, 300)
+          } catch {}
+          try {
+            if (supabase.realtime && Array.isArray(supabase.realtime.channels)) {
+              supabase.realtime.channels = supabase.realtime.channels.filter((c) => c !== existing)
+            }
+          } catch {}
+          try {
+            if (supabase.realtime && typeof supabase.realtime._remove === 'function') {
+              supabase.realtime._remove(existing)
+            }
+          } catch {}
+          try {
+            if (typeof existing.teardown === 'function') {
+              existing.teardown()
+            }
+          } catch {}
         }
-      )
-      .subscribe()
+      })
+    }
 
-    const invChannel = supabase
-      .channel('pos-inventory-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'inventory',
-        },
-        () => {
-          loadProducts()
-        }
-      )
-      .subscribe()
+    let channel = null
+    let invChannel = null
+    let msgChannel = null
 
-    const msgChannel = supabase
-      .channel('pos-order-messages-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'order_messages',
-          filter: `business_id=eq.${business.id}`,
-        },
-        (payload) => {
-          if (payload?.new && payload.new.sender_type === 'customer') {
-            const sender = payload.new.sender_name || 'Pelanggan'
-            showToast(`Pesan baru dari ${sender}: "${(payload.new.message || '').slice(0, 35)}..."`, 'info')
+    try {
+      channel = supabase
+        .channel('pos-orders')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'orders',
+            filter: `business_id=eq.${business.id}`,
+          },
+          (payload) => {
+            if (debounceRef.current) clearTimeout(debounceRef.current)
+            debounceRef.current = setTimeout(() => {
+              loadOrders()
+              loadProducts()
+              if (payload.eventType === 'INSERT') {
+                showToast('Pesanan baru masuk!', 'info')
+              }
+            }, 300)
           }
-        }
-      )
-      .subscribe()
+        )
+        .subscribe()
+
+      invChannel = supabase
+        .channel('pos-inventory-realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'inventory',
+          },
+          () => {
+            loadProducts()
+          }
+        )
+        .subscribe()
+
+      msgChannel = supabase
+        .channel('pos-order-messages-realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'order_messages',
+            filter: `business_id=eq.${business.id}`,
+          },
+          (payload) => {
+            if (payload?.new && payload.new.sender_type === 'customer') {
+              const sender = payload.new.sender_name || 'Pelanggan'
+              showToast(`Pesan baru dari ${sender}: "${(payload.new.message || '').slice(0, 35)}..."`, 'info')
+            }
+          }
+        )
+        .subscribe()
+    } catch (realtimeErr) {
+      console.warn('[PosPage] Realtime subscription error (graceful fallback):', realtimeErr)
+    }
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
-      supabase.removeChannel(channel)
-      supabase.removeChannel(invChannel)
-      supabase.removeChannel(msgChannel)
+      if (channel) {
+        try {
+          supabase.removeChannel(channel)
+        } catch {}
+      }
+      if (invChannel) {
+        try {
+          supabase.removeChannel(invChannel)
+        } catch {}
+      }
+      if (msgChannel) {
+        try {
+          supabase.removeChannel(msgChannel)
+        } catch {}
+      }
     }
   }, [business?.id])
 

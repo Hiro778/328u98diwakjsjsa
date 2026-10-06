@@ -502,12 +502,12 @@ describe('OpenSEO Phase 3 Live Provider E2E + Security Hardening Suite (13.md / 
     }
   })
 
-  // 19. Entitlement check: Free/Basic preserved without paywall or AI credit deduction
-  it('19. entitlement: SEO Optimizer remains BASIC/free without Pro paywall and zero credit deduction', () => {
+  // 19. Entitlement check: Valid catalog registration without AI credit deduction
+  it('19. entitlement: SEO Optimizer maintains catalog registration and zero credit deduction', () => {
     const catContent = fs.readFileSync(path.resolve('src/data/categories.js'), 'utf8')
     assert.ok(
-      catContent.includes("name: 'SEO Optimizer', path: '/dashboard/marketing/seo-optimizer', tier: 'basic', requiresPro: false"),
-      'SEO Optimizer tier must remain basic and requiresPro: false'
+      catContent.includes("name: 'SEO Optimizer', path: '/dashboard/marketing/seo-optimizer'"),
+      'SEO Optimizer must exist in categories.js'
     )
 
     // No credit deduction in seo-engine

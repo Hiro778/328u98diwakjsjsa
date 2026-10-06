@@ -303,9 +303,32 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!user?.id) return
 
+    const channelName = `profile-status-${user.id}`
+
+    if (typeof supabase.getChannels === 'function' && typeof supabase.removeChannel === 'function') {
+      const existing = supabase.getChannels().find(
+        (c) => c.topic === `realtime:${channelName}` || c.topic === channelName
+      )
+      if (existing) {
+        try {
+          supabase.removeChannel(existing)
+        } catch {}
+        try {
+          if (supabase.realtime && Array.isArray(supabase.realtime.channels)) {
+            supabase.realtime.channels = supabase.realtime.channels.filter((c) => c !== existing)
+          }
+        } catch {}
+        try {
+          if (typeof existing.teardown === 'function') {
+            existing.teardown()
+          }
+        } catch {}
+      }
+    }
+
     // 1. Supabase Realtime channel on profiles table for instant server-push
     const channel = supabase
-      .channel(`profile-status-${user.id}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {

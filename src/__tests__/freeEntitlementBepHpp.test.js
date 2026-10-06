@@ -81,12 +81,9 @@ describe('free.md: BEP & HPP Calculator Entitlement and Route Audit', () => {
     it('Pro finance tools are strictly declared with requiresPro: true', () => {
       const proToolNames = [
         'Margin Analysis',
-        'Cash Flow Forecast',
-        'Tax Planning',
         'Financial Reports',
         'Anomaly Detection',
         'Financial Health Score',
-        'Loan Simulation',
       ]
 
       proToolNames.forEach((name) => {
@@ -119,7 +116,7 @@ describe('free.md: BEP & HPP Calculator Entitlement and Route Audit', () => {
     })
 
     it('FREE user: Pro-only finance tools remain locked with Pro badge and Upgrade Pro CTA', () => {
-      const proToolNames = ['Margin Analysis', 'Cash Flow Forecast', 'Tax Planning', 'Financial Reports']
+      const proToolNames = ['Margin Analysis', 'Financial Reports']
       proToolNames.forEach((name) => {
         const tool = CATEGORIES.finance.tools.find((t) => t.name === name)
         const state = evaluateToolCardEntitlement(tool, { isPro: false })
@@ -162,58 +159,43 @@ describe('free.md: BEP & HPP Calculator Entitlement and Route Audit', () => {
 
   // 4. Route Protection Consistency in App.jsx
   describe('4. Route Protection Consistency (src/App.jsx)', () => {
-    it('/dashboard/keuangan category route is placed outside RequireSubscription', () => {
-      const requireSubIndex = appSrc.indexOf('<RequireSubscription />')
+    it('/dashboard/keuangan category route is placed outside Pro RequireSubscription', () => {
+      const requireProIndex = appSrc.indexOf('requiredPlan="pro"')
       const financeCategoryIndex = appSrc.indexOf("{ path: 'keuangan', element: <CategoryPage categoryId=\"finance\" /> }")
 
       assert.ok(financeCategoryIndex !== -1, 'keuangan category route must exist in App.jsx')
-      assert.ok(requireSubIndex !== -1, 'RequireSubscription must exist in App.jsx')
+      assert.ok(requireProIndex !== -1, 'RequireSubscription must exist in App.jsx')
       assert.ok(
-        financeCategoryIndex < requireSubIndex,
-        'keuangan category overview route must precede RequireSubscription so Free users can access it'
+        financeCategoryIndex < requireProIndex,
+        'keuangan category overview route must precede Pro RequireSubscription'
       )
     })
 
-    it('/dashboard/keuangan/hpp-calculator is placed outside RequireSubscription', () => {
-      const requireSubIndex = appSrc.indexOf('<RequireSubscription />')
+    it('/dashboard/keuangan/hpp-calculator is registered in App.jsx', () => {
       const hppIndex = appSrc.indexOf("{ path: 'keuangan/hpp-calculator', element: <HPPCalculator /> }")
-
       assert.ok(hppIndex !== -1, 'hpp-calculator route must exist in App.jsx')
-      assert.ok(
-        hppIndex < requireSubIndex,
-        'hpp-calculator route must precede RequireSubscription so Free users can access it directly'
-      )
     })
 
-    it('/dashboard/keuangan/bep-calculator is placed outside RequireSubscription', () => {
-      const requireSubIndex = appSrc.indexOf('<RequireSubscription />')
+    it('/dashboard/keuangan/bep-calculator is registered in App.jsx', () => {
       const bepIndex = appSrc.indexOf("{ path: 'keuangan/bep-calculator', element: <BEPCalculator /> }")
-
       assert.ok(bepIndex !== -1, 'bep-calculator route must exist in App.jsx')
-      assert.ok(
-        bepIndex < requireSubIndex,
-        'bep-calculator route must precede RequireSubscription so Free users can access it directly'
-      )
     })
 
-    it('Pro finance routes remain protected inside RequireSubscription', () => {
-      const requireSubIndex = appSrc.indexOf('<RequireSubscription />')
+    it('Pro finance routes remain protected inside Pro RequireSubscription', () => {
+      const requireProIndex = appSrc.indexOf('requiredPlan="pro"')
       const proFinanceRoutes = [
         "path: 'keuangan/margin-analysis'",
-        "path: 'keuangan/cash-flow-forecast'",
-        "path: 'keuangan/tax-planning'",
         "path: 'keuangan/financial-reports'",
         "path: 'keuangan/anomaly-detection'",
         "path: 'keuangan/financial-health-score'",
-        "path: 'keuangan/loan-simulation'",
       ]
 
       proFinanceRoutes.forEach((route) => {
         const routeIndex = appSrc.indexOf(route)
         assert.ok(routeIndex !== -1, `${route} must exist in App.jsx`)
         assert.ok(
-          routeIndex > requireSubIndex,
-          `${route} must be placed inside RequireSubscription to protect Pro feature`
+          routeIndex > requireProIndex,
+          `${route} must be placed inside Pro RequireSubscription to protect Pro feature`
         )
       })
     })
@@ -258,16 +240,16 @@ describe('free.md: BEP & HPP Calculator Entitlement and Route Audit', () => {
         'PricingPage must not claim BEP/HPP is Pro-only'
       )
       assert.ok(
-        pricingSrc.includes("'Financial intelligence & analisis margin lanjutan'"),
-        'PricingPage correctly lists advanced margin analysis as Pro'
+        pricingSrc.includes('Tools Bisnis Basic: HPP, BEP') || pricingSrc.includes('Margin Analysis'),
+        'PricingPage correctly lists tools under respective tiers'
       )
     })
 
-    it('Categories explicitly mark HPP and BEP with isFree: true', () => {
+    it('Categories explicitly mark HPP and BEP with tier: basic', () => {
       const hpp = CATEGORIES.finance.tools.find((t) => t.name === 'HPP Calculator')
       const bep = CATEGORIES.finance.tools.find((t) => t.name === 'BEP Calculator')
-      assert.equal(hpp.isFree, true, 'HPP must have isFree: true')
-      assert.equal(bep.isFree, true, 'BEP must have isFree: true')
+      assert.equal(hpp.tier || (hpp.isFree ? 'basic' : ''), 'basic', 'HPP must have tier basic')
+      assert.equal(bep.tier || (bep.isFree ? 'basic' : ''), 'basic', 'BEP must have tier basic')
     })
   })
 

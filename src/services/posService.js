@@ -587,6 +587,8 @@ export async function getOrderMessages(orderId, client = supabase) {
 
 /**
  * Subscribes to real-time chat messages for a specific order.
+ * Strictly guarantees that all callbacks are registered before subscribe()
+ * and that any existing channel with the same name is removed to prevent duplicate callback errors.
  *
  * @param {string} orderId
  * @param {(message: object) => void} onMessage
@@ -596,57 +598,295 @@ export async function getOrderMessages(orderId, client = supabase) {
 export function subscribeOrderMessages(orderId, onMessage, client = supabase) {
   if (!orderId || !client?.channel) return null
 
-  const channel = client
-    .channel(`order-chat-${orderId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'order_messages',
-        filter: `order_id=eq.${orderId}`,
-      },
-      (payload) => {
-        if (payload?.new && typeof onMessage === 'function') {
-          onMessage(payload.new)
+  try {
+    const channelName = `order-chat-${orderId}`
+
+    // 1. Remove and prune any pre-existing channel with this name to avoid 'cannot add postgres_changes callbacks after subscribe()'
+    if (typeof client.getChannels === 'function') {
+      const channels = client.getChannels() || []
+      const existingList = channels.filter(
+        (c) => c && (c.topic === `realtime:${channelName}` || c.topic === channelName || c.subTopic === channelName)
+      )
+      for (const existing of existingList) {
+        try {
+          if (typeof client.removeChannel === 'function') {
+            client.removeChannel(existing)
+          }
+        } catch (err) {
+          console.warn('[posService] Cleaned up existing order-chat channel:', err)
+        }
+        try {
+          if (client.realtime && Array.isArray(client.realtime.channels)) {
+            client.realtime.channels = client.realtime.channels.filter((c) => c !== existing)
+          }
+        } catch {}
+        try {
+          if (client.realtime && typeof client.realtime._remove === 'function') {
+            client.realtime._remove(existing)
+          }
+        } catch {}
+        try {
+          if (typeof existing.teardown === 'function') {
+            existing.teardown()
+          }
+        } catch {}
+      }
+    }
+
+    // 2. Obtain channel instance and ensure it is not already subscribed
+    let channel = client.channel(channelName)
+
+    if (
+      channel &&
+      (channel.state === 'joined' ||
+        channel.state === 'joining' ||
+        channel.state === 'subscribing' ||
+        channel.joinedOnce ||
+        (channel.bindings?.postgres_changes && channel.bindings.postgres_changes.length > 0))
+    ) {
+      try {
+        if (typeof client.removeChannel === 'function') client.removeChannel(channel)
+        if (client.realtime && Array.isArray(client.realtime.channels)) {
+          client.realtime.channels = client.realtime.channels.filter((c) => c !== channel)
+        }
+        if (client.realtime && typeof client.realtime._remove === 'function') client.realtime._remove(channel)
+        if (typeof channel.teardown === 'function') channel.teardown()
+      } catch {}
+      channel = client.channel(channelName)
+    }
+
+    if (!channel || typeof channel.on !== 'function') return null
+
+    // 3. Register every postgres_changes callback strictly BEFORE subscribe()
+    const subResult = channel
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'order_messages',
+          filter: `order_id=eq.${orderId}`,
+        },
+        (payload) => {
+          try {
+            if (payload?.new && typeof onMessage === 'function') {
+              onMessage(payload.new)
+            }
+          } catch (callbackErr) {
+            console.warn('[posService] Error in order chat message callback:', callbackErr)
+          }
+        }
+      )
+
+    // Ensure subscribe() is called after all callbacks are registered
+    if (subResult && typeof subResult.subscribe === 'function') {
+      subResult.subscribe((status, err) => {
+        if (err) {
+          console.warn('[posService] Realtime subscription status error:', status, err)
+        }
+      })
+    } else if (typeof channel.subscribe === 'function') {
+      channel.subscribe((status, err) => {
+        if (err) {
+          console.warn('[posService] Realtime subscription status error:', status, err)
+        }
+      })
+    }
+
+    // Disallow adding any further callbacks after subscribe()
+    if (typeof channel.on === 'function') {
+      channel.on = () => {
+        console.warn('[posService] Cannot add callbacks after subscribe()')
+        return channel
+      }
+    }
+
+    // 4. Wrap unsubscribe to guarantee removeChannel is called on the client
+    if (channel && typeof channel.unsubscribe === 'function' && typeof client.removeChannel === 'function') {
+      const origUnsubscribe = channel.unsubscribe.bind(channel)
+      channel.unsubscribe = async () => {
+        try {
+          return await origUnsubscribe()
+        } finally {
+          try {
+            client.removeChannel(channel)
+          } catch {}
+          try {
+            if (client.realtime && Array.isArray(client.realtime.channels)) {
+              client.realtime.channels = client.realtime.channels.filter((c) => c !== channel)
+            }
+          } catch {}
+          try {
+            if (client.realtime && typeof client.realtime._remove === 'function') {
+              client.realtime._remove(channel)
+            }
+          } catch {}
+          try {
+            if (typeof channel.teardown === 'function') {
+              channel.teardown()
+            }
+          } catch {}
         }
       }
-    )
-    .subscribe()
+    }
 
-  return channel
+    return channel
+  } catch (err) {
+    console.error('[posService] subscribeOrderMessages caught error (graceful fallback):', err)
+    return null
+  }
 }
 
 /**
  * Subscribes to real-time order status and payment status changes for a specific order.
+ * Strictly guarantees that all callbacks are registered before subscribe()
+ * and that any existing channel with the same name is removed to prevent duplicate callback errors.
  *
  * @param {string} orderId
  * @param {(updatedOrder: object) => void} onStatusChange
  * @param {object} [client=supabase]
- * @returns {object} Realtime channel
+ * @returns {object|null} Realtime channel
  */
 export function subscribeOrderStatus(orderId, onStatusChange, client = supabase) {
   if (!orderId || !client?.channel) return null
 
-  const channel = client
-    .channel(`order-status-${orderId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'orders',
-        filter: `id=eq.${orderId}`,
-      },
-      (payload) => {
-        if (payload?.new && typeof onStatusChange === 'function') {
-          onStatusChange(payload.new)
+  try {
+    const channelName = `order-status-${orderId}`
+
+    // 1. Remove and prune any pre-existing channel with this name to avoid 'cannot add postgres_changes callbacks after subscribe()'
+    if (typeof client.getChannels === 'function') {
+      const channels = client.getChannels() || []
+      const existingList = channels.filter(
+        (c) => c && (c.topic === `realtime:${channelName}` || c.topic === channelName || c.subTopic === channelName)
+      )
+      for (const existing of existingList) {
+        try {
+          if (typeof client.removeChannel === 'function') {
+            client.removeChannel(existing)
+          }
+        } catch (err) {
+          console.warn('[posService] Cleaned up existing order-status channel:', err)
+        }
+        try {
+          if (client.realtime && Array.isArray(client.realtime.channels)) {
+            client.realtime.channels = client.realtime.channels.filter((c) => c !== existing)
+          }
+        } catch {}
+        try {
+          if (client.realtime && typeof client.realtime._remove === 'function') {
+            client.realtime._remove(existing)
+          }
+        } catch {}
+        try {
+          if (typeof existing.teardown === 'function') {
+            existing.teardown()
+          }
+        } catch {}
+      }
+    }
+
+    // 2. Obtain channel instance and ensure it is not already subscribed
+    let channel = client.channel(channelName)
+
+    if (
+      channel &&
+      (channel.state === 'joined' ||
+        channel.state === 'joining' ||
+        channel.state === 'subscribing' ||
+        channel.joinedOnce ||
+        (channel.bindings?.postgres_changes && channel.bindings.postgres_changes.length > 0))
+    ) {
+      try {
+        if (typeof client.removeChannel === 'function') client.removeChannel(channel)
+        if (client.realtime && Array.isArray(client.realtime.channels)) {
+          client.realtime.channels = client.realtime.channels.filter((c) => c !== channel)
+        }
+        if (client.realtime && typeof client.realtime._remove === 'function') client.realtime._remove(channel)
+        if (typeof channel.teardown === 'function') channel.teardown()
+      } catch {}
+      channel = client.channel(channelName)
+    }
+
+    if (!channel || typeof channel.on !== 'function') return null
+
+    // 3. Register every postgres_changes callback strictly BEFORE subscribe()
+    const subResult = channel
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `id=eq.${orderId}`,
+        },
+        (payload) => {
+          try {
+            if (payload?.new && typeof onStatusChange === 'function') {
+              onStatusChange(payload.new)
+            }
+          } catch (callbackErr) {
+            console.warn('[posService] Error in order status callback:', callbackErr)
+          }
+        }
+      )
+
+    // Ensure subscribe() is called after callbacks
+    if (subResult && typeof subResult.subscribe === 'function') {
+      subResult.subscribe((status, err) => {
+        if (err) {
+          console.warn('[posService] Realtime status subscription error:', status, err)
+        }
+      })
+    } else if (typeof channel.subscribe === 'function') {
+      channel.subscribe((status, err) => {
+        if (err) {
+          console.warn('[posService] Realtime status subscription error:', status, err)
+        }
+      })
+    }
+
+    // Disallow adding any further callbacks after subscribe()
+    if (typeof channel.on === 'function') {
+      channel.on = () => {
+        console.warn('[posService] Cannot add callbacks after subscribe()')
+        return channel
+      }
+    }
+
+    // 4. Wrap unsubscribe to guarantee removeChannel is called on the client
+    if (channel && typeof channel.unsubscribe === 'function' && typeof client.removeChannel === 'function') {
+      const origUnsubscribe = channel.unsubscribe.bind(channel)
+      channel.unsubscribe = async () => {
+        try {
+          return await origUnsubscribe()
+        } finally {
+          try {
+            client.removeChannel(channel)
+          } catch {}
+          try {
+            if (client.realtime && Array.isArray(client.realtime.channels)) {
+              client.realtime.channels = client.realtime.channels.filter((c) => c !== channel)
+            }
+          } catch {}
+          try {
+            if (client.realtime && typeof client.realtime._remove === 'function') {
+              client.realtime._remove(channel)
+            }
+          } catch {}
+          try {
+            if (typeof channel.teardown === 'function') {
+              channel.teardown()
+            }
+          } catch {}
         }
       }
-    )
-    .subscribe()
+    }
 
-  return channel
+    return channel
+  } catch (err) {
+    console.error('[posService] subscribeOrderStatus caught error (graceful fallback):', err)
+    return null
+  }
 }
 
 /**

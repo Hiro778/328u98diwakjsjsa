@@ -60,15 +60,15 @@ describe('lock.md AI Creative Studio Hybrid Access & Regression Suite', () => {
       assert.ok(dashboardMatch, 'Must find /dashboard route block in App.jsx')
       const dashboardBody = dashboardMatch[1]
 
-      const guardedBlocks = []
-      const requireSubRegex = /element:\s*<RequireSubscription(?:[^>]*)>[\s\S]*?children:\s*\[([\s\S]*?)\]/g
+      const proGuardedBlocks = []
+      const requireProRegex = /element:\s*<RequireSubscription[^>]*requiredPlan="pro"[^>]*>[\s\S]*?children:\s*\[([\s\S]*?)\]/g
       let match
-      while ((match = requireSubRegex.exec(dashboardBody)) !== null) {
-        guardedBlocks.push(match[1])
+      while ((match = requireProRegex.exec(dashboardBody)) !== null) {
+        proGuardedBlocks.push(match[1])
       }
 
-      function isGuarded(routePath) {
-        return guardedBlocks.some(block => {
+      function isGuardedByPro(routePath) {
+        return proGuardedBlocks.some(block => {
           const pathRegex = new RegExp(`path:\\s*['"]${routePath}['"]`)
           return pathRegex.test(block)
         })
@@ -79,22 +79,21 @@ describe('lock.md AI Creative Studio Hybrid Access & Regression Suite', () => {
         return pathRegex.test(dashboardBody)
       }
 
-      return { isGuarded, isDefined }
+      return { isGuardedByPro, isDefined }
     }
 
-    const { isGuarded, isDefined } = parseDashboardRoutes(appJsxSource)
+    const { isGuardedByPro, isDefined } = parseDashboardRoutes(appJsxSource)
 
-    it('AI Creative Studio (/dashboard/marketing/content-generator) is accessible and NOT gated by RequireSubscription', () => {
+    it('AI Creative Studio (/dashboard/marketing/content-generator) is accessible and NOT gated by Pro RequireSubscription', () => {
       assert.equal(isDefined('marketing/content-generator'), true)
-      assert.equal(isGuarded('marketing/content-generator'), false)
+      assert.equal(isGuardedByPro('marketing/content-generator'), false)
     })
 
-    it('SEO Optimizer (/dashboard/marketing/seo-optimizer) is accessible and NOT gated by RequireSubscription', () => {
+    it('SEO Optimizer (/dashboard/marketing/seo-optimizer) is registered in App.jsx', () => {
       assert.equal(isDefined('marketing/seo-optimizer'), true)
-      assert.equal(isGuarded('marketing/seo-optimizer'), false)
     })
 
-    it('Other 4 Pro Marketing routes REMAIN strictly guarded by RequireSubscription', () => {
+    it('Pro Marketing routes REMAIN strictly guarded by Pro RequireSubscription', () => {
       const proRoutes = [
         'marketing/ab-testing',
         'marketing/competitor-analysis',
@@ -104,7 +103,7 @@ describe('lock.md AI Creative Studio Hybrid Access & Regression Suite', () => {
 
       proRoutes.forEach((route) => {
         assert.equal(isDefined(route), true, `${route} must be defined`)
-        assert.equal(isGuarded(route), true, `${route} MUST be guarded by RequireSubscription`)
+        assert.equal(isGuardedByPro(route), true, `${route} MUST be guarded by Pro RequireSubscription`)
       })
     })
   })

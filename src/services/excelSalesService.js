@@ -903,8 +903,11 @@ export async function generateSalesWorkbook({
     const originalWriteFile = workbook.xlsx.writeFile.bind(workbook.xlsx)
     workbook.xlsx.writeFile = async function (filePath, options) {
       const buffer = await workbook.xlsx.writeBuffer(options)
-      const fs = await import('fs')
-      return fs.promises.writeFile(filePath, Buffer.from(buffer))
+      if (typeof window === 'undefined') {
+        const fsMod = await import(/* @vite-ignore */ 'node:fs')
+        return fsMod.promises.writeFile(filePath, Buffer.from(buffer))
+      }
+      throw new Error('writeFile is only supported in Node.js environment')
     }
   }
 

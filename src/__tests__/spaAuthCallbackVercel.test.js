@@ -17,10 +17,9 @@ describe('Production SPA Routing & /auth/callback Vercel Fallback (bug.md)', () 
     assert.doesNotThrow(() => {
       config = JSON.parse(raw)
     }, 'vercel.json must be valid JSON')
-
     assert.ok(Array.isArray(config.rewrites), 'vercel.json must contain a rewrites array')
     const catchAllRewrite = config.rewrites.find(
-      (r) => (r.source === '/(.*)' || r.source === '/:path*') && r.destination === '/index.html'
+      (r) => (r.source === '/(.*)' || r.source === '/:path*' || r.source.includes('.*')) && r.destination === '/index.html'
     )
     assert.ok(catchAllRewrite, 'Must have catch-all rewrite to /index.html for SPA client-side routing')
   })

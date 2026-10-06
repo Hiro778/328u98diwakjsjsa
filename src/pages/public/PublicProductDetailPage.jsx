@@ -61,112 +61,126 @@ export default function PublicProductDetailPage() {
   }, [businessId, productId])
 
   useEffect(() => {
-    loadProductDetail()
-  }, [businessId, productId])
+    let isMounted = true
 
-  async function loadProductDetail() {
-    setError('')
+    async function loadProductDetail() {
+      setError('')
 
-    // 1. Parallel loading of business, design, product, and inventory
-    try {
-      const cachedBundle = getCachedMenuBundle(businessId)
-      let biz = cachedBundle?.business
+      // 1. Parallel loading of business, design, product, and inventory
+      try {
+        const cachedBundle = getCachedMenuBundle(businessId)
+        let biz = cachedBundle?.business
 
-      if (!biz) {
-        const { data: fetchedBiz, error: bizErr } = await supabase
-          .from('businesses')
-          .select('id, name, slogan, description, cover_url, logo_url, is_menu_published')
-          .eq('id', businessId)
-          .single()
+        if (!biz) {
+          const { data: fetchedBiz, error: bizErr } = await supabase
+            .from('businesses')
+            .select('id, name, slogan, description, cover_url, logo_url, is_menu_published')
+            .eq('id', businessId)
+            .single()
 
-        if (bizErr || !fetchedBiz) {
-          setError('Bisnis tidak ditemukan.')
+          if (!isMounted) return
+
+          if (bizErr || !fetchedBiz) {
+            setError('Bisnis tidak ditemukan.')
+            setLoading(false)
+            return
+          }
+          biz = fetchedBiz
+        }
+
+        if (!isMounted) return
+
+        if (!biz.is_menu_published) {
+          setError('Menu bisnis ini belum dipublikasikan.')
           setLoading(false)
           return
         }
-        biz = fetchedBiz
-      }
 
-      if (!biz.is_menu_published) {
-        setError('Menu bisnis ini belum dipublikasikan.')
-        setLoading(false)
-        return
-      }
+        setBusiness(biz)
 
-      setBusiness(biz)
+        // Parallelize design settings and product query
+        const designPromise = cachedBundle?.designSettings
+          ? Promise.resolve(cachedBundle.designSettings)
+          : getDesignSettings(biz.id).catch(() => DEFAULT_DESIGN_SETTINGS)
 
-      // Parallelize design settings and product query
-      const designPromise = cachedBundle?.designSettings
-        ? Promise.resolve(cachedBundle.designSettings)
-        : getDesignSettings(biz.id).catch(() => DEFAULT_DESIGN_SETTINGS)
+        const cachedProd = getCachedProduct(businessId, productId)
+        const prodPromise = cachedProd
+          ? Promise.resolve({ data: cachedProd, error: null })
+          : supabase
+              .from('products')
+              .select('*')
+              .eq('id', productId)
+              .eq('business_id', biz.id)
+              .eq('is_available', true)
+              .eq('is_active', true)
+              .single()
 
-      const cachedProd = getCachedProduct(businessId, productId)
-      const prodPromise = cachedProd
-        ? Promise.resolve({ data: cachedProd, error: null })
-        : supabase
-            .from('products')
-            .select('*')
-            .eq('id', productId)
-            .eq('business_id', biz.id)
-            .eq('is_available', true)
-            .eq('is_active', true)
-            .single()
+        const [design, { data: prod, error: prodErr }] = await Promise.all([
+          designPromise,
+          prodPromise,
+        ])
 
-      const [design, { data: prod, error: prodErr }] = await Promise.all([
-        designPromise,
-        prodPromise,
-      ])
+        if (!isMounted) return
 
-      if (design) setDesignSettings(design)
+        if (design) setDesignSettings(design)
 
-      if (prodErr || !prod) {
-        setError('Produk tidak ditemukan atau tidak tersedia.')
-        setLoading(false)
-        return
-      }
-
-    // 3. Load product inventory stock
-    const { data: inv } = await supabase
-      .from('inventory')
-      .select('quantity')
-      .eq('product_id', prod.id)
-      .maybeSingle()
-
-    const currentStock = inv?.quantity != null ? Number(inv.quantity) : 99
-    setBaseStock(currentStock)
-
-    const parsed = parseProductMetadata(prod)
-    setProduct(prod)
-    setMeta(parsed)
-
-    // Default select first available option in each variant group
-    const initialSelections = {}
-    let initialOptImage = null
-    if (parsed.variantGroups && parsed.variantGroups.length > 0) {
-      parsed.variantGroups.forEach(group => {
-        if (group.options && group.options.length > 0) {
-          // pick first in-stock option or first option
-          const firstAvailable = group.options.find(o => (o.stock ?? currentStock) > 0) || group.options[0]
-          if (firstAvailable) {
-            initialSelections[group.id] = firstAvailable.id
-            if (!initialOptImage && (firstAvailable.imageUrl || firstAvailable.image_url)) {
-              initialOptImage = firstAvailable.imageUrl || firstAvailable.image_url
-            }
-          }
+        if (prodErr || !prod) {
+          setError('Produk tidak ditemukan atau tidak tersedia.')
+          setLoading(false)
+          return
         }
-      })
+
+        // 3. Load product inventory stock
+        const { data: inv } = await supabase
+          .from('inventory')
+          .select('quantity')
+          .eq('product_id', prod.id)
+          .maybeSingle()
+
+        if (!isMounted) return
+
+        const currentStock = inv?.quantity != null ? Number(inv.quantity) : 99
+        setBaseStock(currentStock)
+
+        const parsed = parseProductMetadata(prod)
+        setProduct(prod)
+        setMeta(parsed)
+
+        // Default select first available option in each variant group
+        const initialSelections = {}
+        let initialOptImage = null
+        if (parsed.variantGroups && parsed.variantGroups.length > 0) {
+          parsed.variantGroups.forEach(group => {
+            if (group.options && group.options.length > 0) {
+              const firstAvailable = group.options.find(o => (o.stock ?? currentStock) > 0) || group.options[0]
+              if (firstAvailable) {
+                initialSelections[group.id] = firstAvailable.id
+                if (!initialOptImage && (firstAvailable.imageUrl || firstAvailable.image_url)) {
+                  initialOptImage = firstAvailable.imageUrl || firstAvailable.image_url
+                }
+              }
+            }
+          })
+        }
+        setSelectedVariants(initialSelections)
+        if (initialOptImage) {
+          setSelectedVariantImage(initialOptImage)
+        }
+        setLoading(false)
+      } catch (err) {
+        console.warn('[PublicProductDetailPage] Load detail error:', err)
+        if (isMounted) {
+          setError('Gagal memuat detail produk.')
+          setLoading(false)
+        }
+      }
     }
-    setSelectedVariants(initialSelections)
-    if (initialOptImage) {
-      setSelectedVariantImage(initialOptImage)
+
+    loadProductDetail()
+    return () => {
+      isMounted = false
     }
-    setLoading(false)
-  } catch (err) {
-    console.warn('[PublicProductDetailPage] Load detail error:', err)
-    setError('Gagal memuat detail produk.')
-    setLoading(false)
-  }
-}
+  }, [businessId, productId])
 
   // Calculate selected variant options
   const selectedOptionsList = meta?.variantGroups?.map(group => {

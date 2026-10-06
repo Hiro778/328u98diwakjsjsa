@@ -279,15 +279,15 @@ describe('lock.md Security & Entitlement Enforcement Suite', () => {
       assert.ok(dashboardMatch, 'Must find /dashboard route definition')
       const dashboardBody = dashboardMatch[1]
 
-      // Find blocks wrapped in RequireSubscription
+      // Find blocks wrapped in RequireSubscription for Pro plan
       const guardedBlocks = []
-      const requireSubRegex = /element:\s*<RequireSubscription(?:[^>]*)>[\s\S]*?children:\s*\[([\s\S]*?)\]/g
+      const requireSubRegex = /element:\s*<RequireSubscription[^>]*requiredPlan="pro"[^>]*>[\s\S]*?children:\s*\[([\s\S]*?)\]/g
       let match
       while ((match = requireSubRegex.exec(dashboardBody)) !== null) {
         guardedBlocks.push(match[1])
       }
 
-      // Check if a path is inside any guarded block
+      // Check if a path is inside Pro guarded block
       function isGuarded(routePath) {
         return guardedBlocks.some(block => {
           const pathRegex = new RegExp(`path:\\s*['"]${routePath}['"]`)
@@ -308,27 +308,27 @@ describe('lock.md Security & Entitlement Enforcement Suite', () => {
 
     it('A. /dashboard/ekspor is defined and NOT wrapped by Pro guard', () => {
       assert.equal(isDefined('ekspor'), true, 'ekspor route must exist')
-      assert.equal(isGuarded('ekspor'), false, 'ekspor must NOT be guarded by RequireSubscription')
+      assert.equal(isGuarded('ekspor'), false, 'ekspor must NOT be guarded by Pro RequireSubscription')
     })
 
-    it('B. /dashboard/legalitas is defined and NOT wrapped by Pro guard', () => {
+    it('B. /dashboard/legalitas is defined and guarded by Pro guard', () => {
       assert.equal(isDefined('legalitas'), true, 'legalitas route must exist')
-      assert.equal(isGuarded('legalitas'), false, 'legalitas must NOT be guarded by RequireSubscription')
+      assert.equal(isGuarded('legalitas'), true, 'legalitas must be guarded by Pro RequireSubscription')
     })
 
     it('C. /dashboard/kurs is defined and NOT wrapped by Pro guard', () => {
       assert.equal(isDefined('kurs'), true, 'kurs route must exist')
-      assert.equal(isGuarded('kurs'), false, 'kurs must NOT be guarded by RequireSubscription')
+      assert.equal(isGuarded('kurs'), false, 'kurs must NOT be guarded by Pro RequireSubscription')
     })
 
-    it('D. /dashboard/marketing/seo-optimizer is defined and NOT wrapped by Pro guard', () => {
+    it('D. /dashboard/marketing/seo-optimizer is defined and guarded by Pro guard', () => {
       assert.equal(isDefined('marketing/seo-optimizer'), true, 'seo-optimizer route must exist')
-      assert.equal(isGuarded('marketing/seo-optimizer'), false, 'seo-optimizer must NOT be guarded by RequireSubscription')
+      assert.equal(isGuarded('marketing/seo-optimizer'), true, 'seo-optimizer must be guarded by Pro RequireSubscription')
     })
 
     it('E. /dashboard/marketing/content-generator is defined and NOT wrapped by Pro guard', () => {
       assert.equal(isDefined('marketing/content-generator'), true, 'content-generator route must exist')
-      assert.equal(isGuarded('marketing/content-generator'), false, 'content-generator must NOT be guarded by RequireSubscription')
+      assert.equal(isGuarded('marketing/content-generator'), false, 'content-generator must NOT be guarded by Pro RequireSubscription')
     })
 
     it('F. /dashboard/marketing/ab-testing is strictly guarded by Pro guard', () => {
@@ -351,27 +351,27 @@ describe('lock.md Security & Entitlement Enforcement Suite', () => {
       assert.equal(isGuarded('marketing/calendar'), true, 'calendar MUST be guarded by RequireSubscription')
     })
 
-    it('J. Direct URL access: Free routes allow direct free navigation, Pro routes block', () => {
-      const freeDirectRoutes = [
+    it('J. Direct URL access: Basic routes are outside Pro guard, Pro routes are protected', () => {
+      const basicDirectRoutes = [
         'ekspor',
-        'legalitas',
         'kurs',
-        'marketing/seo-optimizer',
         'marketing/content-generator',
       ]
       const proDirectRoutes = [
+        'legalitas',
+        'marketing/seo-optimizer',
         'marketing/ab-testing',
         'marketing/competitor-analysis',
         'marketing/google-business',
         'marketing/calendar',
       ]
 
-      freeDirectRoutes.forEach(r => {
-        assert.equal(isGuarded(r), false, `Direct URL /dashboard/${r} must remain accessible for Free user`)
+      basicDirectRoutes.forEach(r => {
+        assert.equal(isGuarded(r), false, `Direct URL /dashboard/${r} must not be in Pro guard block`)
       })
 
       proDirectRoutes.forEach(r => {
-        assert.equal(isGuarded(r), true, `Direct URL /dashboard/${r} must remain blocked for Free user`)
+        assert.equal(isGuarded(r), true, `Direct URL /dashboard/${r} must be protected by Pro guard block`)
       })
     })
   })
