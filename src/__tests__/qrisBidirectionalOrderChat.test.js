@@ -228,18 +228,22 @@ describe('Bidirectional Buyer ↔ Seller Chat After QRIS Payment Suite', () => {
     )
   })
 
-  it('7. PublicMenuPage renders WhatsApp Penjual button (replaces Chat Penjual) for buyer on active order screen', () => {
+  it('7. PublicMenuPage renders Hubungi Penjual button (replaces Chat Penjual) for buyer on active order screen', () => {
     const menuPath = path.resolve(process.cwd(), 'src/pages/public/PublicMenuPage.jsx')
     const menuContent = fs.readFileSync(menuPath, 'utf8')
 
-    // Must show WhatsApp Penjual button and NOT internal chat
+    // Must show Hubungi Penjual in Kontak Penjual and NOT internal chat or redundant standalone button
     assert.ok(
-      menuContent.includes('buyer-whatsapp-penjual-btn'),
-      'PublicMenuPage must render buyer-whatsapp-penjual-btn on active order'
+      menuContent.includes('Hubungi Penjual'),
+      'PublicMenuPage must render Hubungi Penjual button label'
     )
     assert.ok(
-      menuContent.includes('WhatsApp Penjual'),
-      'PublicMenuPage must render WhatsApp Penjual button label'
+      menuContent.includes('Kontak Penjual'),
+      'PublicMenuPage must render Kontak Penjual section'
+    )
+    assert.ok(
+      !menuContent.includes('buyer-whatsapp-penjual-btn'),
+      'PublicMenuPage must NOT render redundant standalone buyer-whatsapp-penjual-btn'
     )
     assert.ok(
       !menuContent.includes('OrderChatModal'),

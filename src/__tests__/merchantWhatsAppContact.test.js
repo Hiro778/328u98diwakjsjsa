@@ -137,22 +137,22 @@ describe('Merchant WhatsApp Contact & Internal Chat Removal Suite', () => {
   })
 
   // ────────────────────────────────────────────────────────────
-  // C & D: Buyer UI — WhatsApp Penjual Button
+  // C & D: Buyer UI — Seller WhatsApp Contact via Hubungi Penjual
   // ────────────────────────────────────────────────────────────
   describe('C & D. Buyer UI WhatsApp Button Behavior', () => {
-    it('C. PublicMenuPage renders WhatsApp Penjual button using merchant contact', () => {
+    it('C. PublicMenuPage renders Hubungi Penjual button using merchant contact and removes redundant standalone button', () => {
       const menuSrc = fs.readFileSync(path.resolve('src/pages/public/PublicMenuPage.jsx'), 'utf8')
-      assert.ok(menuSrc.includes('buyer-whatsapp-penjual-btn'), 'PublicMenuPage must render buyer-whatsapp-penjual-btn')
-      assert.ok(menuSrc.includes('WhatsApp Penjual'), 'Button label must be WhatsApp Penjual')
-      assert.ok(menuSrc.includes("window.open(waUrl, '_blank', 'noopener,noreferrer')"), 'Button must open waUrl in new tab')
+      assert.ok(menuSrc.includes('Hubungi Penjual'), 'Button label must be Hubungi Penjual')
+      assert.ok(menuSrc.includes('Kontak Penjual'), 'PublicMenuPage must render Kontak Penjual card')
+      assert.ok(menuSrc.includes('activeSellerContact.actionUrl'), 'Button must use activeSellerContact.actionUrl')
+      assert.ok(!menuSrc.includes('buyer-whatsapp-penjual-btn'), 'Redundant standalone buyer-whatsapp-penjual-btn must be removed')
       assert.ok(!menuSrc.includes('Chat Penjual'), 'PublicMenuPage must not contain Chat Penjual label')
       assert.ok(!menuSrc.includes('buyer-chat-penjual-btn'), 'Old buyer-chat-penjual-btn must be removed')
     })
 
-    it('D. Shows "WhatsApp belum tersedia" and disables button when merchant has no WhatsApp', () => {
+    it('D. Shows "Kontak penjual belum tersedia" fallback when merchant has no contact', () => {
       const menuSrc = fs.readFileSync(path.resolve('src/pages/public/PublicMenuPage.jsx'), 'utf8')
-      assert.ok(menuSrc.includes('WhatsApp belum tersedia'), 'Must render WhatsApp belum tersedia when unavailable')
-      assert.ok(menuSrc.includes('disabled'), 'Must disable button when unavailable')
+      assert.ok(menuSrc.includes('Kontak penjual belum tersedia'), 'Must render Kontak penjual belum tersedia when unavailable')
 
       // Also verify resolveBusinessContact returns hasContact=false
       const contact = resolveBusinessContact({ business: { id: 'biz-1', name: 'Toko Kosong' } })
@@ -160,7 +160,7 @@ describe('Merchant WhatsApp Contact & Internal Chat Removal Suite', () => {
       assert.strictEqual(contact.actionUrl, '')
     })
 
-    it('Ensures NO emojis are used in the WhatsApp button or helper text', () => {
+    it('Ensures NO emojis are used in the contact button or helper text', () => {
       const menuSrc = fs.readFileSync(path.resolve('src/pages/public/PublicMenuPage.jsx'), 'utf8')
       // Old button had 💬
       assert.ok(!menuSrc.includes('💬'), 'Must not contain chat bubble emoji 💬')

@@ -10,7 +10,7 @@ import { getPublicMenuBundle, getCachedMenuBundle, normalizeBusinessId } from '.
 import PublicMenuRenderer from '../../components/pos/PublicMenuRenderer'
 import PublicMenuSkeleton from '../../components/pos/PublicMenuSkeleton'
 import { usePlatformSettings } from '../../hooks/usePlatformSettings'
-import { fetchBusinessContact, resolveBusinessContact, getWhatsAppUrl, normalizePhoneForWhatsApp } from '../../services/businessContactService'
+import { fetchBusinessContact, resolveBusinessContact } from '../../services/businessContactService'
 import { subscribeOrderStatus, getPublicOrder, mapCustomerOrderStatus } from '../../services/posService'
 
 export default function PublicMenuPage() {
@@ -793,12 +793,6 @@ export default function PublicMenuPage() {
       designSettings,
     })
 
-    const rawWhatsApp = (activeSellerContact?.type === 'whatsapp' ? (activeSellerContact?.rawContact || activeSellerContact?.phone) : '') || business?.whatsapp || ''
-    const normalizedWhatsApp = normalizePhoneForWhatsApp(rawWhatsApp)
-    const hasWhatsApp = Boolean(normalizedWhatsApp && normalizedWhatsApp.length >= 7)
-    const orderNumberForWa = orderSuccess?.order_number || (orderSuccess?.id ? String(orderSuccess.id).slice(0, 8) : '')
-    const waPrefilledMessage = orderNumberForWa ? `Halo, saya ingin menanyakan pesanan #${orderNumberForWa}.` : ''
-    const waUrl = hasWhatsApp ? getWhatsAppUrl(normalizedWhatsApp, waPrefilledMessage) : ''
 
     // Compute active title and message based on flow (@3.md & @2.md)
     let statusTitle = statusMeta.title
@@ -953,7 +947,7 @@ export default function PublicMenuPage() {
                 Penjual telah mengonfirmasi pembayaran dan sedang memproses pesanan.
               </p>
               <p className="text-[11px] text-blue-700/90 mt-0.5">
-                Anda dapat menggunakan tombol <strong>WhatsApp Penjual</strong> di bawah untuk berkomunikasi langsung.
+                Anda dapat menggunakan tombol <strong>Hubungi Penjual</strong> di bawah untuk berkomunikasi langsung.
               </p>
             </div>
           )}
@@ -1091,6 +1085,7 @@ export default function PublicMenuPage() {
                 {activeSellerContact?.hasContact && activeSellerContact?.actionUrl && (
                   <a
                     href={activeSellerContact.actionUrl}
+                    data-testid="buyer-hubungi-penjual-btn"
                     target={activeSellerContact.type === 'whatsapp' ? '_blank' : '_self'}
                     rel={activeSellerContact.type === 'whatsapp' ? 'noopener noreferrer' : undefined}
                     className={`flex w-full items-center justify-center gap-2 py-3 px-4 text-sm font-bold text-white shadow-sm transition hover:opacity-90 active:scale-[0.98] ${qrBtnRadius}`}
@@ -1128,38 +1123,6 @@ export default function PublicMenuPage() {
               </motion.button>
             )}
 
-            {/* WhatsApp Penjual Button */}
-            {Boolean(orderSuccess) && (
-              hasWhatsApp && waUrl ? (
-                <motion.button
-                  type="button"
-                  data-testid="buyer-whatsapp-penjual-btn"
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    window.open(waUrl, '_blank', 'noopener,noreferrer')
-                  }}
-                  className={`w-full py-3.5 text-sm font-bold transition hover:opacity-90 active:scale-[0.98] flex items-center justify-center gap-2 border border-emerald-500 bg-emerald-600 text-white shadow-xs ${qrBtnRadius}`}
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-                  </svg>
-                  <span>WhatsApp Penjual</span>
-                </motion.button>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  data-testid="buyer-whatsapp-penjual-btn"
-                  className={`w-full py-3.5 text-sm font-bold opacity-60 cursor-not-allowed flex items-center justify-center gap-2 border border-gray-300 bg-gray-100 text-gray-500 shadow-xs ${qrBtnRadius}`}
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-                  </svg>
-                  <span>WhatsApp belum tersedia</span>
-                </button>
-              )
-            )}
 
             {/* Kembali ke Menu Button */}
             <motion.button
