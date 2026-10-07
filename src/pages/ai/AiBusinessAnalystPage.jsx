@@ -320,9 +320,7 @@ export default function AiBusinessAnalystPage({ isStandalone = false }) {
       {isStandalone && (
         <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface/95 backdrop-blur-md px-3 sm:px-6 pt-[env(safe-area-inset-top,0px)]">
           <Link to="/dashboard" className="flex items-center gap-2 group">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-white shadow-xs">
-              <span className="text-xs font-black">BS</span>
-            </div>
+            <img src="/brand-logo.png" alt="BisnisSehat" className="h-8 w-8 object-contain shrink-0" />
             <div className="leading-tight">
               <span className="block text-xs sm:text-sm font-bold text-text-primary">BisnisSehat</span>
               <span className="block text-[10px] text-text-muted">OS UMKM Modern</span>

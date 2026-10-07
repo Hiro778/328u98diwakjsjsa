@@ -45,6 +45,9 @@ export function getFriendlyOAuthErrorMessage(errorCode, errorDesc) {
   if (code === 'auth_timeout') {
     return 'Proses masuk memerlukan waktu terlalu lama. Silakan coba masuk kembali.'
   }
+  if (code === 'otp_expired') {
+    return 'Link verifikasi atau pemulihan akun sudah tidak valid atau sudah kedaluwarsa. Silakan minta link baru.'
+  }
   if (errorDesc) {
     return `Gagal masuk dengan Google: ${errorDesc}. Silakan coba lagi.`
   }

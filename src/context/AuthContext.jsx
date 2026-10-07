@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { supabase } from '../lib/supabase'
 import { calculateSubscriptionEntitlement, resolveCanonicalSubscription } from '../lib/subscriptionUtils'
 import { fetchPublicPlatformSettings } from '../services/adminSettingsService'
+import { createSafeRealtimeChannel, cleanupAllRealtimeChannels } from '../lib/realtimeHelper'
 
 const AuthContext = createContext(null)
 
@@ -17,6 +18,10 @@ export function AuthProvider({ children }) {
   const [profileLoaded, setProfileLoaded] = useState(false)
   const [businessLoaded, setBusinessLoaded] = useState(false)
   const [subscriptionLoaded, setSubscriptionLoaded] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false)
+  const isSigningOutRef = useRef(false)
+  const loadingUserRef = useRef(null)
 
   const [hasUsedFreeAi, setHasUsedFreeAi] = useState(false)
 
@@ -31,6 +36,9 @@ export function AuthProvider({ children }) {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
+
+      if (loadingUserRef.current !== profileId) return
+
       setBusiness(data)
       if (data?.id) {
         try {
@@ -39,6 +47,7 @@ export function AuthProvider({ children }) {
             .select('id')
             .eq('business_id', data.id)
             .maybeSingle()
+          if (loadingUserRef.current !== profileId) return
           setHasUsedFreeAi(Boolean(freeData))
         } catch {
           // Ignore
@@ -47,7 +56,9 @@ export function AuthProvider({ children }) {
     } catch {
       // Query failed — continue without business
     }
-    setBusinessLoaded(true)
+    if (loadingUserRef.current === profileId) {
+      setBusinessLoaded(true)
+    }
   }
 
   async function loadSubscription(profileId) {
@@ -58,6 +69,8 @@ export function AuthProvider({ children }) {
         .from('subscriptions')
         .select('*')
         .eq('profile_id', profileId)
+
+      if (loadingUserRef.current !== profileId) return null
 
       if (subErr) {
         console.error('[AuthContext] subscription query error:', subErr)
@@ -88,19 +101,23 @@ export function AuthProvider({ children }) {
         console.warn('[AuthContext] subscription_payments check exception:', pErr)
       }
 
+      if (loadingUserRef.current !== profileId) return null
+
       setSubscription(sub)
       setHasPaidHistory(hasPaid)
       setSubscriptionError(null)
     } catch (err) {
       console.error('[AuthContext] loadSubscription unexpected error:', err)
-      setSubscriptionError(err)
+      if (loadingUserRef.current === profileId) {
+        setSubscriptionError(err)
+      }
     } finally {
-      setSubscriptionLoaded(true)
+      if (loadingUserRef.current === profileId) {
+        setSubscriptionLoaded(true)
+      }
     }
     return sub
   }
-
-  const loadingUserRef = useRef(null)
 
   async function loadOrCreateProfile(authUser) {
     if (!authUser) return
@@ -122,9 +139,12 @@ export function AuthProvider({ children }) {
       // Query failed (timeout/504/etc) — continue without profile
     }
 
+    if (loadingUserRef.current !== authUser.id) return
+
     if (!prof) {
       // Wait for trigger to commit
       await new Promise((r) => setTimeout(r, 500))
+      if (loadingUserRef.current !== authUser.id) return
       try {
         const { data: retry } = await supabase
           .from('profiles')
@@ -136,6 +156,8 @@ export function AuthProvider({ children }) {
         // Retry also failed
       }
     }
+
+    if (loadingUserRef.current !== authUser.id) return
 
     if (!prof) {
       // Fallback: insert client-side (requires INSERT RLS policy)
@@ -155,6 +177,8 @@ export function AuthProvider({ children }) {
         // Insert also failed
       }
     }
+
+    if (loadingUserRef.current !== authUser.id) return
 
     setProfile(prof)
     setProfileLoaded(true)
@@ -176,7 +200,9 @@ export function AuthProvider({ children }) {
         subPromise,
       ])
     } else {
-      setBusinessLoaded(true)
+      if (loadingUserRef.current === authUser.id) {
+        setBusinessLoaded(true)
+      }
       await subPromise
     }
   }
@@ -186,8 +212,10 @@ export function AuthProvider({ children }) {
 
     async function initAuth() {
       try {
-        // 1. Initial retrieval of session from storage / memory
-        const { data: { session } } = await supabase.auth.getSession()
+        // 1. Initial retrieval of session from storage / memory with safety timeout (prevents deadlock)
+        const getSessionPromise = supabase.auth.getSession()
+        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ data: { session: null } }), 4000))
+        const { data: { session } } = await Promise.race([getSessionPromise, timeoutPromise])
 
         if (!isMounted) return
 
@@ -203,7 +231,9 @@ export function AuthProvider({ children }) {
         // 2. If getSession returned null/error, attempt refreshSession fallback
         // (handles cases where token expired while user was paying on Midtrans)
         try {
-          const { data: refreshData } = await supabase.auth.refreshSession()
+          const refreshPromise = supabase.auth.refreshSession()
+          const refreshTimeout = new Promise((resolve) => setTimeout(() => resolve({ data: { session: null } }), 4000))
+          const { data: refreshData } = await Promise.race([refreshPromise, refreshTimeout])
           if (!isMounted) return
           if (refreshData?.session?.user) {
             setUser(refreshData.session.user)
@@ -250,7 +280,7 @@ export function AuthProvider({ children }) {
           .eq('id', currentUserId)
           .maybeSingle()
 
-        if (latestProfile && isMounted) {
+        if (latestProfile && isMounted && loadingUserRef.current === currentUserId) {
           setProfile(latestProfile)
           if (['banned', 'suspended', 'deleted'].includes(latestProfile.status)) {
             console.warn('[AuthContext] Banned/suspended status detected on window focus. Zero access enforced.')
@@ -269,14 +299,19 @@ export function AuthProvider({ children }) {
       async (event, session) => {
         if (!isMounted) return
 
+        if (event === 'PASSWORD_RECOVERY') {
+          setIsRecoveryMode(true)
+        }
+
         if (session?.user) {
           setUser(session.user)
           setAuthLoading(false)
           if (loadingUserRef.current !== session.user.id || event === 'SIGNED_IN') {
             await loadOrCreateProfile(session.user)
           }
-        } else if (event === 'SIGNED_OUT') {
-          // Explicit sign out
+        } else if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session?.user)) {
+          // Explicit sign out or empty initial session
+          setIsRecoveryMode(false)
           loadingUserRef.current = null
           setUser(null)
           setProfile(null)
@@ -303,62 +338,49 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!user?.id) return
 
-    const channelName = `profile-status-${user.id}`
-
-    if (typeof supabase.getChannels === 'function' && typeof supabase.removeChannel === 'function') {
-      const existing = supabase.getChannels().find(
-        (c) => c.topic === `realtime:${channelName}` || c.topic === channelName
-      )
-      if (existing) {
-        try {
-          supabase.removeChannel(existing)
-        } catch {}
-        try {
-          if (supabase.realtime && Array.isArray(supabase.realtime.channels)) {
-            supabase.realtime.channels = supabase.realtime.channels.filter((c) => c !== existing)
-          }
-        } catch {}
-        try {
-          if (typeof existing.teardown === 'function') {
-            existing.teardown()
-          }
-        } catch {}
-      }
-    }
+    const userId = user.id
+    const channelName = `profile-status-${userId}`
 
     // 1. Supabase Realtime channel on profiles table for instant server-push
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'profiles',
-          filter: `id=eq.${user.id}`,
-        },
-        (payload) => {
-          const updatedProfile = payload.new
-          if (updatedProfile) {
-            setProfile(updatedProfile)
-            if (['banned', 'suspended', 'deleted'].includes(updatedProfile.status)) {
-              console.warn('[AuthContext] Realtime ban/suspension received! Enforcing zero app access immediately.')
-              setBusiness(null)
-              setSubscription(null)
+    const channel = createSafeRealtimeChannel(
+      supabase,
+      channelName,
+      (ch) => {
+        ch.on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'profiles',
+            filter: `id=eq.${userId}`,
+          },
+          (payload) => {
+            if (loadingUserRef.current !== userId) return
+            const updatedProfile = payload.new
+            if (updatedProfile) {
+              setProfile(updatedProfile)
+              if (['banned', 'suspended', 'deleted'].includes(updatedProfile.status)) {
+                console.warn('[AuthContext] Realtime ban/suspension received! Enforcing zero app access immediately.')
+                setBusiness(null)
+                setSubscription(null)
+              }
             }
           }
-        }
-      )
-      .subscribe()
+        )
+      }
+    )
 
     // 2. Heartbeat polling check (every 4 seconds) to guarantee lockout even if websocket is closed
     const heartbeatTimer = setInterval(async () => {
+      if (loadingUserRef.current !== userId) return
       try {
         const { data: latestProfile } = await supabase
           .from('profiles')
           .select('*')
-          .eq('id', user.id)
+          .eq('id', userId)
           .maybeSingle()
+
+        if (loadingUserRef.current !== userId) return
 
         if (latestProfile) {
           setProfile((prev) => {
@@ -379,8 +401,12 @@ export function AuthProvider({ children }) {
     }, 4000)
 
     return () => {
-      supabase.removeChannel(channel)
       clearInterval(heartbeatTimer)
+      if (channel && typeof supabase.removeChannel === 'function') {
+        try {
+          supabase.removeChannel(channel)
+        } catch {}
+      }
     }
   }, [user?.id])
 
@@ -393,19 +419,92 @@ export function AuthProvider({ children }) {
     })
   }, [])
 
+  const signInWithEmail = useCallback(async (email, password) => {
+    return await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+  }, [])
+
+  const signUpWithEmail = useCallback(async (email, password) => {
+    return await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+  }, [])
+
+  const resetPasswordForEmail = useCallback(async (email) => {
+    return await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/reset-password`,
+    })
+  }, [])
+
+  const updatePassword = useCallback(async (newPassword) => {
+    return await supabase.auth.updateUser({
+      password: newPassword,
+    })
+  }, [])
+
   const signOut = useCallback(async () => {
+    if (isSigningOutRef.current) return
+    isSigningOutRef.current = true
+    setIsLoggingOut(true)
+    setIsRecoveryMode(false)
     loadingUserRef.current = null
-    await supabase.auth.signOut()
-    setUser(null)
-    setProfile(null)
-    setBusiness(null)
-    setSubscription(null)
-    setHasPaidHistory(false)
-    setSubscriptionError(null)
-    setProfileLoaded(true)
-    setBusinessLoaded(true)
-    setSubscriptionLoaded(true)
-    setAuthLoading(false)
+
+    try {
+      // 1. Immediately tear down all active realtime channels to avoid receiving messages during signout
+      await cleanupAllRealtimeChannels(supabase)
+    } catch (cleanupErr) {
+      console.warn('[AuthContext] realtime cleanup warning during signOut:', cleanupErr)
+    }
+
+    try {
+      // 2. Race signOut against a safety timeout (3500ms) so Gotrue network/lock hang never freezes UI
+      const signOutPromise = supabase.auth.signOut()
+      const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 3500))
+      const res = await Promise.race([signOutPromise, timeoutPromise])
+      if (res?.timeout) {
+        console.warn('[AuthContext] supabase.auth.signOut timed out, invoking local scope signout fallback')
+        try {
+          await supabase.auth.signOut({ scope: 'local' })
+        } catch {}
+      }
+    } catch (err) {
+      console.error('[AuthContext] signOut failed, proceeding to wipe local session anyway:', err)
+      try {
+        await supabase.auth.signOut({ scope: 'local' })
+      } catch {}
+    } finally {
+      // 3. Clear all auth and entity states synchronously
+      setUser(null)
+      setProfile(null)
+      setBusiness(null)
+      setSubscription(null)
+      setHasPaidHistory(false)
+      setSubscriptionError(null)
+      setProfileLoaded(true)
+      setBusinessLoaded(true)
+      setSubscriptionLoaded(true)
+      setAuthLoading(false)
+
+      // 4. Clean up any Supabase auth tokens stored in localStorage to prevent resurrecting session
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          Object.keys(localStorage).forEach((key) => {
+            if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+              localStorage.removeItem(key)
+            }
+          })
+        }
+      } catch {}
+
+      setIsLoggingOut(false)
+      isSigningOutRef.current = false
+    }
   }, [])
 
   // Idle Session Inactivity Timeout Enforcement (@ban.md)
@@ -527,7 +626,13 @@ export function AuthProvider({ children }) {
         subscriptionExpiresAt: subscription?.expires_at || null,
         subscriptionError,
         isSubscriptionLoading: !subscriptionLoaded,
+        isLoggingOut,
+        isRecoveryMode,
         signInWithGoogle,
+        signInWithEmail,
+        signUpWithEmail,
+        resetPasswordForEmail,
+        updatePassword,
         signOut,
         refreshProfile,
         refreshBusiness,

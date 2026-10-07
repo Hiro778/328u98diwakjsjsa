@@ -52,17 +52,14 @@ export default function Footer() {
 
           {/* Brand + description */}
           <div className="col-span-2 sm:col-span-2 lg:col-span-1">
-            <Link to="/" className="inline-flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1E293B] border border-[#222C3E]">
-                <span className="text-xs font-bold text-[#818CF8]">BS</span>
-              </div>
+            <Link to="/" className="inline-flex items-center gap-2.5">
+              <img src="/brand-logo.png" alt="BisnisSehat" className="h-8 w-8 object-contain shrink-0" />
               <span className="text-base font-bold tracking-tight text-white">
                 BisnisSehat
               </span>
             </Link>
             <p className="mt-3 max-w-[240px] text-xs leading-relaxed text-slate-400">
-              Platform bisnis UMKM Indonesia &mdash; kelola keuangan, stok, penjualan,
-              legalitas, sampai ekspor dalam satu tempat.
+              Platform tools bisnis untuk UMKM Indonesia. Bantu UMKM mengelola keuangan, penjualan, stok, operasional, dan mengambil keputusan bisnis dengan tools dan AI.
             </p>
           </div>
 

@@ -130,8 +130,8 @@ export function showLocalNotification(title, message, actionUrl) {
   try {
     const notif = new Notification(title, {
       body: message,
-      icon: '/favicon.svg',
-      badge: '/favicon.svg'
+      icon: '/pwa-192x192.png',
+      badge: '/favicon-32x32.png'
     })
 
     if (actionUrl) {

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
+import { createSafeRealtimeChannel } from '../../../lib/realtimeHelper'
 import { createNotification } from '../../../services/notificationService'
 import { useAuth } from '../../../context/AuthContext'
 import { formatCurrency } from '../../../lib/orderNumber'
@@ -79,45 +80,11 @@ export default function POSPage() {
   useEffect(() => {
     if (!business?.id) return
 
-    // Clean up any stale channels before subscribing to avoid 'cannot add postgres_changes callbacks after subscribe()'
-    if (typeof supabase.getChannels === 'function') {
-      const channels = supabase.getChannels() || []
-      ;['pos-orders', 'pos-inventory-realtime'].forEach((name) => {
-        const existing = channels.find(
-          (c) => c && (c.topic === `realtime:${name}` || c.topic === name || c.subTopic === name)
-        )
-        if (existing) {
-          try {
-            if (typeof supabase.removeChannel === 'function') {
-              supabase.removeChannel(existing)
-            }
-          } catch {}
-          try {
-            if (supabase.realtime && Array.isArray(supabase.realtime.channels)) {
-              supabase.realtime.channels = supabase.realtime.channels.filter((c) => c !== existing)
-            }
-          } catch {}
-          try {
-            if (supabase.realtime && typeof supabase.realtime._remove === 'function') {
-              supabase.realtime._remove(existing)
-            }
-          } catch {}
-          try {
-            if (typeof existing.teardown === 'function') {
-              existing.teardown()
-            }
-          } catch {}
-        }
-      })
-    }
-
-    let channel = null
-    let invChannel = null
-
-    try {
-      channel = supabase
-        .channel('pos-orders')
-        .on(
+    const channel = createSafeRealtimeChannel(
+      supabase,
+      'pos-orders',
+      (ch) => {
+        ch.on(
           'postgres_changes',
           {
             event: '*',
@@ -136,11 +103,14 @@ export default function POSPage() {
             }, 300)
           }
         )
-        .subscribe()
+      }
+    )
 
-      invChannel = supabase
-        .channel('pos-inventory-realtime')
-        .on(
+    const invChannel = createSafeRealtimeChannel(
+      supabase,
+      'pos-inventory-realtime',
+      (ch) => {
+        ch.on(
           'postgres_changes',
           {
             event: '*',
@@ -151,19 +121,17 @@ export default function POSPage() {
             loadProducts()
           }
         )
-        .subscribe()
-    } catch (realtimeErr) {
-      console.warn('[PosPage] Realtime subscription error (graceful fallback):', realtimeErr)
-    }
+      }
+    )
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
-      if (channel) {
+      if (channel && typeof supabase.removeChannel === 'function') {
         try {
           supabase.removeChannel(channel)
         } catch {}
       }
-      if (invChannel) {
+      if (invChannel && typeof supabase.removeChannel === 'function') {
         try {
           supabase.removeChannel(invChannel)
         } catch {}

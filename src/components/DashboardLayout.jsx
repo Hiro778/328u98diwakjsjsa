@@ -25,9 +25,7 @@ export default function DashboardLayout() {
   const brandHeader = (
     <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-5 bg-surface">
       <Link to="/" className="flex items-center gap-2.5 group">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white shadow-xs group-hover:scale-102 transition-transform">
-          <span className="text-xs font-black tracking-tight">{platformName.slice(0, 2).toUpperCase()}</span>
-        </div>
+        <img src="/brand-logo.png" alt={platformName} className="h-9 w-9 object-contain shrink-0 group-hover:scale-102 transition-transform" />
         <div>
           <span className="block text-sm font-bold text-text-primary leading-none">{platformName}</span>
           <span className="block text-[10px] font-medium text-text-muted mt-1 leading-none">OS UMKM Modern</span>
@@ -72,9 +70,7 @@ export default function DashboardLayout() {
             >
               <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-5">
                 <Link to="/" className="flex items-center gap-2.5">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white">
-                    <span className="text-xs font-black tracking-tight">BS</span>
-                  </div>
+                  <img src="/brand-logo.png" alt="BisnisSehat" className="h-9 w-9 object-contain shrink-0" />
                   <div>
                     <span className="block text-sm font-bold text-text-primary leading-none">BisnisSehat</span>
                     <span className="block text-[10px] font-medium text-text-muted mt-1 leading-none">OS UMKM Modern</span>

@@ -66,8 +66,8 @@ describe('WhatsApp Bot Persistent Lifecycle & Architecture Audit (bot.md)', () =
   })
 
   it('VALIDATION 9: Session persistence configuration exists for PM2 and systemd', () => {
-    assert.ok(existsSync(new URL('../../whatsapp-connector/ecosystem.config.cjs', import.meta.url).pathname))
-    assert.ok(existsSync(new URL('../../whatsapp-connector/whatsapp-connector.service', import.meta.url).pathname))
+    assert.ok(existsSync(new URL('../../whatsapp-connector/ecosystem.config.cjs', import.meta.url)))
+    assert.ok(existsSync(new URL('../../whatsapp-connector/whatsapp-connector.service', import.meta.url)))
   })
 
   it('VALIDATION 10: /hai greeting and interactive mode selection process correctly', async () => {

@@ -130,7 +130,7 @@ const ADMIN_NAV_ITEMS = [
 ]
 
 export default function AdminLayout() {
-  const { profile, signOut } = useAuth()
+  const { profile, signOut, isLoggingOut } = useAuth()
   const { role, isSuperAdmin } = useAdminAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -144,9 +144,7 @@ export default function AdminLayout() {
         {/* Brand Header */}
         <div className="h-16 flex items-center justify-between px-6 border-b border-[#1F2937]">
           <Link to="/admin" className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center font-black text-black text-sm">
-              BS
-            </div>
+            <img src="/brand-logo.png" alt="BisnisSehat" className="w-8 h-8 object-contain shrink-0" />
             <div>
               <span className="block font-bold text-sm tracking-wide text-white">BisnisSehat Admin</span>
               <span className="block text-[10px] uppercase tracking-wider text-emerald-400 font-semibold">Control Center</span>
@@ -210,13 +208,14 @@ export default function AdminLayout() {
             Kembali ke App Utama
           </Link>
           <button
+            disabled={isLoggingOut}
             onClick={() => signOut()}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors text-left"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-50 transition-colors text-left"
           >
             <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            Keluar Sesi
+            {isLoggingOut ? 'Sedang keluar...' : 'Keluar Sesi'}
           </button>
         </div>
       </aside>
@@ -299,9 +298,7 @@ export default function AdminLayout() {
             <div className="relative w-64 max-w-[calc(100vw-48px)] bg-[#111827] border-r border-[#1F2937] flex flex-col h-full z-10 pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
               <div className="h-16 flex items-center justify-between px-6 border-b border-[#1F2937]">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center font-black text-black text-sm">
-                    BS
-                  </div>
+                  <img src="/brand-logo.png" alt="BisnisSehat" className="w-8 h-8 object-contain shrink-0" />
                   <span className="font-bold text-sm text-white">BisnisSehat Admin</span>
                 </div>
                 <button
@@ -368,16 +365,17 @@ export default function AdminLayout() {
                   Kembali ke App Utama
                 </Link>
                 <button
-                  onClick={() => {
+                  disabled={isLoggingOut}
+                  onClick={async () => {
                     setMobileMenuOpen(false)
-                    signOut()
+                    await signOut()
                   }}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 text-left"
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-50 text-left"
                 >
                   <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                   </svg>
-                  Keluar Sesi
+                  {isLoggingOut ? 'Sedang keluar...' : 'Keluar Sesi'}
                 </button>
               </div>
             </div>

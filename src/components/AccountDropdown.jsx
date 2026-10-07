@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { getPlanDisplay } from '../data/categories'
 
 export default function AccountDropdown() {
-  const { profile, subscription, signOut } = useAuth()
+  const { profile, subscription, signOut, isLoggingOut } = useAuth()
   const [open, setOpen] = useState(false)
   const [avatarError, setAvatarError] = useState(false)
   const ref = useRef(null)
@@ -136,13 +136,20 @@ export default function AccountDropdown() {
             {/* Sign out */}
             <div className="p-1.5">
               <button
-                onClick={() => { signOut(); setOpen(false) }}
-                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-danger hover:bg-danger/10 transition-colors text-left"
+                disabled={isLoggingOut}
+                onClick={async () => {
+                  try {
+                    await signOut()
+                  } finally {
+                    setOpen(false)
+                  }
+                }}
+                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-danger hover:bg-danger/10 disabled:opacity-50 transition-colors text-left"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
-                Keluar
+                {isLoggingOut ? 'Sedang keluar...' : 'Keluar'}
               </button>
             </div>
           </motion.div>

@@ -198,9 +198,7 @@ export default function PricingPage() {
           {/* Brand Header */}
           <div className="mb-8 text-center">
             <Link to="/" className="inline-flex items-center justify-center gap-2.5">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/20 border border-primary/30 shadow-sm text-primary">
-                <span className="text-base font-extrabold text-primary">BS</span>
-              </div>
+              <img src="/brand-logo.png" alt="BisnisSehat" className="h-11 w-11 object-contain shrink-0" />
               <span className="text-xl font-black text-text-primary tracking-tight">BisnisSehat</span>
             </Link>
             <h1 className="mt-3 text-2xl sm:text-3xl font-extrabold text-text-primary tracking-tight">

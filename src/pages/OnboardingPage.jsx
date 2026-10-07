@@ -96,9 +96,7 @@ export default function OnboardingPage() {
       >
         {/* Brand */}
         <div className="mb-8 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-navy-600">
-            <span className="text-lg font-extrabold text-white">BS</span>
-          </div>
+          <img src="/brand-logo.png" alt="BisnisSehat" className="mx-auto h-12 w-12 object-contain" />
           <h1 className="mt-4 text-2xl font-extrabold text-navy-700">
             Selamat datang di BisnisSehat
           </h1>

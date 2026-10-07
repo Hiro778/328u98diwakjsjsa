@@ -97,7 +97,7 @@ export default function BusinessControl() {
             <span className="text-warm-400">bisnis lo.</span>
           </h2>
           <p className="mt-4 text-lg text-text-secondary">
-            Semua aspek bisnis — dari keuangan sampai ekspor — terhubung dalam satu panel yang rapi.
+            Semua aspek bisnis — dari keuangan, penjualan, stok, hingga operasional — terhubung dalam satu panel yang rapi.
           </p>
         </motion.div>
 

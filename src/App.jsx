@@ -6,6 +6,8 @@ import { AuthProvider } from './context/AuthContext'
 import { SettingsProvider } from './context/SettingsContext'
 import LandingPage from './pages/LandingPage'
 import AuthPage from './pages/AuthPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import AuthCallbackPage from './pages/AuthCallbackPage'
 import OnboardingPage from './pages/OnboardingPage'
 import PricingPage from './pages/PricingPage'
@@ -97,6 +99,16 @@ const router = createBrowserRouter([
   {
     path: '/auth',
     element: <AuthPage />,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: '/auth/forgot-password',
+    element: <ForgotPasswordPage />,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: '/auth/reset-password',
+    element: <ResetPasswordPage />,
     errorElement: <RouteErrorBoundary />,
   },
   {

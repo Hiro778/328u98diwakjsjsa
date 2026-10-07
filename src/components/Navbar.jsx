@@ -11,7 +11,7 @@ const NAV_LINKS = [
 ]
 
 export default function Navbar() {
-  const { user, profile, isAuthenticated, signOut } = useAuth()
+  const { user, profile, isAuthenticated, signOut, isLoggingOut } = useAuth()
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const { scrollY } = useScroll()
@@ -45,10 +45,8 @@ export default function Navbar() {
 
       <div className="relative z-10 mx-auto flex h-full max-w-7xl items-center justify-between px-5 sm:px-8">
         {/* Brand */}
-        <a href="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-600">
-            <span className="text-sm font-extrabold text-white">BS</span>
-          </div>
+        <a href="/" className="flex items-center gap-2.5">
+          <img src="/brand-logo.png" alt="BisnisSehat" className="h-9 w-9 object-contain shrink-0" />
           <span className="text-lg font-bold tracking-tight text-navy-700">
             BisnisSehat
           </span>
@@ -166,10 +164,17 @@ export default function Navbar() {
                     Dashboard
                   </Link>
                   <button
-                    onClick={() => { signOut(); setMobileOpen(false) }}
-                    className="rounded-lg px-4 py-2.5 text-sm font-medium text-text-muted"
+                    disabled={isLoggingOut}
+                    onClick={async () => {
+                      try {
+                        await signOut()
+                      } finally {
+                        setMobileOpen(false)
+                      }
+                    }}
+                    className="rounded-lg px-4 py-2.5 text-sm font-medium text-text-muted disabled:opacity-50"
                   >
-                    Keluar
+                    {isLoggingOut ? 'Sedang keluar...' : 'Keluar'}
                   </button>
                 </>
               ) : (

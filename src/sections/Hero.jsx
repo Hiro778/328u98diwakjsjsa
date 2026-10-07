@@ -300,8 +300,7 @@ export default function Hero() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
           >
-            Kelola keuangan, stok, penjualan, legalitas, sampai ekspor dalam
-            satu tempat.
+            Bantu UMKM mengelola keuangan, penjualan, stok, operasional, dan mengambil keputusan bisnis dengan tools dan AI.
           </motion.p>
 
           {/* CTAs */}
