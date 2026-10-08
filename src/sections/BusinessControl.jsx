@@ -57,14 +57,14 @@ const miniCards = [
     ),
   },
   {
-    label: 'Ekspor',
-    value: '3 pasar',
-    sub: 'Active export markets',
+    label: 'Analisis',
+    value: 'Optimal',
+    sub: 'Performa bisnis sehat',
     color: '#6366F1',
     icon: (
       <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-        <circle cx="9" cy="9" r="6" stroke="#6366F1" strokeWidth="1.5" />
-        <path d="M3 9h12M9 3c2 2 2 4 0 6s-2 4 0 6" stroke="#6366F1" strokeWidth="1.2" />
+        <path d="M3 13.5l3.5-3.5 3 3 5.5-6.5" stroke="#6366F1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M12 6.5h3v3" stroke="#6366F1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
   },
