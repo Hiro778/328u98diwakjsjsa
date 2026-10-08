@@ -6,11 +6,12 @@
 // - Opens HelpCenterModal with search, full tool guides, usage rules, and bug reporting
 // - Ergonomic floating circular button (Escape to close, outside click dismissal, accessible dialog)
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePlatformSettings } from '../hooks/usePlatformSettings'
-import HelpCenterModal from './help/HelpCenterModal'
-import BugReportModal from './help/BugReportModal'
+
+const HelpCenterModal = lazy(() => import('./help/HelpCenterModal'))
+const BugReportModal = lazy(() => import('./help/BugReportModal'))
 
 export default function CustomerSupportWidget() {
   const { supportPhone, supportHours } = usePlatformSettings()
@@ -285,17 +286,25 @@ export default function CustomerSupportWidget() {
       </div>
 
       {/* ── Help Center Modal Dialog ── */}
-      <HelpCenterModal
-        isOpen={isHelpCenterOpen}
-        onClose={() => setIsHelpCenterOpen(false)}
-        initialQuery={initialSearchQuery}
-      />
+      {isHelpCenterOpen && (
+        <Suspense fallback={null}>
+          <HelpCenterModal
+            isOpen={isHelpCenterOpen}
+            onClose={() => setIsHelpCenterOpen(false)}
+            initialQuery={initialSearchQuery}
+          />
+        </Suspense>
+      )}
 
       {/* ── Native Bug Report Modal Dialog ── */}
-      <BugReportModal
-        isOpen={isBugReportOpen}
-        onClose={() => setIsBugReportOpen(false)}
-      />
+      {isBugReportOpen && (
+        <Suspense fallback={null}>
+          <BugReportModal
+            isOpen={isBugReportOpen}
+            onClose={() => setIsBugReportOpen(false)}
+          />
+        </Suspense>
+      )}
     </>
   )
 }

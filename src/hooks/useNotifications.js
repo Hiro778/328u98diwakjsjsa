@@ -37,21 +37,24 @@ export function useNotifications() {
 
     if (!businessId) return
 
-    // Background scheduled sync & Web Push setup (graceful, non-blocking)
+    // Background scheduled sync & Web Push setup (graceful, non-blocking, deferred)
+    let syncTimer = null
     if (!isSyncingRef.current) {
-      isSyncingRef.current = true
-      syncDueNotifications(businessId)
-        .then(() => loadData())
-        .catch((err) => console.warn('[useNotifications] Initial sync caught:', err))
-        .finally(() => {
-          isSyncingRef.current = false
-        })
+      syncTimer = setTimeout(() => {
+        isSyncingRef.current = true
+        syncDueNotifications(businessId)
+          .then(() => loadData())
+          .catch((err) => console.warn('[useNotifications] Initial sync caught:', err))
+          .finally(() => {
+            isSyncingRef.current = false
+          })
 
-      if (userId) {
-        subscribeToPush(businessId, userId).catch((err) =>
-          console.warn('[useNotifications] Web Push subscription caught:', err)
-        )
-      }
+        if (userId) {
+          subscribeToPush(businessId, userId).catch((err) =>
+            console.warn('[useNotifications] Web Push subscription caught:', err)
+          )
+        }
+      }, 1500)
     }
 
     // Subscribe to Realtime Postgres changes
@@ -73,6 +76,7 @@ export function useNotifications() {
     })
 
     return () => {
+      if (syncTimer) clearTimeout(syncTimer)
       if (channel) {
         if (typeof supabase.removeChannel === 'function') {
           supabase.removeChannel(channel)

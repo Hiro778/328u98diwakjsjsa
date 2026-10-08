@@ -230,3 +230,46 @@ export function aggregateSalesMetrics(orders = []) {
     productSalesMap,
   }
 }
+
+/**
+ * Fetch data penjualan & inventori aktual untuk tenant tertentu
+ */
+export async function fetchBusinessSalesData(businessId, { onlyFinal = true } = {}) {
+  if (!businessId) {
+    throw new Error('Tenant isolation: business_id wajib disertakan.')
+  }
+
+  // 1. Ambil orders dan order_items via canonical service (Source of Truth)
+  const { orders, error: ordersError } = await fetchCanonicalOrders(businessId, { onlyFinal })
+
+  if (ordersError) {
+    console.error('[canonicalSalesService] Fetch orders error:', ordersError)
+    throw new Error(`Gagal mengambil data pesanan: ${ordersError.message}`)
+  }
+
+  // 2. Ambil inventori untuk deteksi stok menipis
+  const { data: inventory } = await supabase
+    .from('inventory')
+    .select(`
+      id,
+      quantity,
+      min_stock,
+      location,
+      product:products (
+        id,
+        name,
+        price,
+        business_id
+      )
+    `)
+
+  // Filter inventori milik business_id secara aman
+  const tenantInventory = (inventory || []).filter(
+    (item) => item.product && item.product.business_id === businessId
+  )
+
+  return {
+    orders: orders || [],
+    inventory: tenantInventory,
+  }
+}

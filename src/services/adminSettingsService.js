@@ -159,6 +159,7 @@ export async function getSetting(key) {
 export function invalidatePublicSettingsCache() {
   cachedPublicSettings = null
   cacheTimestamp = 0
+  publicSettingsPromise = null
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('platform-settings-invalidated'))
   }
@@ -243,6 +244,7 @@ export const DEFAULT_PUBLIC_SETTINGS = {
 
 let cachedPublicSettings = null
 let cacheTimestamp = 0
+let publicSettingsPromise = null
 const CACHE_TTL_MS = 30000
 
 /**
@@ -255,22 +257,32 @@ export async function fetchPublicPlatformSettings(forceRefresh = false) {
     return cachedPublicSettings
   }
 
-  try {
-    const { data, error } = await supabase.rpc('get_public_platform_settings')
-    if (error) {
-      console.warn('[adminSettingsService] Could not fetch public settings, using defaults/cached:', error.message)
+  if (!forceRefresh && publicSettingsPromise) {
+    return publicSettingsPromise
+  }
+
+  publicSettingsPromise = (async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_public_platform_settings')
+      if (error) {
+        console.warn('[adminSettingsService] Could not fetch public settings, using defaults/cached:', error.message)
+        if (cachedPublicSettings) return cachedPublicSettings
+        return DEFAULT_PUBLIC_SETTINGS
+      }
+      const merged = { ...DEFAULT_PUBLIC_SETTINGS, ...(data || {}) }
+      cachedPublicSettings = merged
+      cacheTimestamp = Date.now()
+      return merged
+    } catch (err) {
+      console.warn('[adminSettingsService] Error loading public settings, using defaults/cached:', err)
       if (cachedPublicSettings) return cachedPublicSettings
       return DEFAULT_PUBLIC_SETTINGS
+    } finally {
+      publicSettingsPromise = null
     }
-    const merged = { ...DEFAULT_PUBLIC_SETTINGS, ...(data || {}) }
-    cachedPublicSettings = merged
-    cacheTimestamp = now
-    return merged
-  } catch (err) {
-    console.warn('[adminSettingsService] Error loading public settings, using defaults/cached:', err)
-    if (cachedPublicSettings) return cachedPublicSettings
-    return DEFAULT_PUBLIC_SETTINGS
-  }
+  })()
+
+  return publicSettingsPromise
 }
 
 

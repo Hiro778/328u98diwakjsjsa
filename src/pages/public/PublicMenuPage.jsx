@@ -79,6 +79,36 @@ export default function PublicMenuPage() {
     return () => { isMounted = false }
   }, [])
 
+  // Sync category from URL search params or hash (#category-..., #kategori-...)
+  useEffect(() => {
+    function resolveCategoryFromUrl() {
+      if (typeof window === 'undefined') return
+      const catParam = searchParams.get('category')
+      const hash = window.location.hash || ''
+      const hashMatch = hash.match(/^#(?:category|kategori)-(.+)$/i)
+      const target = catParam || (hashMatch ? decodeURIComponent(hashMatch[1]) : null)
+
+      if (target && categories.length > 0) {
+        const found = categories.find((c) => {
+          const cName = typeof c === 'string' ? c : c.name
+          const cId = typeof c === 'object' ? c.id : ''
+          return (
+            (cName && cName.toLowerCase() === target.toLowerCase()) ||
+            (cId && cId.toLowerCase() === target.toLowerCase())
+          )
+        })
+        if (found) {
+          const resolvedName = typeof found === 'string' ? found : found.name
+          setActiveCategory(resolvedName)
+        }
+      }
+    }
+
+    resolveCategoryFromUrl()
+    window.addEventListener('hashchange', resolveCategoryFromUrl)
+    return () => window.removeEventListener('hashchange', resolveCategoryFromUrl)
+  }, [categories, searchParams])
+
   // Sync cart with localStorage for seamless navigation between list and detail
   useEffect(() => {
     function loadSavedCart() {

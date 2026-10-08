@@ -4,27 +4,29 @@ import { createBrowserRouter, RouterProvider, Navigate } from 'react-router'
 import { ThemeProvider } from './context/ThemeContext'
 import { AuthProvider } from './context/AuthContext'
 import { SettingsProvider } from './context/SettingsContext'
-import LandingPage from './pages/LandingPage'
-import AuthPage from './pages/AuthPage'
-import ForgotPasswordPage from './pages/ForgotPasswordPage'
-import ResetPasswordPage from './pages/ResetPasswordPage'
 import AuthCallbackPage from './pages/AuthCallbackPage'
-import OnboardingPage from './pages/OnboardingPage'
-import PricingPage from './pages/PricingPage'
-import DashboardLayout from './components/DashboardLayout'
 import RequireAuth from './components/RequireAuth'
 import RequireAdmin from './components/RequireAdmin'
 import AdminLayout from './components/admin/AdminLayout'
 import LoadingScreen from './components/LoadingScreen'
-import ActivateCreditPage from './pages/ActivateCreditPage'
-import TentangKamiPage from './pages/TentangKamiPage'
 import RequireOnboarding from './components/RequireOnboarding'
 import RequireSubscription from './components/RequireSubscription'
 import MaintenanceGate from './components/MaintenanceGate'
-import NotFoundPage from './pages/NotFoundPage'
-import PublicMenuPage from './pages/public/PublicMenuPage'
-import PublicProductDetailPage from './pages/public/PublicProductDetailPage'
 import RouteErrorBoundary from './components/RouteErrorBoundary'
+
+// ── Lazy-loaded Core Pages & Layouts ──
+const LandingPage = lazy(() => import('./pages/LandingPage'))
+const AuthPage = lazy(() => import('./pages/AuthPage'))
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'))
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
+const PricingPage = lazy(() => import('./pages/PricingPage'))
+const DashboardLayout = lazy(() => import('./components/DashboardLayout'))
+const ActivateCreditPage = lazy(() => import('./pages/ActivateCreditPage'))
+const TentangKamiPage = lazy(() => import('./pages/TentangKamiPage'))
+const PublicMenuPage = lazy(() => import('./pages/public/PublicMenuPage'))
+const PublicProductDetailPage = lazy(() => import('./pages/public/PublicProductDetailPage'))
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
 // ── Lazy-loaded Admin Pages ──
 const AdminDashboardOverview = lazy(() => import('./pages/admin/AdminDashboardOverview'))
@@ -98,17 +100,29 @@ const router = createBrowserRouter([
   // Authentication infrastructure required for admin recovery (@gas.md)
   {
     path: '/auth',
-    element: <AuthPage />,
+    element: (
+      <Suspense fallback={<LoadingScreen />}>
+        <AuthPage />
+      </Suspense>
+    ),
     errorElement: <RouteErrorBoundary />,
   },
   {
     path: '/auth/forgot-password',
-    element: <ForgotPasswordPage />,
+    element: (
+      <Suspense fallback={<LoadingScreen />}>
+        <ForgotPasswordPage />
+      </Suspense>
+    ),
     errorElement: <RouteErrorBoundary />,
   },
   {
     path: '/auth/reset-password',
-    element: <ResetPasswordPage />,
+    element: (
+      <Suspense fallback={<LoadingScreen />}>
+        <ResetPasswordPage />
+      </Suspense>
+    ),
     errorElement: <RouteErrorBoundary />,
   },
   {
@@ -165,15 +179,27 @@ const router = createBrowserRouter([
     children: [
       {
         path: '/',
-        element: <LandingPage />,
+        element: (
+          <Suspense fallback={<LoadingScreen />}>
+            <LandingPage />
+          </Suspense>
+        ),
       },
       {
         path: '/tentang-kami',
-        element: <TentangKamiPage />,
+        element: (
+          <Suspense fallback={<LoadingScreen />}>
+            <TentangKamiPage />
+          </Suspense>
+        ),
       },
       {
         path: '/activate-credit',
-        element: <ActivateCreditPage />,
+        element: (
+          <Suspense fallback={<LoadingScreen />}>
+            <ActivateCreditPage />
+          </Suspense>
+        ),
       },
       {
         path: '/test-tools-view',
@@ -188,26 +214,48 @@ const router = createBrowserRouter([
       // Public menu (no auth required, but gated during maintenance)
       {
         path: '/menu/:businessId',
-        element: <PublicMenuPage />,
+        element: (
+          <Suspense fallback={<LoadingScreen />}>
+            <PublicMenuPage />
+          </Suspense>
+        ),
         errorElement: <RouteErrorBoundary />,
       },
       {
         path: '/menu/:businessId/product/:productId',
-        element: <PublicProductDetailPage />,
+        element: (
+          <Suspense fallback={<LoadingScreen />}>
+            <PublicProductDetailPage />
+          </Suspense>
+        ),
         errorElement: <RouteErrorBoundary />,
       },
       {
         path: '/onboarding',
         element: <RequireAuth />,
         children: [
-          { index: true, element: <OnboardingPage /> },
+          {
+            index: true,
+            element: (
+              <Suspense fallback={<LoadingScreen />}>
+                <OnboardingPage />
+              </Suspense>
+            ),
+          },
         ],
       },
       {
         path: '/pricing',
         element: <RequireAuth />,
         children: [
-          { index: true, element: <PricingPage /> },
+          {
+            index: true,
+            element: (
+              <Suspense fallback={<LoadingScreen />}>
+                <PricingPage />
+              </Suspense>
+            ),
+          },
         ],
       },
       {
@@ -218,7 +266,11 @@ const router = createBrowserRouter([
         element: <RequireOnboarding />,
         children: [
           {
-            element: <DashboardLayout />,
+            element: (
+              <Suspense fallback={<LoadingScreen />}>
+                <DashboardLayout />
+              </Suspense>
+            ),
             children: [
               { index: true, element: <DashboardHome /> },
               { path: 'profile', element: <ProfilePage /> },
@@ -343,7 +395,11 @@ const router = createBrowserRouter([
   },
   {
     path: '*',
-    element: <NotFoundPage />,
+    element: (
+      <Suspense fallback={<LoadingScreen />}>
+        <NotFoundPage />
+      </Suspense>
+    ),
   },
 ])
 

@@ -40,24 +40,28 @@ export function AuthProvider({ children }) {
       if (loadingUserRef.current !== profileId) return
 
       setBusiness(data)
+      setBusinessLoaded(true)
+
       if (data?.id) {
-        try {
-          const { data: freeData } = await supabase
-            .from('creative_free_usage')
-            .select('id')
-            .eq('business_id', data.id)
-            .maybeSingle()
-          if (loadingUserRef.current !== profileId) return
-          setHasUsedFreeAi(Boolean(freeData))
-        } catch {
-          // Ignore
-        }
+        // Asynchronously check creative free usage without blocking business load
+        supabase
+          .from('creative_free_usage')
+          .select('id')
+          .eq('business_id', data.id)
+          .maybeSingle()
+          .then(({ data: freeData }) => {
+            if (loadingUserRef.current === profileId) {
+              setHasUsedFreeAi(Boolean(freeData))
+            }
+          })
+          .catch(() => {})
       }
     } catch {
       // Query failed — continue without business
-    }
-    if (loadingUserRef.current === profileId) {
-      setBusinessLoaded(true)
+    } finally {
+      if (loadingUserRef.current === profileId) {
+        setBusinessLoaded(true)
+      }
     }
   }
 
@@ -65,13 +69,24 @@ export function AuthProvider({ children }) {
     let sub = null
     let hasPaid = false
     try {
-      const { data: subRows, error: subErr } = await supabase
+      // Parallelize subscriptions and verified payments checks
+      const subPromise = supabase
         .from('subscriptions')
         .select('*')
         .eq('profile_id', profileId)
 
+      const paymentPromise = supabase
+        .from('subscription_payments')
+        .select('id')
+        .eq('profile_id', profileId)
+        .in('payment_status', ['paid', 'settlement'])
+        .limit(1)
+
+      const [subResult, paymentResult] = await Promise.all([subPromise, paymentPromise])
+
       if (loadingUserRef.current !== profileId) return null
 
+      const { data: subRows, error: subErr } = subResult
       if (subErr) {
         console.error('[AuthContext] subscription query error:', subErr)
         setSubscriptionError(subErr)
@@ -83,22 +98,11 @@ export function AuthProvider({ children }) {
         sub = resolveCanonicalSubscription(subRows)
       }
 
-      // Query database for verified payment records (source of truth for paid Pro)
-      try {
-        const { data: paymentData, error: paymentErr } = await supabase
-          .from('subscription_payments')
-          .select('id')
-          .eq('profile_id', profileId)
-          .in('payment_status', ['paid', 'settlement'])
-          .limit(1)
-
-        if (paymentErr) {
-          console.warn('[AuthContext] subscription_payments check error:', paymentErr)
-        } else if (paymentData && paymentData.length > 0) {
-          hasPaid = true
-        }
-      } catch (pErr) {
-        console.warn('[AuthContext] subscription_payments check exception:', pErr)
+      const { data: paymentData, error: paymentErr } = paymentResult
+      if (paymentErr) {
+        console.warn('[AuthContext] subscription_payments check error:', paymentErr)
+      } else if (paymentData && paymentData.length > 0) {
+        hasPaid = true
       }
 
       if (loadingUserRef.current !== profileId) return null
@@ -123,8 +127,9 @@ export function AuthProvider({ children }) {
     if (!authUser) return
     loadingUserRef.current = authUser.id
 
-    // Start subscription load immediately in parallel using authUser.id
+    // Start subscription and business loads immediately in parallel using authUser.id
     const subPromise = loadSubscription(authUser.id)
+    const businessPromise = loadBusiness(authUser.id)
 
     let prof = null
 
@@ -183,6 +188,9 @@ export function AuthProvider({ children }) {
     setProfile(prof)
     setProfileLoaded(true)
 
+    // Wait for parallel subscription and business loads to complete
+    await Promise.all([subPromise, businessPromise])
+
     // Strict Security Hardening: Banned or suspended user must have ZERO app access
     if (prof?.status === 'banned' || prof?.status === 'suspended' || prof?.status === 'deleted') {
       console.warn('[AuthContext] BANNED/SUSPENDED USER DETECTED. Zero access enforcement initiated.')
@@ -192,19 +200,6 @@ export function AuthProvider({ children }) {
       setSubscriptionLoaded(true)
       return
     }
-
-    // Chain: load business after profile, wait for subPromise
-    if (prof) {
-      await Promise.all([
-        loadBusiness(prof.id),
-        subPromise,
-      ])
-    } else {
-      if (loadingUserRef.current === authUser.id) {
-        setBusinessLoaded(true)
-      }
-      await subPromise
-    }
   }
 
   useEffect(() => {
@@ -212,9 +207,26 @@ export function AuthProvider({ children }) {
 
     async function initAuth() {
       try {
+        // Fast path: check whether localStorage has a stored Supabase token
+        const hasStoredToken = (() => {
+          try {
+            if (typeof window === 'undefined' || !window.localStorage) return false
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i)
+              if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                const item = localStorage.getItem(key)
+                return Boolean(item && item !== 'null' && item !== '{}')
+              }
+            }
+          } catch {
+            return false
+          }
+          return false
+        })()
+
         // 1. Initial retrieval of session from storage / memory with safety timeout (prevents deadlock)
         const getSessionPromise = supabase.auth.getSession()
-        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ data: { session: null } }), 4000))
+        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ data: { session: null } }), 3000))
         const { data: { session } } = await Promise.race([getSessionPromise, timeoutPromise])
 
         if (!isMounted) return
@@ -228,23 +240,25 @@ export function AuthProvider({ children }) {
           return
         }
 
-        // 2. If getSession returned null/error, attempt refreshSession fallback
+        // 2. Only attempt refreshSession fallback if a stored token is present
         // (handles cases where token expired while user was paying on Midtrans)
-        try {
-          const refreshPromise = supabase.auth.refreshSession()
-          const refreshTimeout = new Promise((resolve) => setTimeout(() => resolve({ data: { session: null } }), 4000))
-          const { data: refreshData } = await Promise.race([refreshPromise, refreshTimeout])
-          if (!isMounted) return
-          if (refreshData?.session?.user) {
-            setUser(refreshData.session.user)
-            setAuthLoading(false)
-            if (loadingUserRef.current !== refreshData.session.user.id) {
-              await loadOrCreateProfile(refreshData.session.user)
+        if (hasStoredToken) {
+          try {
+            const refreshPromise = supabase.auth.refreshSession()
+            const refreshTimeout = new Promise((resolve) => setTimeout(() => resolve({ data: { session: null } }), 3000))
+            const { data: refreshData } = await Promise.race([refreshPromise, refreshTimeout])
+            if (!isMounted) return
+            if (refreshData?.session?.user) {
+              setUser(refreshData.session.user)
+              setAuthLoading(false)
+              if (loadingUserRef.current !== refreshData.session.user.id) {
+                await loadOrCreateProfile(refreshData.session.user)
+              }
+              return
             }
-            return
+          } catch {
+            // refreshSession failed or not possible
           }
-        } catch {
-          // refreshSession failed or not possible
         }
 
         // 3. Truly unauthenticated
@@ -370,7 +384,7 @@ export function AuthProvider({ children }) {
       }
     )
 
-    // 2. Heartbeat polling check (every 4 seconds) to guarantee lockout even if websocket is closed
+    // 2. Heartbeat polling check (fallback safety net every 30s) to guarantee lockout even if websocket disconnects
     const heartbeatTimer = setInterval(async () => {
       if (loadingUserRef.current !== userId) return
       try {
@@ -398,7 +412,7 @@ export function AuthProvider({ children }) {
       } catch {
         // Ignore network hiccups
       }
-    }, 4000)
+    }, 30000)
 
     return () => {
       clearInterval(heartbeatTimer)

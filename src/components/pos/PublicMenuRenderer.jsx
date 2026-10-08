@@ -7,11 +7,21 @@ import {
   sanitizeSocialUrl,
   getProductImageUrl,
 } from '../../services/qrMenuDesignService.js'
+import { resolveBannerPromotion } from '../../services/bannerPromotionService.js'
+import { resolveBannerCtaUrl } from '../../services/bannerCtaService.js'
 
 // ─────────────────────────────────────────────────────────────
 // Promotional Hero Banner / Carousel Component (ban.md)
 // ─────────────────────────────────────────────────────────────
-function BannerCarousel({ banners = [], heightPreset = 'compact', overlayOpacity = 0 }) {
+function BannerCarousel({
+  banners = [],
+  heightPreset = 'compact',
+  overlayOpacity = 0,
+  products = [],
+  onSelectProduct = () => {},
+  isInteractive = true,
+  business = null,
+}) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
   const touchStartXRef = useRef(null)
@@ -95,7 +105,15 @@ function BannerCarousel({ banners = [], heightPreset = 'compact', overlayOpacity
     return 'object-center'
   }
 
-  const hasOverlayContent = Boolean(b.title || b.description || b.ctaText)
+  const promoInfo = resolveBannerPromotion(b, products)
+  const targetProduct =
+    promoInfo?.product ||
+    (b.ctaTarget?.type === 'product'
+      ? products.find((p) => String(p.id) === String(b.ctaTarget.id))
+      : b.targetId
+      ? products.find((p) => String(p.id) === String(b.targetId))
+      : null)
+  const hasOverlayContent = Boolean(b.title || b.description || b.ctaText || promoInfo)
   const overlay = Number(overlayOpacity || 0)
 
   return (
@@ -119,7 +137,12 @@ function BannerCarousel({ banners = [], heightPreset = 'compact', overlayOpacity
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25, ease: 'easeInOut' }}
-          className="absolute inset-0 h-full w-full"
+          onClick={() => {
+            if (targetProduct && isInteractive && onSelectProduct) {
+              onSelectProduct(targetProduct)
+            }
+          }}
+          className={`absolute inset-0 h-full w-full ${targetProduct ? 'cursor-pointer' : ''}`}
         >
           <img
             src={b.imageUrl || b.image_url}
@@ -151,12 +174,58 @@ function BannerCarousel({ banners = [], heightPreset = 'compact', overlayOpacity
                   {b.description}
                 </p>
               )}
+
+              {/* Promotional Price Display */}
+              {promoInfo && (
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  {promoInfo.enabled ? (
+                    <>
+                      {promoInfo.basePrice > 0 && promoInfo.promoPrice < promoInfo.basePrice && (
+                        <span className="text-white/70 text-[11px] sm:text-xs line-through tabular-nums">
+                          {formatCurrency(promoInfo.basePrice)}
+                        </span>
+                      )}
+                      <span className="text-emerald-400 text-xs sm:text-sm font-extrabold tabular-nums drop-shadow-xs">
+                        {formatCurrency(promoInfo.promoPrice)}
+                      </span>
+                      {promoInfo.discountBadge && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500 text-white shadow-2xs">
+                          {promoInfo.discountBadge}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    promoInfo.basePrice > 0 && (
+                      <span className="text-white text-xs sm:text-sm font-bold tabular-nums drop-shadow-xs">
+                        {formatCurrency(promoInfo.basePrice)}
+                      </span>
+                    )
+                  )}
+                </div>
+              )}
+
               {b.ctaText && (
                 <div className="mt-2">
-                  {b.ctaUrl ? (
+                  {targetProduct ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (isInteractive && onSelectProduct) {
+                          onSelectProduct(targetProduct)
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold rounded-lg bg-warm-400 hover:bg-warm-500 text-white shadow-xs transition active:scale-95 cursor-pointer"
+                    >
+                      <span>{b.ctaText}</span>
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                      </svg>
+                    </button>
+                  ) : (b.ctaUrl || b.ctaTarget) ? (
                     <a
-                      href={b.ctaUrl}
-                      target={b.ctaUrl.startsWith('http') ? '_blank' : undefined}
+                      href={resolveBannerCtaUrl(b, business?.id) || b.ctaUrl}
+                      target={(resolveBannerCtaUrl(b, business?.id) || b.ctaUrl || '').startsWith('http') ? '_blank' : undefined}
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold rounded-lg bg-warm-400 hover:bg-warm-500 text-white shadow-xs transition active:scale-95 cursor-pointer"
                     >
@@ -417,6 +486,10 @@ export default function PublicMenuRenderer({
               banners={banners}
               heightPreset={block.props?.height || 'compact'}
               overlayOpacity={block.props?.overlayOpacity}
+              products={products}
+              onSelectProduct={onSelectProduct}
+              isInteractive={isInteractive}
+              business={business}
             />
           </div>
         )
@@ -430,7 +503,7 @@ export default function PublicMenuRenderer({
         const uniqueCategories = Array.from(new Set(allCategories.filter(Boolean)))
 
         return (
-          <div key={block.id} className="px-4 py-3">
+          <div key={block.id} id="categories" className="px-4 py-3">
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
               {uniqueCategories.map((cat) => {
                 const isSelected = activeCategory === cat || (cat === 'all' && activeCategory === 'all')

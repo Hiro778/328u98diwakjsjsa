@@ -10,6 +10,15 @@ import useToast from '../../../hooks/useToast'
 import Toast from '../../../components/Toast'
 import BackButton from '../../../components/BackButton'
 import PublicMenuRenderer from '../../../components/pos/PublicMenuRenderer'
+import BannerCtaPicker from '../../../components/pos/BannerCtaPicker'
+import { resolveTargetFromRawUrl } from '../../../services/bannerCtaService'
+import { formatCurrency } from '../../../lib/orderNumber'
+import {
+  calculatePromoPrice,
+  validatePromotion,
+  formatPromoDiscountBadge,
+  resolveBannerPromotion,
+} from '../../../services/bannerPromotionService'
 import {
   getDesignSettings,
   saveDesignSettings,
@@ -290,7 +299,7 @@ export default function QRMenuDesignerPage() {
   }
 
   // Handle Save Banner (from Modal - qr.md)
-  async function handleSaveBanner({ title, description, ctaText, ctaUrl, imagePosition = 'center', file, existingUrl }) {
+  async function handleSaveBanner({ title, description, ctaText, ctaUrl, imagePosition = 'center', file, existingUrl, ctaTarget, promotion }) {
     if (!file && !existingUrl) {
       showToast('Harap pilih atau unggah gambar banner.', 'error')
       return
@@ -312,7 +321,17 @@ export default function QRMenuDesignerPage() {
         if (found) {
           updatedBanners = existingBanners.map((b) =>
             b.id === editingBanner.id
-              ? { ...b, imageUrl: finalUrl, title, description, ctaText, ctaUrl, imagePosition }
+              ? {
+                  ...b,
+                  imageUrl: finalUrl,
+                  title,
+                  description,
+                  ctaText,
+                  ctaUrl,
+                  ctaTarget: ctaTarget ? { ...ctaTarget, ...(promotion ? { promotion } : {}) } : null,
+                  imagePosition,
+                  promotion: promotion || b.promotion,
+                }
               : b
           )
         } else {
@@ -326,7 +345,9 @@ export default function QRMenuDesignerPage() {
               description,
               ctaText,
               ctaUrl,
+              ctaTarget: ctaTarget ? { ...ctaTarget, ...(promotion ? { promotion } : {}) } : null,
               imagePosition,
+              promotion,
             },
           ]
         }
@@ -338,7 +359,9 @@ export default function QRMenuDesignerPage() {
           description,
           ctaText,
           ctaUrl,
+          ctaTarget: ctaTarget ? { ...ctaTarget, ...(promotion ? { promotion } : {}) } : null,
           imagePosition,
+          promotion,
         }
         updatedBanners = [...existingBanners, newBanner]
       }
@@ -1094,6 +1117,7 @@ export default function QRMenuDesignerPage() {
               <BannerEditor
                 business={business}
                 layout={layout}
+                products={products}
                 updateSectionProps={updateSectionProps}
                 onOpenAddModal={() => {
                   setEditingBanner(null)
@@ -1220,6 +1244,10 @@ export default function QRMenuDesignerPage() {
         banner={editingBanner}
         onSave={handleSaveBanner}
         uploading={uploadingAsset === 'banner'}
+        business={business}
+        products={products}
+        categories={categories}
+        showToast={showToast}
       />
 
       {/* Social Link Modal (qr.md) */}
@@ -1309,6 +1337,7 @@ function BannerEditor({
   onOpenAddModal,
   onOpenEditModal,
   onDeleteBanner,
+  products = [],
 }) {
   const bannerSection = layout.find((s) => s.id === 'banner')
   const currentHeight = bannerSection?.props?.height || 'compact'
@@ -1409,38 +1438,57 @@ function BannerEditor({
         </div>
       ) : (
         <div className="space-y-3">
-          {banners.map((item, index) => (
-            <div
-              key={item.id || index}
-              className="rounded-xl border border-border bg-surface p-3 space-y-2.5 shadow-2xs transition-all hover:border-warm-300"
-            >
-              <div className="flex gap-3">
-                <img
-                  src={item.imageUrl}
-                  alt={item.title || 'Banner'}
-                  className="h-16 w-24 rounded-lg object-cover border shrink-0 bg-cream/40"
-                />
-                <div className="min-w-0 flex-1 flex flex-col justify-center">
-                  <h4 className="text-xs font-bold text-navy-700 truncate">
-                    {item.title || `Banner #${index + 1}`}
-                  </h4>
-                  {item.description && (
-                    <p className="text-[11px] text-text-muted line-clamp-1 mt-0.5">
-                      {item.description}
-                    </p>
-                  )}
-                  {item.ctaText && (
-                    <span className="text-[10px] text-warm-600 font-semibold mt-1 block">
-                      CTA: {item.ctaText}
-                    </span>
-                  )}
-                  {item.imagePosition && item.imagePosition !== 'center' && (
-                    <span className="text-[10px] text-text-muted mt-0.5 block">
-                      Fokus gambar: {item.imagePosition === 'top' ? 'Atas' : 'Bawah'}
-                    </span>
-                  )}
+          {banners.map((item, index) => {
+            const promo = resolveBannerPromotion(item, products)
+            return (
+              <div
+                key={item.id || index}
+                className="rounded-xl border border-border bg-surface p-3 space-y-2.5 shadow-2xs transition-all hover:border-warm-300"
+              >
+                <div className="flex gap-3">
+                  <img
+                    src={item.imageUrl}
+                    alt={item.title || 'Banner'}
+                    className="h-16 w-24 rounded-lg object-cover border shrink-0 bg-cream/40"
+                  />
+                  <div className="min-w-0 flex-1 flex flex-col justify-center">
+                    <h4 className="text-xs font-bold text-navy-700 truncate">
+                      {item.title || `Banner #${index + 1}`}
+                    </h4>
+                    {item.description && (
+                      <p className="text-[11px] text-text-muted line-clamp-1 mt-0.5">
+                        {item.description}
+                      </p>
+                    )}
+                    {item.ctaText && (
+                      <span className="text-[10px] text-warm-600 font-semibold mt-1 block">
+                        CTA: {item.ctaText}
+                      </span>
+                    )}
+                    {item.imagePosition && item.imagePosition !== 'center' && (
+                      <span className="text-[10px] text-text-muted mt-0.5 block">
+                        Fokus gambar: {item.imagePosition === 'top' ? 'Atas' : 'Bawah'}
+                      </span>
+                    )}
+                    {promo?.enabled && (
+                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                        {promo.discountBadge && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-700">
+                            {promo.discountBadge}
+                          </span>
+                        )}
+                        {promo.basePrice > 0 && promo.promoPrice < promo.basePrice && (
+                          <span className="text-[10px] text-text-muted line-through">
+                            {formatCurrency(promo.basePrice)}
+                          </span>
+                        )}
+                        <span className="text-[10px] font-extrabold text-emerald-600">
+                          {formatCurrency(promo.promoPrice)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
 
               {/* Actions: Reorder + Edit + Hapus */}
               <div className="flex items-center justify-between border-t border-border/60 pt-2">
@@ -1487,8 +1535,9 @@ function BannerEditor({
                 </div>
               </div>
             </div>
-          ))}
-        </div>
+          )
+        })}
+      </div>
       )}
     </div>
   )
@@ -1645,12 +1694,26 @@ function SocialLinksEditor({
 // Banner Modal Form (qr.md)
 // ─────────────────────────────────────────────────────────────
 
-function BannerModal({ isOpen, onClose, banner, onSave, uploading }) {
+function BannerModal({
+  isOpen,
+  onClose,
+  banner,
+  onSave,
+  uploading,
+  business,
+  products = [],
+  categories = [],
+  showToast,
+}) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [ctaText, setCtaText] = useState('')
   const [ctaUrl, setCtaUrl] = useState('')
+  const [ctaTarget, setCtaTarget] = useState(null)
   const [imagePosition, setImagePosition] = useState('center')
+  const [promoEnabled, setPromoEnabled] = useState(false)
+  const [discountType, setDiscountType] = useState('percentage')
+  const [discountValue, setDiscountValue] = useState('20')
   const [file, setFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState('')
   const fileInputRef = useRef(null)
@@ -1661,19 +1724,88 @@ function BannerModal({ isOpen, onClose, banner, onSave, uploading }) {
       setDescription(banner.description || '')
       setCtaText(banner.ctaText || '')
       setCtaUrl(banner.ctaUrl || '')
+      setCtaTarget(
+        banner.ctaTarget ||
+          resolveTargetFromRawUrl(banner.ctaUrl, {
+            products,
+            categories,
+            businessId: business?.id,
+          })
+      )
       setImagePosition(banner.imagePosition || 'center')
       setPreviewUrl(banner.imageUrl || '')
       setFile(null)
+
+      const existingPromo = banner.promotion || banner.ctaTarget?.promotion || banner.target?.promotion
+      if (existingPromo && existingPromo.enabled) {
+        setPromoEnabled(true)
+        setDiscountType(existingPromo.discount_type || 'percentage')
+        setDiscountValue(
+          existingPromo.discount_value !== undefined && existingPromo.discount_value !== null
+            ? String(existingPromo.discount_value)
+            : '20'
+        )
+      } else {
+        setPromoEnabled(false)
+        setDiscountType('percentage')
+        setDiscountValue('20')
+      }
     } else {
       setTitle('')
       setDescription('')
       setCtaText('')
       setCtaUrl('')
+      setCtaTarget(null)
       setImagePosition('center')
       setFile(null)
       setPreviewUrl('')
+      setPromoEnabled(false)
+      setDiscountType('percentage')
+      setDiscountValue('20')
     }
-  }, [banner, isOpen])
+  }, [banner, isOpen, products, categories, business?.id])
+
+  const activeTarget =
+    ctaTarget ||
+    resolveTargetFromRawUrl(ctaUrl, {
+      products,
+      categories,
+      businessId: business?.id,
+    })
+
+  const isProductTarget = activeTarget?.type === 'product'
+  const targetProductId = activeTarget?.id || activeTarget?.productId
+  const targetProduct = isProductTarget
+    ? products.find((p) => String(p.id) === String(targetProductId))
+    : null
+
+  const basePrice = Number(targetProduct?.unit_price ?? targetProduct?.price ?? 0)
+
+  const promoValidation =
+    promoEnabled && targetProduct
+      ? validatePromotion({
+          basePrice,
+          discountType,
+          discountValue: Number(discountValue) || 0,
+        })
+      : { valid: true, error: null }
+
+  const calculatedPromoPrice =
+    promoEnabled && targetProduct
+      ? calculatePromoPrice({
+          basePrice,
+          discountType,
+          discountValue: Number(discountValue) || 0,
+        })
+      : basePrice
+
+  const promoDiscountBadge =
+    promoEnabled && targetProduct
+      ? formatPromoDiscountBadge({
+          discountType,
+          discountValue: Number(discountValue) || 0,
+        })
+      : ''
 
   function handleFileChange(e) {
     const selected = e.target.files?.[0]
@@ -1686,14 +1818,45 @@ function BannerModal({ isOpen, onClose, banner, onSave, uploading }) {
 
   function handleSubmit(e) {
     e.preventDefault()
+
+    if (promoEnabled && isProductTarget && targetProduct) {
+      const val = validatePromotion({
+        basePrice,
+        discountType,
+        discountValue: Number(discountValue) || 0,
+      })
+      if (!val.valid) {
+        showToast?.(val.error || 'Konfigurasi diskon tidak valid.', 'error')
+        return
+      }
+    }
+
+    const promotionConfig =
+      promoEnabled && isProductTarget && targetProduct
+        ? {
+            enabled: true,
+            discount_type: discountType,
+            discount_value: Math.max(0, Number(discountValue) || 0),
+          }
+        : {
+            enabled: false,
+          }
+
     onSave({
       title: title.trim(),
       description: description.trim(),
       ctaText: ctaText.trim(),
       ctaUrl: ctaUrl.trim(),
+      ctaTarget: activeTarget
+        ? {
+            ...activeTarget,
+            promotion: promotionConfig,
+          }
+        : null,
       imagePosition,
       file,
       existingUrl: banner?.imageUrl || previewUrl,
+      promotion: promotionConfig,
     })
   }
 
@@ -1831,7 +1994,7 @@ function BannerModal({ isOpen, onClose, banner, onSave, uploading }) {
               </div>
 
               {/* CTA Text & Link */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="space-y-3">
                 <div>
                   <label className="text-xs font-bold text-navy-700 block mb-1">
                     Teks Tombol CTA
@@ -1844,18 +2007,122 @@ function BannerModal({ isOpen, onClose, banner, onSave, uploading }) {
                     className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-navy-700 placeholder:text-text-muted/60 focus:border-warm-400 focus:outline-none"
                   />
                 </div>
+
+                {/* Link / Target CTA */}
                 <div>
-                  <label className="text-xs font-bold text-navy-700 block mb-1">
-                    Link / Target CTA
-                  </label>
-                  <input
-                    type="text"
-                    value={ctaUrl}
-                    onChange={(e) => setCtaUrl(e.target.value)}
-                    placeholder="Contoh: #kategori-kopi"
-                    className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-navy-700 placeholder:text-text-muted/60 focus:border-warm-400 focus:outline-none"
+                  <BannerCtaPicker
+                    businessId={business?.id}
+                    ctaUrl={ctaUrl}
+                    ctaTarget={ctaTarget}
+                    ctaText={ctaText}
+                    products={products}
+                    categories={categories}
+                    onChange={({ ctaUrl: newUrl, ctaTarget: newTarget }) => {
+                      setCtaUrl(newUrl)
+                      setCtaTarget(newTarget)
+                    }}
+                    onPreviewClick={(preview) => {
+                      showToast?.(`Preview CTA: Mengarah ke ${preview.label}`, 'info')
+                    }}
                   />
                 </div>
+
+                {/* Promotional Price / Discount Configuration (Display-Only) */}
+                {isProductTarget && targetProduct && (
+                  <div className="rounded-xl border border-warm-200/80 bg-warm-50/40 p-3 sm:p-3.5 space-y-3">
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={promoEnabled}
+                        onChange={(e) => setPromoEnabled(e.target.checked)}
+                        className="h-4 w-4 rounded border-border text-warm-500 focus:ring-warm-400 focus:ring-offset-0 cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-navy-800">
+                        Tampilkan harga promo
+                      </span>
+                    </label>
+
+                    {promoEnabled && (
+                      <div className="space-y-3 pt-2.5 border-t border-warm-200/60">
+                        {/* Row: Harga Normal & Jenis Diskon */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div>
+                            <span className="text-[11px] font-semibold text-text-secondary block mb-1">
+                              Harga Normal
+                            </span>
+                            <div className="rounded-lg border border-border/80 bg-surface/80 px-2.5 py-1.5 text-xs font-bold text-navy-800">
+                              {formatCurrency(basePrice)}
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-semibold text-text-secondary block mb-1">
+                              Jenis Diskon
+                            </label>
+                            <select
+                              value={discountType}
+                              onChange={(e) => setDiscountType(e.target.value)}
+                              className="w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs font-medium text-navy-700 focus:border-warm-400 focus:outline-none"
+                            >
+                              <option value="percentage">Persentase (%)</option>
+                              <option value="fixed">Nominal Tetap (Rp)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Row: Nilai Diskon */}
+                        <div>
+                          <label className="text-[11px] font-semibold text-text-secondary block mb-1">
+                            Nilai Diskon
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min={0}
+                              max={discountType === 'percentage' ? 100 : basePrice}
+                              value={discountValue}
+                              onChange={(e) => setDiscountValue(e.target.value)}
+                              placeholder={discountType === 'percentage' ? 'Contoh: 20' : 'Contoh: 5000'}
+                              className="w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 pr-10 text-xs font-medium text-navy-700 focus:border-warm-400 focus:outline-none"
+                            />
+                            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-text-muted select-none">
+                              {discountType === 'percentage' ? '%' : 'Rp'}
+                            </span>
+                          </div>
+                          {!promoValidation.valid && (
+                            <p className="text-[11px] text-rose-500 font-medium mt-1">
+                              {promoValidation.error}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Display: Harga Promo */}
+                        <div className="rounded-lg bg-surface border border-emerald-200/80 p-2.5 flex items-center justify-between">
+                          <div>
+                            <span className="text-[10px] uppercase tracking-wider font-bold text-emerald-700 block">
+                              Harga Promo
+                            </span>
+                            <div className="flex items-baseline gap-1.5 mt-0.5">
+                              {basePrice > 0 && calculatedPromoPrice < basePrice && (
+                                <span className="text-xs text-text-muted line-through">
+                                  {formatCurrency(basePrice)}
+                                </span>
+                              )}
+                              <span className="text-sm font-extrabold text-emerald-600">
+                                {formatCurrency(calculatedPromoPrice)}
+                              </span>
+                            </div>
+                          </div>
+                          {promoDiscountBadge && (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-extrabold tracking-wide">
+                              {promoDiscountBadge}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}

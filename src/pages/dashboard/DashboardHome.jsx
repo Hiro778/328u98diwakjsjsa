@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { Link } from 'react-router'
 import { useAuth } from '../../context/AuthContext'
 import { getPlanDisplay } from '../../data/categories'
-import { fetchBusinessSalesData, aggregateSalesMetrics } from '../../services/excelSalesService'
+import { fetchBusinessSalesData, aggregateSalesMetrics } from '../../services/canonicalSalesService'
 import { supabase } from '../../lib/supabase'
 import { formatCurrency } from '../../lib/orderNumber'
 
@@ -34,11 +34,16 @@ export default function DashboardHome() {
     inventoryCount: 0,
     customerCount: 0,
   })
+  const [metricsLoading, setMetricsLoading] = useState(Boolean(business?.id))
 
   useEffect(() => {
     let isMounted = true
     async function loadData() {
-      if (!business?.id) return
+      if (!business?.id) {
+        setMetricsLoading(false)
+        return
+      }
+      setMetricsLoading(true)
 
       try {
         const [salesData, custResult] = await Promise.all([
@@ -60,6 +65,10 @@ export default function DashboardHome() {
         })
       } catch (err) {
         console.error('[DashboardHome] Load metrics error:', err)
+      } finally {
+        if (isMounted) {
+          setMetricsLoading(false)
+        }
       }
     }
 
@@ -237,12 +246,21 @@ export default function DashboardHome() {
               </div>
             </div>
             <div className="mt-4">
-              <div className="text-2xl sm:text-3xl font-black text-text-primary tracking-tight">
-                {kpi.value}
-              </div>
-              <p className="mt-1 text-xs text-text-muted">
-                {kpi.subtitle}
-              </p>
+              {metricsLoading ? (
+                <>
+                  <div className="h-8 w-28 rounded-lg bg-surface-hover animate-pulse my-0.5" />
+                  <div className="h-4 w-36 rounded bg-surface-hover/70 animate-pulse mt-2" />
+                </>
+              ) : (
+                <>
+                  <div className="text-2xl sm:text-3xl font-black text-text-primary tracking-tight">
+                    {kpi.value}
+                  </div>
+                  <p className="mt-1 text-xs text-text-muted">
+                    {kpi.subtitle}
+                  </p>
+                </>
+              )}
             </div>
           </motion.div>
         ))}
@@ -263,12 +281,21 @@ export default function DashboardHome() {
               </div>
             </div>
             <div className="mt-4">
-              <div className="text-2xl sm:text-3xl font-black text-text-primary tracking-tight">
-                {kpi.value}
-              </div>
-              <p className="mt-1 text-xs text-text-muted">
-                {kpi.subtitle}
-              </p>
+              {metricsLoading ? (
+                <>
+                  <div className="h-8 w-24 rounded-lg bg-surface-hover animate-pulse my-0.5" />
+                  <div className="h-4 w-32 rounded bg-surface-hover/70 animate-pulse mt-2" />
+                </>
+              ) : (
+                <>
+                  <div className="text-2xl sm:text-3xl font-black text-text-primary tracking-tight">
+                    {kpi.value}
+                  </div>
+                  <p className="mt-1 text-xs text-text-muted">
+                    {kpi.subtitle}
+                  </p>
+                </>
+              )}
             </div>
           </motion.div>
         ))}

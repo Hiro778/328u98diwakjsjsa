@@ -1,5 +1,13 @@
-import ExcelJS from 'exceljs'
 import { supabase } from '../lib/supabase.js'
+
+let _excelJsModule = null
+async function getExcelJS() {
+  if (!_excelJsModule) {
+    const mod = await import('exceljs')
+    _excelJsModule = mod.default || mod
+  }
+  return _excelJsModule
+}
 
 /**
  * Service Excel Penjualan Otomatis
@@ -40,53 +48,11 @@ import {
   isFinalTransaction,
   fetchCanonicalOrders,
   aggregateSalesMetrics,
+  fetchBusinessSalesData,
 } from './canonicalSalesService.js'
 import { injectNativeChart } from './excelChartService.js'
 
-export { isFinalTransaction, fetchCanonicalOrders, aggregateSalesMetrics, injectNativeChart }
-
-/**
- * Fetch data penjualan & inventori aktual untuk tenant tertentu
- */
-export async function fetchBusinessSalesData(businessId, { onlyFinal = true } = {}) {
-  if (!businessId) {
-    throw new Error('Tenant isolation: business_id wajib disertakan.')
-  }
-
-  // 1. Ambil orders dan order_items via canonical service (Source of Truth)
-  const { orders, error: ordersError } = await fetchCanonicalOrders(businessId, { onlyFinal })
-
-  if (ordersError) {
-    console.error('[excelSalesService] Fetch orders error:', ordersError)
-    throw new Error(`Gagal mengambil data pesanan: ${ordersError.message}`)
-  }
-
-  // 2. Ambil inventori untuk deteksi stok menipis
-  const { data: inventory } = await supabase
-    .from('inventory')
-    .select(`
-      id,
-      quantity,
-      min_stock,
-      location,
-      product:products (
-        id,
-        name,
-        price,
-        business_id
-      )
-    `)
-
-  // Filter inventori milik business_id secara aman
-  const tenantInventory = (inventory || []).filter(
-    (item) => item.product && item.product.business_id === businessId
-  )
-
-  return {
-    orders: orders || [],
-    inventory: tenantInventory,
-  }
-}
+export { isFinalTransaction, fetchCanonicalOrders, aggregateSalesMetrics, fetchBusinessSalesData, injectNativeChart }
 
 /**
  * Bangun data laporan harian untuk satu bulan tertentu, dibatasi sampai batas tanggal cutoff
@@ -248,6 +214,7 @@ export async function generateSalesWorkbook({
   exportDate = new Date(),
   chartType = 'bar',
 }) {
+  const ExcelJS = await getExcelJS()
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'BisnisSehat'
   workbook.lastModifiedBy = businessName

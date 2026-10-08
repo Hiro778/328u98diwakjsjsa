@@ -15,6 +15,15 @@ import { ADMIN_ROLES } from '../services/adminRbacService.js'
  * call verifyWithServer on mount. Subsequent SIGNED_IN / TOKEN_REFRESHED /
  * SIGNED_OUT events keep state current without causing loops.
  */
+let adminVerifyPromise = null
+let cachedAdminState = null
+const ADMIN_CACHE_TTL_MS = 30000
+
+export function invalidateAdminAuthCache() {
+  cachedAdminState = null
+  adminVerifyPromise = null
+}
+
 export function useAdminAuth() {
   const [role, setRole] = useState(ADMIN_ROLES.USER)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -37,39 +46,68 @@ export function useAdminAuth() {
         setIsAdmin(false)
         setIsSuperAdmin(false)
         activeUserIdRef.current = null
+        cachedAdminState = null
         setError(null)
         setLoading(false)
         return
       }
 
-      activeUserIdRef.current = session.user.id
+      const userId = session.user.id
+      activeUserIdRef.current = userId
 
-      // Fetch verified server-side role & flags via SECURITY DEFINER RPCs
-      const [roleRes, adminRes, superAdminRes] = await Promise.all([
-        supabase.rpc('get_current_admin_role'),
-        supabase.rpc('is_admin'),
-        supabase.rpc('is_super_admin'),
-      ])
+      // Reuse fresh in-memory verification if within TTL
+      const now = Date.now()
+      if (cachedAdminState && cachedAdminState.userId === userId && (now - cachedAdminState.timestamp < ADMIN_CACHE_TTL_MS)) {
+        if (!isMountedRef.current) return
+        setRole(cachedAdminState.role)
+        setIsAdmin(cachedAdminState.isAdmin)
+        setIsSuperAdmin(cachedAdminState.isSuperAdmin)
+        setError(cachedAdminState.error)
+        setLoading(false)
+        return
+      }
 
+      // Deduplicate concurrent in-flight RPC queries for the same user
+      if (!adminVerifyPromise || adminVerifyPromise.userId !== userId) {
+        const p = (async () => {
+          const [roleRes, adminRes, superAdminRes] = await Promise.all([
+            supabase.rpc('get_current_admin_role'),
+            supabase.rpc('is_admin'),
+            supabase.rpc('is_super_admin'),
+          ])
+          const fetchErr = roleRes.error || adminRes.error || superAdminRes.error
+          if (fetchErr) {
+            console.error('[useAdminAuth] Server verification error:', fetchErr)
+            return {
+              userId,
+              role: ADMIN_ROLES.USER,
+              isAdmin: false,
+              isSuperAdmin: false,
+              error: fetchErr,
+              timestamp: Date.now(),
+            }
+          }
+          return {
+            userId,
+            role: roleRes.data || ADMIN_ROLES.USER,
+            isAdmin: Boolean(adminRes.data),
+            isSuperAdmin: Boolean(superAdminRes.data),
+            error: null,
+            timestamp: Date.now(),
+          }
+        })()
+        p.userId = userId
+        adminVerifyPromise = p
+      }
+
+      const result = await adminVerifyPromise
+      cachedAdminState = result
       if (!isMountedRef.current) return
 
-      if (roleRes.error || adminRes.error || superAdminRes.error) {
-        const fetchErr = roleRes.error || adminRes.error || superAdminRes.error
-        console.error('[useAdminAuth] Server verification error:', fetchErr)
-        setRole(ADMIN_ROLES.USER)
-        setIsAdmin(false)
-        setIsSuperAdmin(false)
-        setError(fetchErr)
-      } else {
-        const serverRole = roleRes.data || ADMIN_ROLES.USER
-        const serverIsAdmin = Boolean(adminRes.data)
-        const serverIsSuperAdmin = Boolean(superAdminRes.data)
-
-        setRole(serverRole)
-        setIsAdmin(serverIsAdmin)
-        setIsSuperAdmin(serverIsSuperAdmin)
-        setError(null)
-      }
+      setRole(result.role)
+      setIsAdmin(result.isAdmin)
+      setIsSuperAdmin(result.isSuperAdmin)
+      setError(result.error)
     } catch (err) {
       if (isMountedRef.current) {
         console.error('[useAdminAuth] Unexpected error:', err)
@@ -131,6 +169,8 @@ export function useAdminAuth() {
             setIsAdmin(false)
             setIsSuperAdmin(false)
             activeUserIdRef.current = null
+            cachedAdminState = null
+            adminVerifyPromise = null
             setError(null)
             setLoading(false)
             break
@@ -148,6 +188,8 @@ export function useAdminAuth() {
   }, [verifyWithServer])
 
   const refreshAdminAuth = useCallback(async () => {
+    cachedAdminState = null
+    adminVerifyPromise = null
     setLoading(true)
     const { data: { session } } = await supabase.auth.getSession()
     const isMountedRef = { current: true }
