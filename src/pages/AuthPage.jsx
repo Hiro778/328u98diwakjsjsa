@@ -17,6 +17,45 @@ function isSafeReturnTo(path) {
   return true
 }
 
+function EyeIcon({ className = 'h-5 w-5' }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
+function EyeOffIcon({ className = 'h-5 w-5' }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <line x1="2" x2="22" y1="2" y2="22" />
+    </svg>
+  )
+}
+
+
 export default function AuthPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const {
@@ -42,6 +81,11 @@ export default function AuthPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+
+  // Password visibility states (isolated per input)
+  const [showLoginPassword, setShowLoginPassword] = useState(false)
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoggingIn, setIsLoggingIn] = useState(false)
@@ -69,6 +113,9 @@ export default function AuthPage() {
     setClientError(null)
     setPassword('')
     setConfirmPassword('')
+    setShowLoginPassword(false)
+    setShowRegisterPassword(false)
+    setShowConfirmPassword(false)
     setVerificationSentEmail(null)
     const newParams = new URLSearchParams(searchParams)
     if (newMode === 'register') {
@@ -308,16 +355,46 @@ export default function AuthPage() {
                     </Link>
                   )}
                 </div>
-                <input
-                  id="auth-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={mode === 'register' ? 'Minimal 6 karakter' : 'Password kamu'}
-                  autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-                  disabled={isSubmitting || isGoogleLoading}
-                  className="w-full rounded-xl border border-navy-200 bg-white px-3.5 py-2.5 text-sm text-navy-900 placeholder:text-navy-300 focus:border-navy-600 focus:outline-none focus:ring-1 focus:ring-navy-600 disabled:bg-navy-50 disabled:cursor-not-allowed transition-colors"
-                />
+                <div className="relative">
+                  <input
+                    id="auth-password"
+                    type={
+                      mode === 'login'
+                        ? showLoginPassword ? 'text' : 'password'
+                        : showRegisterPassword ? 'text' : 'password'
+                    }
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={mode === 'register' ? 'Minimal 6 karakter' : 'Password kamu'}
+                    autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                    disabled={isSubmitting || isGoogleLoading}
+                    className="w-full rounded-xl border border-navy-200 bg-white pl-3.5 pr-11 py-2.5 text-sm text-navy-900 placeholder:text-navy-300 focus:border-navy-600 focus:outline-none focus:ring-1 focus:ring-navy-600 disabled:bg-navy-50 disabled:cursor-not-allowed transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (mode === 'login') {
+                        setShowLoginPassword((prev) => !prev)
+                      } else {
+                        setShowRegisterPassword((prev) => !prev)
+                      }
+                    }}
+                    disabled={isSubmitting || isGoogleLoading}
+                    aria-label={
+                      mode === 'login'
+                        ? showLoginPassword ? 'Sembunyikan password' : 'Lihat password'
+                        : showRegisterPassword ? 'Sembunyikan password' : 'Lihat password'
+                    }
+                    data-testid={mode === 'login' ? 'toggle-login-password' : 'toggle-register-password'}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3.5 pl-2 text-navy-400 hover:text-navy-700 focus:outline-none focus:text-navy-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    {(mode === 'login' ? showLoginPassword : showRegisterPassword) ? (
+                      <EyeOffIcon className="h-5 w-5" />
+                    ) : (
+                      <EyeIcon className="h-5 w-5" />
+                    )}
+                  </button>
+                </div>
               </div>
 
               {mode === 'register' && (
@@ -325,16 +402,32 @@ export default function AuthPage() {
                   <label htmlFor="auth-confirm-password" className="block text-xs font-semibold text-navy-700 mb-1.5">
                     Konfirmasi password
                   </label>
-                  <input
-                    id="auth-confirm-password"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Ulangi password"
-                    autoComplete="new-password"
-                    disabled={isSubmitting || isGoogleLoading}
-                    className="w-full rounded-xl border border-navy-200 bg-white px-3.5 py-2.5 text-sm text-navy-900 placeholder:text-navy-300 focus:border-navy-600 focus:outline-none focus:ring-1 focus:ring-navy-600 disabled:bg-navy-50 disabled:cursor-not-allowed transition-colors"
-                  />
+                  <div className="relative">
+                    <input
+                      id="auth-confirm-password"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Ulangi password"
+                      autoComplete="new-password"
+                      disabled={isSubmitting || isGoogleLoading}
+                      className="w-full rounded-xl border border-navy-200 bg-white pl-3.5 pr-11 py-2.5 text-sm text-navy-900 placeholder:text-navy-300 focus:border-navy-600 focus:outline-none focus:ring-1 focus:ring-navy-600 disabled:bg-navy-50 disabled:cursor-not-allowed transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                      disabled={isSubmitting || isGoogleLoading}
+                      aria-label={showConfirmPassword ? 'Sembunyikan konfirmasi password' : 'Lihat konfirmasi password'}
+                      data-testid="toggle-confirm-password"
+                      className="absolute inset-y-0 right-0 flex items-center pr-3.5 pl-2 text-navy-400 hover:text-navy-700 focus:outline-none focus:text-navy-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOffIcon className="h-5 w-5" />
+                      ) : (
+                        <EyeIcon className="h-5 w-5" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               )}
 

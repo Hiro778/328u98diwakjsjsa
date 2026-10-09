@@ -337,4 +337,54 @@ describe('Email/Password Auth, Verification, Recovery & Security Suite', () => {
       assert.strictEqual(authPageContent.includes('activation_code'), false, 'activation_code should not be in signup')
     })
   })
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // SECTION 6: SHOW/HIDE PASSWORD TOGGLE INTEGRITY (UX & ACCESSIBILITY)
+  // ═════════════════════════════════════════════════════════════════════════
+
+  describe('6. Show/Hide Password Toggle UX & Accessibility', () => {
+    const authPagePath = path.resolve('src/pages/AuthPage.jsx')
+    const authPageContent = fs.readFileSync(authPagePath, 'utf-8')
+
+    it('6.1. AuthPage defines isolated show/hide states for all password inputs', () => {
+      assert.ok(authPageContent.includes('const [showLoginPassword, setShowLoginPassword] = useState(false)'), 'showLoginPassword state must exist')
+      assert.ok(authPageContent.includes('const [showRegisterPassword, setShowRegisterPassword] = useState(false)'), 'showRegisterPassword state must exist')
+      assert.ok(authPageContent.includes('const [showConfirmPassword, setShowConfirmPassword] = useState(false)'), 'showConfirmPassword state must exist')
+    })
+
+    it('6.2. switchMode resets all password visibility states to hidden', () => {
+      assert.ok(authPageContent.includes('setShowLoginPassword(false)'), 'switchMode must reset showLoginPassword')
+      assert.ok(authPageContent.includes('setShowRegisterPassword(false)'), 'switchMode must reset showRegisterPassword')
+      assert.ok(authPageContent.includes('setShowConfirmPassword(false)'), 'switchMode must reset showConfirmPassword')
+    })
+
+    it('6.3. All toggle buttons explicitly specify type="button" to prevent form submission', () => {
+      assert.ok(authPageContent.includes("data-testid={mode === 'login' ? 'toggle-login-password' : 'toggle-register-password'}"))
+      assert.ok(authPageContent.includes('data-testid="toggle-confirm-password"'))
+
+      const buttonTypeMatches = [...authPageContent.matchAll(/<button[^>]*?type="button"[^>]*?>/g)]
+      assert.ok(buttonTypeMatches.length >= 2, 'Must have type="button" buttons for toggles')
+    })
+
+    it('6.4. Toggle buttons have dynamic aria-labels for screen readers', () => {
+      assert.ok(authPageContent.includes("'Sembunyikan password' : 'Lihat password'"))
+      assert.ok(authPageContent.includes("'Sembunyikan konfirmasi password' : 'Lihat konfirmasi password'"))
+    })
+
+    it('6.5. Password inputs toggle type between "text" and "password"', () => {
+      assert.ok(authPageContent.includes("showLoginPassword ? 'text' : 'password'"))
+      assert.ok(authPageContent.includes("showRegisterPassword ? 'text' : 'password'"))
+      assert.ok(authPageContent.includes("showConfirmPassword ? 'text' : 'password'"))
+    })
+
+    it('6.6. Password inputs have right padding to prevent text overlap with toggle icon', () => {
+      assert.ok(authPageContent.includes('pr-11'), 'Password input must have pr-11 padding for comfortable icon clearance')
+    })
+
+    it('6.7. EyeIcon and EyeOffIcon are defined with aria-hidden for accessibility', () => {
+      assert.ok(authPageContent.includes('function EyeIcon'), 'EyeIcon must be defined')
+      assert.ok(authPageContent.includes('function EyeOffIcon'), 'EyeOffIcon must be defined')
+      assert.ok(authPageContent.includes('aria-hidden="true"'), 'Icons must have aria-hidden="true"')
+    })
+  })
 })
