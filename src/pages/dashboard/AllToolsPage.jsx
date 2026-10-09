@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { CATEGORIES, TOTAL_TOOLS } from '../../data/categories'
+import { CATEGORIES, isToolVisible, isCategoryVisible, TOTAL_VISIBLE_TOOLS } from '../../data/categories'
 import ToolCard from '../../components/ToolCard'
 import BackButton from '../../components/BackButton'
 
@@ -21,7 +21,6 @@ const CATEGORY_TABS = [
   { id: 'sales', label: 'Penjualan & CRM' },
   { id: 'marketing', label: 'Marketing' },
   { id: 'legal', label: 'Legal & Compliance' },
-  { id: 'export', label: 'Kurs & Ekspor' },
   { id: 'analytics', label: 'Analytics' },
 ]
 
@@ -31,14 +30,16 @@ export default function AllToolsPage() {
   const [tierFilter, setTierFilter] = useState('all')
   const q = search.toLowerCase().trim()
 
-  const categoriesToDisplay = activeCategory === 'all'
-    ? Object.values(CATEGORIES)
-    : Object.values(CATEGORIES).filter((cat) => cat.id === activeCategory)
+  const categoriesToDisplay = (activeCategory === 'all'
+    ? Object.values(CATEGORIES).filter(isCategoryVisible)
+    : Object.values(CATEGORIES).filter((cat) => cat.id === activeCategory && isCategoryVisible(cat))
+  )
 
   const filtered = categoriesToDisplay
     .map((cat) => ({
       ...cat,
       tools: cat.tools.filter((t) => {
+        if (!isToolVisible(t)) return false
         const matchesQuery = t.name.toLowerCase().includes(q)
         if (!matchesQuery) return false
         if (tierFilter === 'basic') return t.tier === 'basic'
@@ -88,7 +89,7 @@ export default function AllToolsPage() {
               </svg>
               <input
                 type="text"
-                placeholder={`Cari dari ${TOTAL_TOOLS} tools...`}
+                placeholder={`Cari dari ${TOTAL_VISIBLE_TOOLS} tools...`}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full rounded-lg border border-[#222C3E] bg-[#151D2C] py-2 pl-9 pr-8 text-xs sm:text-sm text-[#F8FAFC] placeholder:text-slate-500 focus:border-[#818CF8] focus:outline-none focus:ring-1 focus:ring-[#818CF8]/40 transition-all"
@@ -134,8 +135,8 @@ export default function AllToolsPage() {
             {CATEGORY_TABS.map((tab) => {
               const isActive = activeCategory === tab.id
               const count = tab.id === 'all'
-                ? TOTAL_TOOLS
-                : CATEGORIES[tab.id]?.tools.length || 0
+                ? TOTAL_VISIBLE_TOOLS
+                : CATEGORIES[tab.id]?.tools.filter(isToolVisible).length || 0
 
               return (
                 <button

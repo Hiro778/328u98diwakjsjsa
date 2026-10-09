@@ -1,13 +1,8 @@
-import { motion } from 'framer-motion'
-
 export default function BannedAccountScreen({ banReason, onSignOut }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B0F19] px-4 sm:px-6">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 16 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-md rounded-2xl border border-red-500/30 bg-[#111827] p-6 sm:p-8 text-center shadow-2xl shadow-red-950/40"
+      <div
+        className="w-full max-w-md rounded-2xl border border-red-500/30 bg-[#111827] p-6 sm:p-8 text-center shadow-2xl shadow-red-950/40 transition-all duration-300"
       >
         {/* Shield / Lock Icon */}
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-red-500/40 bg-red-500/10 text-red-500 shadow-inner shadow-red-500/20">
@@ -68,7 +63,7 @@ export default function BannedAccountScreen({ banReason, onSignOut }) {
             Keluar dari Akun (Sign Out)
           </button>
         </div>
-      </motion.div>
+      </div>
     </div>
   )
 }

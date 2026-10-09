@@ -19,7 +19,7 @@ describe('Public QR Menu High Concurrency & Scale Suite (Phase 11)', () => {
     return Array.from({ length: count }, (_, i) => ({
       id: `prod-${businessId}-${i + 1}`,
       name: `Kopi Nusantara #${i + 1}`,
-      description: `Biji kopi pilihan kualitas ekspor #${i + 1}`,
+      description: `Biji kopi pilihan kualitas premium #${i + 1}`,
       unit_price: 25000 + i * 1000,
       category: i % 2 === 0 ? 'Kopi Dingin' : 'Kopi Panas',
       image_url: `https://storage.bisnissehat.id/products/${businessId}/kopi-${i + 1}.webp`,

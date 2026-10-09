@@ -69,10 +69,10 @@ export default function ExportConfig({ product, onBack, onContinue }) {
       </div>
 
       <p className="mb-3 text-sm font-semibold tracking-wide text-warm-400 uppercase">
-        Konfigurasi Ekspor
+        Konfigurasi Pengiriman Global
       </p>
       <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-cream">
-        Atur detail <span className="text-warm-400">ekspor-nya</span>
+        Atur detail <span className="text-warm-400">pengirimannya</span>
       </h2>
 
       <div className="mt-6 space-y-5">
@@ -169,7 +169,7 @@ export default function ExportConfig({ product, onBack, onContinue }) {
               : 'cursor-not-allowed bg-white/10 text-cream/30'
           }`}
         >
-          Hitung Potensi Ekspor &rarr;
+          Hitung Potensi Valuta & Margin &rarr;
         </motion.button>
       </div>
     </motion.div>

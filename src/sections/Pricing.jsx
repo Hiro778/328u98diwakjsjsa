@@ -1,13 +1,13 @@
 import { motion } from 'framer-motion'
-import { TOTAL_TOOLS } from '../data/categories'
+import { TOTAL_VISIBLE_TOOLS } from '../data/categories'
 import usePricingCta from '../hooks/usePricingCta'
 
 const features = [
-  `${TOTAL_TOOLS}+ business tools`,
+  `${TOTAL_VISIBLE_TOOLS}+ business tools`,
   'Financial intelligence',
   'Inventory & operations',
   'CRM',
-  'Export tools',
+  'Perencanaan Pajak & Cash Flow',
   'AI business insights',
   'Weekly business recap',
 ]

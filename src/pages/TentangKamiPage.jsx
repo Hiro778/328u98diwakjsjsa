@@ -87,9 +87,9 @@ export default function TentangKamiPage() {
             </div>
 
             <div className="p-6 rounded-xl bg-[#0F172A] border border-[#1E293B]">
-              <h4 className="text-base font-semibold text-slate-200 mb-2">Pusat Ekspor & Kesiapan Pasar</h4>
+              <h4 className="text-base font-semibold text-slate-200 mb-2">Pasar Global & Kesiapan Mutu</h4>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Analisis kesiapan ekspor UMKM, standar kemasan internasional, dan direktori sertifikasi komoditas dagang.
+                Analisis kesiapan pasar global UMKM, standar kemasan internasional, dan direktori sertifikasi komoditas dagang.
               </p>
             </div>
 

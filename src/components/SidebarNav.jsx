@@ -1,5 +1,8 @@
+import { memo } from 'react'
 import { NavLink } from 'react-router'
 import { SIDEBAR_NAV, CATEGORIES } from '../data/categories'
+
+const itemsById = Object.fromEntries(SIDEBAR_NAV.map((i) => [i.id, i]))
 
 const NAV_GROUPS = [
   {
@@ -12,7 +15,7 @@ const NAV_GROUPS = [
   },
   {
     header: 'PERTUMBUHAN',
-    itemIds: ['marketing', 'legalitas', 'ekspor', 'insight'],
+    itemIds: ['marketing', 'legalitas', 'insight'],
   },
   {
     header: 'DIREKTORI',
@@ -20,15 +23,14 @@ const NAV_GROUPS = [
   },
 ]
 
-export default function SidebarNav({ onNavigate }) {
-  const itemsById = Object.fromEntries(SIDEBAR_NAV.map((i) => [i.id, i]))
+function SidebarNavComponent({ onNavigate }) {
 
   return (
     <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
       {NAV_GROUPS.map((group) => {
         const groupItems = group.itemIds
           .map((id) => itemsById[id])
-          .filter(Boolean)
+          .filter((item) => item && !item.hidden && item.id !== 'ekspor')
 
         if (groupItems.length === 0) return null
 
@@ -40,7 +42,7 @@ export default function SidebarNav({ onNavigate }) {
             <div className="space-y-1">
               {groupItems.map((item) => {
                 const cat = item.categoryId ? CATEGORIES[item.categoryId] : null
-                const count = cat ? cat.tools.length : null
+                const count = cat ? cat.tools.filter((t) => !t.hidden && !t.locked).length : null
 
                 return (
                   <NavLink
@@ -98,3 +100,5 @@ export default function SidebarNav({ onNavigate }) {
     </nav>
   )
 }
+
+export default memo(SidebarNavComponent)

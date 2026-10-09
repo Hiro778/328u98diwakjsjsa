@@ -45,7 +45,7 @@ export default function ProductSelector({ selectedProductId, onSelectProduct, on
       <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-cream sm:text-3xl">
         Produk mana yang mau lo
         <br />
-        <span className="text-warm-400">ekspor?</span>
+        <span className="text-warm-400">kirim?</span>
       </h2>
 
       {/* Search */}

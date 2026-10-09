@@ -35,19 +35,19 @@ const categories = [
       { name: 'Halal Certification', status: 'available' },
       { name: 'Trademark Registration', status: 'available' },
       { name: 'Contract Templates', status: 'coming_soon' },
-      { name: 'Export Compliance', status: 'coming_soon' },
+      { name: 'Trade Compliance', status: 'coming_soon' },
     ],
   },
   {
     id: 'export',
-    title: 'Export',
+    title: 'Kurs & Valuta',
     color: '#6366F1',
     tools: [
       { name: 'HS Code Lookup', status: 'coming_soon' },
       { name: 'Import Duty Estimator', status: 'coming_soon' },
       { name: 'Buyer Matching', status: 'coming_soon' },
       { name: 'Incoterms Guide', status: 'coming_soon' },
-      { name: 'Export Documents', status: 'coming_soon' },
+      { name: 'Dokumen Perdagangan', status: 'coming_soon' },
       { name: 'Currency Risk Calculator', status: 'coming_soon' },
       { name: 'Certification Guide', status: 'coming_soon' },
       { name: 'Freight Estimator', status: 'coming_soon' },
@@ -127,15 +127,16 @@ export default function BusinessTools() {
   const [search, setSearch] = useState('')
   const [active, setActive] = useState(null)
 
+  const visibleCategories = categories.filter((cat) => cat.id !== 'export')
   const q = search.toLowerCase()
-  const filtered = categories
+  const filtered = visibleCategories
     .map((cat) => ({
       ...cat,
       tools: cat.tools.filter((t) => t.name.toLowerCase().includes(q)),
     }))
     .filter((cat) => cat.tools.length > 0)
 
-  const totalTools = categories.reduce((sum, c) => sum + c.tools.length, 0)
+  const totalTools = visibleCategories.reduce((sum, c) => sum + c.tools.length, 0)
 
   return (
     <section id="tools" className="px-5 py-20 sm:px-8 sm:py-28">
@@ -157,7 +158,7 @@ export default function BusinessTools() {
             aspek bisnis lo.
           </h2>
           <p className="mt-3 max-w-lg text-base text-text-secondary">
-            Dari kalkulator HPP sampai kalkulator impor — semua ada di sini.
+            Dari kalkulator HPP, BEP, hingga pembukuan & kasir — semua ada di sini.
           </p>
         </motion.div>
 

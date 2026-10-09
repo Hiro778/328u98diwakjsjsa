@@ -4,10 +4,8 @@ import { createBrowserRouter, RouterProvider, Navigate } from 'react-router'
 import { ThemeProvider } from './context/ThemeContext'
 import { AuthProvider } from './context/AuthContext'
 import { SettingsProvider } from './context/SettingsContext'
-import AuthCallbackPage from './pages/AuthCallbackPage'
 import RequireAuth from './components/RequireAuth'
 import RequireAdmin from './components/RequireAdmin'
-import AdminLayout from './components/admin/AdminLayout'
 import LoadingScreen from './components/LoadingScreen'
 import RequireOnboarding from './components/RequireOnboarding'
 import RequireSubscription from './components/RequireSubscription'
@@ -26,9 +24,17 @@ const ActivateCreditPage = lazy(() => import('./pages/ActivateCreditPage'))
 const TentangKamiPage = lazy(() => import('./pages/TentangKamiPage'))
 const PublicMenuPage = lazy(() => import('./pages/public/PublicMenuPage'))
 const PublicProductDetailPage = lazy(() => import('./pages/public/PublicProductDetailPage'))
+import AuthCallbackPage from './pages/AuthCallbackPage'
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
-// ── Lazy-loaded Admin Pages ──
+const AdminLayoutLazy = lazy(() => import('./components/admin/AdminLayout'))
+function AdminLayout() {
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <AdminLayoutLazy />
+    </Suspense>
+  )
+}
 const AdminDashboardOverview = lazy(() => import('./pages/admin/AdminDashboardOverview'))
 const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage'))
 const AdminUserDetailPage = lazy(() => import('./pages/admin/AdminUserDetailPage'))

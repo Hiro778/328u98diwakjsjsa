@@ -11,7 +11,7 @@ const FOOTER_COLUMNS = [
     links: [
       { label: 'Dashboard', href: '/dashboard' },
       { label: 'Fitur', href: '/#features' },
-      { label: 'Ekspor', href: '/dashboard/ekspor' },
+      { label: 'Kurs & Valuta', href: '/dashboard/ekspor', hidden: true },
       { label: 'Harga', href: '/pricing' },
       { label: 'Tools', href: '/dashboard/semua-tools' },
     ],
@@ -70,7 +70,7 @@ export default function Footer() {
                 {col.title}
               </h4>
               <ul className="space-y-2">
-                {col.links.map((link) => (
+                {col.links.filter((l) => !l.hidden).map((link) => (
                   <li key={link.label}>
                     <Link
                       to={link.href}

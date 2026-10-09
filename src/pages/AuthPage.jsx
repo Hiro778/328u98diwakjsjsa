@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { Navigate, useSearchParams, Link } from 'react-router'
 import { useAuth } from '../context/AuthContext'
 import { usePlatformSettings } from '../hooks/usePlatformSettings'
@@ -24,6 +23,7 @@ export default function AuthPage() {
     signInWithGoogle,
     signInWithEmail,
     signUpWithEmail,
+    user,
     isAuthenticated,
     isAccessDenied,
     isBanned,
@@ -61,9 +61,8 @@ export default function AuthPage() {
   const resetSuccess = searchParams.get('reset_success') === '1'
   const verifiedSuccess = searchParams.get('verified') === '1'
 
-  if (loading) return <LoadingScreen />
+  if ((user || isAuthenticated) && !isLoggingOut && !isAccessDenied) return <Navigate to={safeReturnTo || '/dashboard'} replace />
   if (isAccessDenied || isBanned || isSuspended) return <BannedAccountScreen banReason={banReason} onSignOut={signOut} />
-  if (isAuthenticated && !isLoggingOut) return <Navigate to={safeReturnTo || '/dashboard'} replace />
 
   function switchMode(newMode) {
     setMode(newMode)
@@ -186,12 +185,7 @@ export default function AuthPage() {
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-cream px-4 sm:px-5 py-8 pt-[max(2rem,env(safe-area-inset-top,0px))] pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-sm"
-      >
+      <div className="w-full max-w-sm transition-all duration-300">
         {/* Brand */}
         <div className="mb-8 text-center">
           <Link to="/" className="inline-block">
@@ -215,11 +209,7 @@ export default function AuthPage() {
 
         {/* Verification Sent Success Notice */}
         {verificationSentEmail ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="rounded-2xl border border-emerald-200 bg-white p-6 text-center shadow-sm"
-          >
+          <div className="rounded-2xl border border-emerald-200 bg-white p-6 text-center shadow-sm">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-2xl">
               ✉️
             </div>
@@ -238,43 +228,33 @@ export default function AuthPage() {
                 Kembali ke Masuk
               </button>
             </div>
-          </motion.div>
+          </div>
         ) : (
           <>
             {/* Success Alert Banners */}
             {resetSuccess && (
-              <motion.div
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs text-emerald-800 leading-relaxed shadow-sm flex items-start gap-2.5"
-              >
+              <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs text-emerald-800 leading-relaxed shadow-sm flex items-start gap-2.5">
                 <span className="text-base select-none">✅</span>
                 <div>
                   <p className="font-semibold text-emerald-900 mb-0.5">Password Berhasil Diperbarui</p>
                   <p>Silakan masuk menggunakan password baru kamu.</p>
                 </div>
-              </motion.div>
+              </div>
             )}
 
             {verifiedSuccess && (
-              <motion.div
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs text-emerald-800 leading-relaxed shadow-sm flex items-start gap-2.5"
-              >
+              <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs text-emerald-800 leading-relaxed shadow-sm flex items-start gap-2.5">
                 <span className="text-base select-none">🎉</span>
                 <div>
                   <p className="font-semibold text-emerald-900 mb-0.5">Email Terverifikasi</p>
                   <p>Akun kamu sudah aktif. Silakan masuk untuk melanjutkan.</p>
                 </div>
-              </motion.div>
+              </div>
             )}
 
             {/* Error Alert Banner */}
             {errorMessage && (
-              <motion.div
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
+              <div
                 data-testid="oauth-error-banner"
                 className="oauth-error-banner mb-5 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs text-rose-800 leading-relaxed shadow-sm flex items-start gap-2.5"
               >
@@ -283,7 +263,7 @@ export default function AuthPage() {
                   <p className="font-semibold text-rose-900 mb-0.5">Kendala Masuk Akun</p>
                   <p>{errorMessage}</p>
                 </div>
-              </motion.div>
+              </div>
             )}
 
             {!isRegistrationEnabled && mode === 'register' && (
@@ -391,13 +371,11 @@ export default function AuthPage() {
             </div>
 
             {/* Google OAuth Button */}
-            <motion.button
+            <button
               type="button"
               onClick={handleGoogleLogin}
               disabled={isLoggingIn || loading}
-              whileHover={isGoogleLoading ? {} : { scale: 1.01 }}
-              whileTap={isGoogleLoading ? {} : { scale: 0.99 }}
-              className={`flex w-full items-center justify-center gap-3 rounded-xl border border-navy-100 bg-white px-6 py-3 text-[14px] font-semibold text-navy-700 shadow-sm transition-all ${
+              className={`flex w-full items-center justify-center gap-3 rounded-xl border border-navy-100 bg-white px-6 py-3 text-[14px] font-semibold text-navy-700 shadow-sm transition-all hover:scale-[1.01] active:scale-[0.99] ${
                 isGoogleLoading ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-md cursor-pointer'
               }`}
             >
@@ -417,7 +395,7 @@ export default function AuthPage() {
                   <span>Continue with Google</span>
                 </>
               )}
-            </motion.button>
+            </button>
 
             {/* Toggle Login / Register */}
             <div className="mt-6 text-center text-xs text-text-secondary">
@@ -451,7 +429,7 @@ export default function AuthPage() {
             </p>
           </>
         )}
-      </motion.div>
+      </div>
     </div>
   )
 }

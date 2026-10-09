@@ -52,7 +52,7 @@ export const ADS_RECOMMENDATIONS = [
     title: 'META — Retargeting Pelanggan & Custom Audience',
     situation: 'UMKM yang sudah memiliki kontak pelanggan (WhatsApp/database nomor pembeli) atau pengunjung toko yang belum melakukan checkout.',
     actions: [
-      'Ekspor daftar nomor telepon atau email pelanggan yang pernah bertransaksi ke dalam file spreadsheet (CSV).',
+      'Unduh daftar nomor telepon atau email pelanggan yang pernah bertransaksi ke dalam file spreadsheet (CSV).',
       'Buka Meta Ads Manager > Audiences > Create Audience > Custom Audience > Customer List.',
       'Buat kampanye penawaran khusus "Repeat Order" atau voucher promo bagi pelanggan lama tersebut.',
       'Kombinasikan dengan exclusion agar pembeli yang baru saja order hari ini tidak melihat promo yang sama.'

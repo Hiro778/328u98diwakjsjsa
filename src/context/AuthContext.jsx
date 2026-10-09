@@ -1,8 +1,9 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { calculateSubscriptionEntitlement, resolveCanonicalSubscription } from '../lib/subscriptionUtils'
 import { fetchPublicPlatformSettings } from '../services/adminSettingsService'
 import { createSafeRealtimeChannel, cleanupAllRealtimeChannels } from '../lib/realtimeHelper'
+import { invalidateBusinessSalesDataCache } from '../services/canonicalSalesService'
 
 const AuthContext = createContext(null)
 
@@ -223,6 +224,20 @@ export function AuthProvider({ children }) {
           }
           return false
         })()
+
+        // Zero-wait resolution: if no auth token is stored in localStorage,
+        // user is definitively unauthenticated on initial load.
+        // Prevents blocking the entire app and /auth on unnecessary async checks.
+        if (!hasStoredToken) {
+          if (isMounted) {
+            setUser(null)
+            setProfileLoaded(true)
+            setBusinessLoaded(true)
+            setSubscriptionLoaded(true)
+            setAuthLoading(false)
+          }
+          return
+        }
 
         // 1. Initial retrieval of session from storage / memory with safety timeout (prevents deadlock)
         const getSessionPromise = supabase.auth.getSession()
@@ -469,17 +484,45 @@ export function AuthProvider({ children }) {
     setIsRecoveryMode(false)
     loadingUserRef.current = null
 
+    // 1. Immediately wipe local auth and entity states to provide instant UI response
+    setUser(null)
+    setProfile(null)
+    setBusiness(null)
+    setSubscription(null)
+    setHasPaidHistory(false)
+    setSubscriptionError(null)
+    setProfileLoaded(true)
+    setBusinessLoaded(true)
+    setSubscriptionLoaded(true)
+    setAuthLoading(false)
+
+    // 2. Clean up any Supabase auth tokens stored in localStorage immediately to prevent resurrecting session
     try {
-      // 1. Immediately tear down all active realtime channels to avoid receiving messages during signout
+      if (typeof window !== 'undefined' && window.localStorage) {
+        Object.keys(localStorage).forEach((key) => {
+          if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+            localStorage.removeItem(key)
+          }
+        })
+      }
+    } catch {}
+
+    // Invalidate any cached business analytics data
+    try {
+      invalidateBusinessSalesDataCache()
+    } catch {}
+
+    // 3. Immediately tear down all active realtime channels
+    try {
       await cleanupAllRealtimeChannels(supabase)
     } catch (cleanupErr) {
       console.warn('[AuthContext] realtime cleanup warning during signOut:', cleanupErr)
     }
 
+    // 4. Dispatch server-side signOut with safety timeout (2.5s)
     try {
-      // 2. Race signOut against a safety timeout (3500ms) so Gotrue network/lock hang never freezes UI
       const signOutPromise = supabase.auth.signOut()
-      const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 3500))
+      const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 2500))
       const res = await Promise.race([signOutPromise, timeoutPromise])
       if (res?.timeout) {
         console.warn('[AuthContext] supabase.auth.signOut timed out, invoking local scope signout fallback')
@@ -488,34 +531,11 @@ export function AuthProvider({ children }) {
         } catch {}
       }
     } catch (err) {
-      console.error('[AuthContext] signOut failed, proceeding to wipe local session anyway:', err)
+      console.warn('[AuthContext] signOut server notice:', err)
       try {
         await supabase.auth.signOut({ scope: 'local' })
       } catch {}
     } finally {
-      // 3. Clear all auth and entity states synchronously
-      setUser(null)
-      setProfile(null)
-      setBusiness(null)
-      setSubscription(null)
-      setHasPaidHistory(false)
-      setSubscriptionError(null)
-      setProfileLoaded(true)
-      setBusinessLoaded(true)
-      setSubscriptionLoaded(true)
-      setAuthLoading(false)
-
-      // 4. Clean up any Supabase auth tokens stored in localStorage to prevent resurrecting session
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          Object.keys(localStorage).forEach((key) => {
-            if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-              localStorage.removeItem(key)
-            }
-          })
-        }
-      } catch {}
-
       setIsLoggingOut(false)
       isSigningOutRef.current = false
     }
@@ -601,60 +621,88 @@ export function AuthProvider({ children }) {
   const isAccessDenied = isBanned || isSuspended
   const banReason = profile?.status_reason || ''
 
-  // Entitlement state machine per fic1.md & fix.md specifications
-  const entitlement = calculateSubscriptionEntitlement({
+  // Entitlement state machine per fic1.md & fix.md specifications (memoized)
+  const entitlement = useMemo(() => calculateSubscriptionEntitlement({
     user,
     subscription,
     hasPaidHistory,
     loading,
     error: subscriptionError,
     now: new Date(),
-  })
+  }), [user, subscription, hasPaidHistory, loading, subscriptionError])
+
+  const value = useMemo(() => ({
+    user,
+    profile,
+    business: isAccessDenied ? null : business,
+    subscription: isAccessDenied ? null : subscription,
+    hasPaidHistory,
+    hasUsedFreeAi,
+    loading,
+    authLoading,
+    isAuthenticated: !!user && !loading && !isAccessDenied,
+    isAccessDenied,
+    isBanned,
+    isSuspended,
+    banReason,
+    hasCompletedOnboarding: !!business && !isAccessDenied,
+    subscriptionState: isAccessDenied ? 'none' : entitlement.subscriptionState,
+    hasActiveSubscription: isAccessDenied ? false : entitlement.hasActiveSubscription,
+    hasExpiredSubscription: isAccessDenied ? false : entitlement.hasExpiredSubscription,
+    hasCancelledSubscription: isAccessDenied ? false : (entitlement.hasCancelledSubscription || false),
+    isPro: isAccessDenied ? false : entitlement.isPro,
+    isBasic: isAccessDenied ? false : entitlement.isBasic,
+    plan: isAccessDenied ? null : entitlement.plan,
+    canAccessBasic: isAccessDenied ? false : Boolean(entitlement.hasActiveSubscription),
+    canAccessPro: isAccessDenied ? false : Boolean(entitlement.isPro),
+    subscriptionExpiresAt: subscription?.expires_at || null,
+    subscriptionError,
+    isSubscriptionLoading: !subscriptionLoaded,
+    isLoggingOut,
+    isRecoveryMode,
+    signInWithGoogle,
+    signInWithEmail,
+    signUpWithEmail,
+    resetPasswordForEmail,
+    updatePassword,
+    signOut,
+    refreshProfile,
+    refreshBusiness,
+    refreshSubscription,
+    refreshFreeAiUsage,
+    retrySubscription: refreshSubscription,
+  }), [
+    user,
+    profile,
+    business,
+    subscription,
+    hasPaidHistory,
+    hasUsedFreeAi,
+    loading,
+    authLoading,
+    isAccessDenied,
+    isBanned,
+    isSuspended,
+    banReason,
+    entitlement,
+    subscriptionError,
+    subscriptionLoaded,
+    isLoggingOut,
+    isRecoveryMode,
+    signInWithGoogle,
+    signInWithEmail,
+    signUpWithEmail,
+    resetPasswordForEmail,
+    updatePassword,
+    signOut,
+    refreshProfile,
+    refreshBusiness,
+    refreshSubscription,
+    refreshFreeAiUsage,
+  ])
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        profile,
-        business: isAccessDenied ? null : business,
-        subscription: isAccessDenied ? null : subscription,
-        hasPaidHistory,
-        hasUsedFreeAi,
-        loading,
-        authLoading,
-        isAuthenticated: !!user && !loading && !isAccessDenied,
-        isAccessDenied,
-        isBanned,
-        isSuspended,
-        banReason,
-        hasCompletedOnboarding: !!business && !isAccessDenied,
-        subscriptionState: isAccessDenied ? 'none' : entitlement.subscriptionState,
-        hasActiveSubscription: isAccessDenied ? false : entitlement.hasActiveSubscription,
-        hasExpiredSubscription: isAccessDenied ? false : entitlement.hasExpiredSubscription,
-        hasCancelledSubscription: isAccessDenied ? false : (entitlement.hasCancelledSubscription || false),
-        isPro: isAccessDenied ? false : entitlement.isPro,
-        isBasic: isAccessDenied ? false : entitlement.isBasic,
-        plan: isAccessDenied ? null : entitlement.plan,
-        canAccessBasic: isAccessDenied ? false : Boolean(entitlement.hasActiveSubscription),
-        canAccessPro: isAccessDenied ? false : Boolean(entitlement.isPro),
-        subscriptionExpiresAt: subscription?.expires_at || null,
-        subscriptionError,
-        isSubscriptionLoading: !subscriptionLoaded,
-        isLoggingOut,
-        isRecoveryMode,
-        signInWithGoogle,
-        signInWithEmail,
-        signUpWithEmail,
-        resetPasswordForEmail,
-        updatePassword,
-        signOut,
-        refreshProfile,
-        refreshBusiness,
-        refreshSubscription,
-        refreshFreeAiUsage,
-        retrySubscription: refreshSubscription,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )

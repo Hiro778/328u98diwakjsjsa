@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 
 const BUSINESS_TYPES = [
-  'UMKM', 'Exportir', 'Manufaktur', 'Peternakan', 'Perikanan', 'Pertanian', 'Jasa', 'Lainnya',
+  'UMKM', 'Perdagangan', 'Manufaktur', 'Peternakan', 'Perikanan', 'Pertanian', 'Jasa', 'Lainnya',
 ]
 
 const BUSINESS_CATEGORIES = [

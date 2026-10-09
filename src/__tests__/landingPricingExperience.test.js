@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PLAN_CONFIG, PLANS } from '../data/categories.js';
+import { PLAN_CONFIG, PLANS, CATEGORIES, isCategoryVisible, isToolVisible, TOTAL_VISIBLE_TOOLS, FEATURE_FLAGS } from '../data/categories.js';
 
 describe('Landing Page & Pricing Experience Integrity Tests', () => {
   const landingPath = path.resolve('src/pages/LandingPage.jsx');
@@ -174,5 +174,81 @@ describe('Landing Page & Pricing Experience Integrity Tests', () => {
 
     // 9. Pricing handoff tetap berjalan
     assert.ok(content.includes('href="#final-cta"'));
+  });
+
+  test('Section 7: Regression Test — No export or currency features in Basic plan or public pricing surfaces', () => {
+    const pricingExpContent = fs.readFileSync(pricingExpPath, 'utf8');
+    const pricingSecPath = path.resolve('src/sections/Pricing.jsx');
+    const pricingPagePath = path.resolve('src/pages/PricingPage.jsx');
+    const pricingSecContent = fs.readFileSync(pricingSecPath, 'utf8');
+    const pricingPageContent = fs.readFileSync(pricingPagePath, 'utf8');
+
+    // 1. Source content checks for forbidden legacy phrases
+    const forbiddenPricingItems = [
+      'Kurs & Bea Cukai Calculator',
+      'Analisis Valuta & Ekspor Standalone',
+      'Tools Valuta & Kurs',
+      'Valuta & Ekspor',
+      'Kurs & Bea Cukai',
+      'dan Kurs',
+    ];
+
+    for (const item of forbiddenPricingItems) {
+      assert.ok(
+        !pricingExpContent.includes(item),
+        `PricingExperience.jsx must NOT contain forbidden item: "${item}"`
+      );
+      assert.ok(
+        !pricingSecContent.includes(item),
+        `Pricing.jsx must NOT contain forbidden item: "${item}"`
+      );
+      assert.ok(
+        !pricingPageContent.includes(item),
+        `PricingPage.jsx must NOT contain forbidden item: "${item}"`
+      );
+    }
+
+    // 2. Validate actual features data rendered for Basic plan in PricingExperience.jsx
+    const basicPlanMatch = pricingExpContent.match(/id:\s*['"]basic['"][\s\S]*?features:\s*(\[[\s\S]*?\])\s*,?\s*\}/);
+    assert.ok(basicPlanMatch, 'Basic plan features array must be present in PricingExperience.jsx');
+    // Evaluates parsed array of feature objects: [{ text: '...', highlight?: boolean }]
+    const basicFeatures = eval(basicPlanMatch[1]);
+    assert.ok(Array.isArray(basicFeatures), 'Basic features must be an array');
+    assert.equal(basicFeatures.length, 7, 'Basic features must contain exactly 7 feature items');
+
+    const basicFeatureTexts = basicFeatures.map((f) => f.text);
+    assert.ok(basicFeatureTexts.includes('Perencanaan Pajak (Tax Planning)'), 'Must include Tax Planning');
+    assert.ok(basicFeatureTexts.includes('Cash Flow Forecast Bulanan'), 'Must include Cash Flow Forecast Bulanan');
+
+    for (const text of basicFeatureTexts) {
+      assert.ok(
+        !/ekspor|export|kurs|bea cukai|valuta/i.test(text),
+        `Basic plan rendered feature "${text}" must not contain export or foreign exchange terms`
+      );
+    }
+
+    // 3. Validate BASIC_FEATURES array data in PricingPage.jsx
+    const pageFeaturesMatch = pricingPageContent.match(/const BASIC_FEATURES\s*=\s*(\[[\s\S]*?\])\s*(?:;|\n)/);
+    assert.ok(pageFeaturesMatch, 'BASIC_FEATURES must be defined in PricingPage.jsx');
+    const pageBasicFeatures = eval(pageFeaturesMatch[1]);
+    for (const text of pageBasicFeatures) {
+      assert.ok(
+        !/kurs|valuta|bea cukai|ekspor/i.test(text),
+        `PricingPage.jsx BASIC_FEATURES item "${text}" must not contain export/valuta terms`
+      );
+    }
+
+    // 4. Validate runtime category visibility and tool counts from data source of truth
+    assert.equal(FEATURE_FLAGS.export_tools, false, 'FEATURE_FLAGS.export_tools must be false');
+    assert.equal(isCategoryVisible(CATEGORIES.export), false, 'Export category must NOT be visible');
+    assert.equal(
+      isToolVisible(CATEGORIES.finance.tools.find((t) => t.name === 'Kurs')),
+      false,
+      'Kurs tool must NOT be visible'
+    );
+    assert.ok(
+      TOTAL_VISIBLE_TOOLS > 0 && TOTAL_VISIBLE_TOOLS < 39,
+      `TOTAL_VISIBLE_TOOLS (${TOTAL_VISIBLE_TOOLS}) must exclude hidden export tools`
+    );
   });
 });

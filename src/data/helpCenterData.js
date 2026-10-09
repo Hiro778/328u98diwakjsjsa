@@ -12,7 +12,7 @@ export const HELP_CATEGORIES = [
   { id: 'sales', label: 'Penjualan & CRM', icon: 'user-group' },
   { id: 'marketing', label: 'Marketing', icon: 'megaphone' },
   { id: 'legal', label: 'Legal & Compliance', icon: 'shield-check' },
-  { id: 'export', label: 'Kurs & Ekspor', icon: 'globe' },
+  { id: 'export', label: 'Kurs & Valuta', icon: 'globe' },
   { id: 'analytics', label: 'Analytics', icon: 'chart-bar' },
   { id: 'account', label: 'Akun & Subscription', icon: 'credit-card' },
   { id: 'rules', label: 'Ketentuan Penggunaan', icon: 'document-text' },
@@ -222,7 +222,7 @@ export const TOOL_FAQS = [
     caraPakai: [
       'Pilih periode laporan (bulan berjalan, kuartal, atau tahun berjalan).',
       'Tinjau breakdown pendapatan vs seluruh komponen pengeluaran.',
-      'Export atau cetak ringkasan laporan keuangan.',
+      'Unduh atau cetak ringkasan laporan keuangan.',
     ],
     artiHasil: 'Laba bersih positif menandakan operasional periode tersebut berjalan secara profitable.',
     catatan: 'Disusun berdasarkan agregasi transaksi yang tercatat di sistem.',
@@ -710,24 +710,40 @@ export const TOOL_FAQS = [
     keywords: ['legalitas', 'nib oss', 'halal bpjph', 'pirt', 'haki merek'],
   },
 
-  // ── Kurs & Ekspor ──
+  // ── Kurs & Valuta ──
   {
     toolName: 'Kurs & Valuta Asing',
     category: 'export',
     route: '/dashboard/ekspor',
     entitlement: 'FREE',
     apaItu: 'Informasi nilai tukar mata uang asing utama (USD, EUR, SGD, MYR, JPY, CNY) terhadap Rupiah untuk membantu UMKM memantau dampak fluktuasi valas.',
-    kapanDigunakan: 'Saat membeli bahan baku impor, menentukan harga jual produk ekspor, atau memantau tren kurs.',
+    kapanDigunakan: 'Saat membeli bahan baku impor, menentukan harga jual produk pasar global, atau memantau tren kurs.',
     caraPakai: [
       'Buka /dashboard/ekspor.',
       'Lihat kurs tengah indikatif Bank Indonesia dan kalkulator konversi valuta asing.',
     ],
     artiHasil: 'Membantu mengestimasi biaya riil transaksi valas bisnis Anda.',
     catatan: 'Kurs indikatif; transaksi perbankan menggunakan kurs transaksi bank penyedia.',
-    keywords: ['kurs', 'valas', 'dollar rupiah', 'ekspor impor', 'konversi mata uang'],
+    keywords: ['kurs', 'valas', 'dollar rupiah', 'perdagangan global', 'konversi mata uang'],
   },
 
   // ── Analytics ──
+  {
+    toolName: 'AI Business Analyst',
+    category: 'analytics',
+    route: '/ai',
+    entitlement: 'PRO',
+    apaItu: 'Asisten analis bisnis berbasis AI yang memberikan wawasan strategis, diagnosis kesehatan usaha, dan rekomendasi langkah optimasi bisnis.',
+    kapanDigunakan: 'Saat Anda membutuhkan analisis mendalam performa bisnis atau rekomendasi keputusan strategis UMKM.',
+    caraPakai: [
+      'Buka /ai dari menu navigasi.',
+      'Ketik pertanyaan bisnis atau pilih topik analisis yang diinginkan.',
+      'Dapatkan analisis mendalam dan rekomendasi tindakan praktis.',
+    ],
+    artiHasil: 'Rekomendasi strategis dan wawasan terstruktur untuk memajukan pertumbuhan usaha Anda.',
+    catatan: 'Fitur eksklusif paket Pro dengan dukungan model AI bisnis teruji.',
+    keywords: ['ai analyst', 'analis bisnis', 'konsultan bisnis', 'asisten ai', 'strategi bisnis'],
+  },
   {
     toolName: 'Real-time Dashboard',
     category: 'analytics',

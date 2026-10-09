@@ -19,13 +19,13 @@ describe('BisnisSehat Full Adversarial Security & Business Logic Audit (bug.md)'
       const categoriesPath = path.resolve(process.cwd(), 'src/data/categories.js');
       const content = fs.readFileSync(categoriesPath, 'utf8');
 
-      // Finance free tools
-      assert.ok(content.includes("name: 'HPP Calculator', path: '/dashboard/keuangan/hpp-calculator', requiresPro: false, isFree: true"));
-      assert.ok(content.includes("name: 'BEP Calculator', path: '/dashboard/keuangan/bep-calculator', requiresPro: false, isFree: true"));
+      // Finance basic tools
+      assert.ok(content.includes("name: 'HPP Calculator', path: '/dashboard/keuangan/hpp-calculator', tier: 'basic', requiresPro: false"));
+      assert.ok(content.includes("name: 'BEP Calculator', path: '/dashboard/keuangan/bep-calculator', tier: 'basic', requiresPro: false"));
 
       // Finance Pro tools
-      assert.ok(content.includes("name: 'Margin Analysis', path: '/dashboard/keuangan/margin-analysis', requiresPro: true"));
-      assert.ok(content.includes("name: 'Cash Flow Forecast', path: '/dashboard/keuangan/cash-flow-forecast', requiresPro: true"));
+      assert.ok(content.includes("name: 'Margin Analysis', path: '/dashboard/keuangan/margin-analysis', tier: 'pro', requiresPro: true"));
+      assert.ok(content.includes("name: 'Financial Reports', path: '/dashboard/keuangan/financial-reports', tier: 'pro', requiresPro: true"));
 
       // Coming soon tools
       assert.ok(content.includes("name: 'AI Video Generator', availability: 'COMING_SOON', status: 'coming_soon'"));

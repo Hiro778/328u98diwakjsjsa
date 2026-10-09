@@ -87,7 +87,7 @@ export default function ExcelPenjualanPage() {
       setTimeout(() => setToastMessage(''), 4000)
     } catch (err) {
       console.error('[ExcelPenjualanPage] Export error:', err)
-      setError(`Gagal mengekspor Excel: ${err.message}`)
+      setError(`Gagal mengunduh Excel: ${err.message}`)
     } finally {
       setExporting(false)
     }
@@ -194,7 +194,7 @@ export default function ExcelPenjualanPage() {
             disabled={exporting || loading}
             className="px-4 py-2 text-sm font-medium rounded-xl border border-border bg-bg-card hover:bg-bg-hover text-text-primary transition-all disabled:opacity-50 shadow-sm"
           >
-            Export Bulan Ini
+            Unduh Excel Bulan Ini
           </button>
           <button
             onClick={() => handleExport('all')}
@@ -214,7 +214,7 @@ export default function ExcelPenjualanPage() {
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
-                Export Excel Terbaru
+                Unduh Excel Terbaru
               </>
             )}
           </button>

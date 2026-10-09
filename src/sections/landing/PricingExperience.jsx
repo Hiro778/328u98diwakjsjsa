@@ -29,8 +29,8 @@ const PLANS_DATA = [
       { text: 'Simulasi Pinjaman & Angsuran', highlight: true },
       { text: 'Kalkulator Gaji Karyawan', highlight: true },
       { text: 'Generator Iklan & Copywriting' },
-      { text: 'Kurs & Bea Cukai Calculator' },
-      { text: 'Analisis Valuta & Ekspor Standalone' },
+      { text: 'Perencanaan Pajak (Tax Planning)' },
+      { text: 'Cash Flow Forecast Bulanan' },
     ],
   },
   {

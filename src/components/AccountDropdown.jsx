@@ -138,11 +138,8 @@ export default function AccountDropdown() {
               <button
                 disabled={isLoggingOut}
                 onClick={async () => {
-                  try {
-                    await signOut()
-                  } finally {
-                    setOpen(false)
-                  }
+                  setOpen(false)
+                  await signOut()
                 }}
                 className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-danger hover:bg-danger/10 disabled:opacity-50 transition-colors text-left"
               >

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import { useProductCatalog } from '../context/ProductCatalogContext'
+import { ProductCatalogProvider, useProductCatalog } from '../context/ProductCatalogContext'
 import LandingState from './ExportIntelligence/LandingState'
 import ProductSelector from './ExportIntelligence/ProductSelector'
 import AddProductForm from './ExportIntelligence/AddProductForm'
@@ -9,7 +9,7 @@ import ResultsPanel from './ExportIntelligence/ResultsPanel'
 import DestinationInsights from './ExportIntelligence/DestinationInsights'
 import { calculateExport } from './ExportIntelligence/calculateExport'
 
-export default function ExportIntelligence() {
+function ExportIntelligenceInner() {
   const { getProduct } = useProductCatalog()
   const [stage, setStage] = useState('LANDING')
   const [selectedProductId, setSelectedProductId] = useState(null)
@@ -112,5 +112,13 @@ export default function ExportIntelligence() {
         </div>
       </div>
     </section>
+  )
+}
+
+export default function ExportIntelligence() {
+  return (
+    <ProductCatalogProvider>
+      <ExportIntelligenceInner />
+    </ProductCatalogProvider>
   )
 }

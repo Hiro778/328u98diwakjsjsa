@@ -20,7 +20,7 @@ import { invalidateBusinessContactCache } from '../../services/businessContactSe
 import BusinessQrisSettings from '../../components/pos/BusinessQrisSettings'
 
 const DEFAULT_BUSINESS_TYPES = [
-  'UMKM', 'Exportir', 'Manufaktur', 'Peternakan', 'Perikanan', 'Pertanian', 'Jasa', 'Lainnya',
+  'UMKM', 'Perdagangan', 'Manufaktur', 'Peternakan', 'Perikanan', 'Pertanian', 'Jasa', 'Lainnya',
 ]
 
 const DEFAULT_BUSINESS_CATEGORIES = [

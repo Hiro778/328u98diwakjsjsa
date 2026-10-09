@@ -14,7 +14,7 @@ function formatRpShort(n) {
 export default function ResultsPanel({ product, config, results, onBack, onReset }) {
   const metrics = [
     { label: 'Estimasi Revenue', value: formatRp(results.revenue), accent: 'text-warm-400' },
-    { label: 'Total Biaya Ekspor', value: formatRp(results.exportCost), accent: 'text-electric-400' },
+    { label: 'Total Biaya Logistik', value: formatRp(results.exportCost), accent: 'text-electric-400' },
     { label: 'Estimasi Profit', value: formatRp(results.profit), accent: 'text-profit-400' },
     { label: 'Margin', value: results.margin.toFixed(1) + '%', accent: 'text-profit-400' },
   ]

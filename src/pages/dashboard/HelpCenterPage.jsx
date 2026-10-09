@@ -37,7 +37,7 @@ export default function HelpCenterPage() {
       })
     })
 
-    TOOL_FAQS.forEach((tool, idx) => {
+    TOOL_FAQS.filter((tool) => tool.category !== 'export' && !tool.hidden).forEach((tool, idx) => {
       items.push({
         id: `tool-${idx}-${tool.toolName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
         type: 'tool',
@@ -189,7 +189,7 @@ export default function HelpCenterPage() {
 
           {/* Categories Pill Bar */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-none text-xs">
-            {HELP_CATEGORIES.map((cat) => {
+            {HELP_CATEGORIES.filter((cat) => cat.id !== 'export' && !cat.hidden).map((cat) => {
               const isSelected = selectedCategory === cat.id
               return (
                 <button

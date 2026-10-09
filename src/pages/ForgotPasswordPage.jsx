@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { motion } from 'framer-motion'
 import { Link } from 'react-router'
 import { useAuth } from '../context/AuthContext'
 import { usePlatformSettings } from '../hooks/usePlatformSettings'
@@ -63,12 +62,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-cream px-4 sm:px-5 py-8 pt-[max(2rem,env(safe-area-inset-top,0px))] pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-sm"
-      >
+      <div className="w-full max-w-sm transition-all duration-300">
         {/* Brand */}
         <div className="mb-8 text-center">
           <Link to="/" className="inline-block">
@@ -83,11 +77,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         {submitted ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="rounded-2xl border border-emerald-200 bg-white p-6 text-center shadow-sm"
-          >
+          <div className="rounded-2xl border border-emerald-200 bg-white p-6 text-center shadow-sm">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-2xl">
               ✉️
             </div>
@@ -105,18 +95,14 @@ export default function ForgotPasswordPage() {
                 Kembali ke Login
               </Link>
             </div>
-          </motion.div>
+          </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             {clientError && (
-              <motion.div
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 flex items-start gap-2 shadow-sm"
-              >
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 flex items-start gap-2 shadow-sm">
                 <span className="text-sm select-none">⚠️</span>
                 <span>{clientError}</span>
-              </motion.div>
+              </div>
             )}
 
             <div>
@@ -162,7 +148,7 @@ export default function ForgotPasswordPage() {
             </div>
           </form>
         )}
-      </motion.div>
+      </div>
     </div>
   )
 }

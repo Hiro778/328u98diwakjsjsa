@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { fetchPublicPlatformSettings, DEFAULT_PUBLIC_SETTINGS } from '../services/adminSettingsService'
 
 const SettingsContext = createContext(null)
@@ -51,10 +51,12 @@ export function SettingsProvider({ children }) {
       document.addEventListener('visibilitychange', handleVisibilityChange)
     }
 
-    // 30-second interval fallback for active tabs
+    // 60-second interval fallback for active visible tabs
     const intervalId = setInterval(() => {
-      load(true)
-    }, 30000)
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        load(true)
+      }
+    }, 60000)
 
     return () => {
       isMountedRef.current = false
@@ -70,7 +72,7 @@ export function SettingsProvider({ children }) {
     }
   }, [load])
 
-  const value = {
+  const value = useMemo(() => ({
     settings,
     loading,
     refetchSettings: () => load(true),
@@ -87,7 +89,7 @@ export function SettingsProvider({ children }) {
     isPosEnabled: settings.enable_pos_module !== false,
     posMaxItems: Number(settings.pos_max_items_per_order) || 100,
     sessionIdleTimeoutMinutes: Number(settings.session_idle_timeout_minutes) || 60,
-  }
+  }), [settings, loading, load])
 
   return (
     <SettingsContext.Provider value={value}>

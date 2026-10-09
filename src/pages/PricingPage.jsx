@@ -7,7 +7,7 @@ import { cancelSubscription } from '../lib/subscriptionService'
 import { redeemActivationCode } from '../lib/activationCodeService'
 
 const BASIC_FEATURES = [
-  'Tools Bisnis Basic: HPP, BEP, Tax Planning, Loan Simulation, Cash Flow Forecast, dan Kurs',
+  'Tools Bisnis Basic: HPP, BEP, Tax Planning, Loan Simulation, dan Cash Flow Forecast',
   'Akses AI Creative Studio (tanpa kuota kredit bulanan; top-up kredit tersedia terpisah)',
   'Perhitungan realtime instan langsung di browser',
   'Tanpa komitmen jangka panjang, bayar bulanan Rp35.000',

@@ -1,5 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
+import { Link } from 'react-router'
 import { motion } from 'framer-motion'
+import { FEATURE_FLAGS } from '../../data/categories'
 import useExchangeRates from '../../hooks/useExchangeRates'
 import AnimatedNumber from '../../components/AnimatedNumber'
 import CurrencyConverter from '../../sections/CurrencyIntelligence/CurrencyConverter'
@@ -24,7 +26,45 @@ const fadeUp = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } },
 }
 
-export default function ExportCenterPage() {
+function ExportLockedState() {
+  return (
+    <div className="space-y-6">
+      <BackButton fallbackUrl="/dashboard" label="Kembali" />
+      <div className="flex min-h-[60vh] flex-col items-center justify-center rounded-2xl border border-[#222C3E] bg-[#151D2C] p-8 text-center shadow-sm">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        </div>
+        <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-400">
+          🔒 Fitur Dinonaktifkan
+        </span>
+        <h2 className="mt-4 text-xl font-bold text-white">
+          Fitur ini saat ini belum tersedia
+        </h2>
+        <p className="mt-2 max-w-md text-sm text-slate-400 leading-relaxed">
+          Platform BisnisSehat saat ini berfokus penuh pada solusi dan instrumen bisnis UMKM Indonesia. Modul ini sedang dinonaktifkan.
+        </p>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-primary/90"
+          >
+            Kembali ke Dashboard
+          </Link>
+          <Link
+            to="/dashboard/semua-tools"
+            className="inline-flex items-center gap-2 rounded-xl border border-[#222C3E] bg-[#1E293B] px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:bg-[#253248] hover:text-white"
+          >
+            Lihat Direktori Tools UMKM
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LiveExportCenter() {
   const { rates, source, timestamp, loading, error, isStale, refresh } = useExchangeRates({
     autoRefresh: true,
     intervalMs: 5 * 60 * 1000,
@@ -320,4 +360,11 @@ function formatTimestamp(ts) {
   } catch {
     return '—'
   }
+}
+
+export default function ExportCenterPage() {
+  if (!FEATURE_FLAGS.export_tools) {
+    return <ExportLockedState />
+  }
+  return <LiveExportCenter />
 }

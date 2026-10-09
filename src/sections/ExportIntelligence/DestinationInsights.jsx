@@ -29,7 +29,7 @@ export default function DestinationInsights({ selectedDest, onSelect, interactiv
           <span className="text-2xl">{d.flag}</span>
           <div className="flex-1">
             <p className="font-semibold text-cream">{d.name}</p>
-            <p className="text-xs text-cream/50">Potential export margin {d.margin}</p>
+            <p className="text-xs text-cream/50">Potential global margin {d.margin}</p>
           </div>
           <svg
             className={`h-4 w-4 transition-colors ${

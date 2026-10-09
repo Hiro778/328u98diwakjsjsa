@@ -1,9 +1,7 @@
-import { useState, Suspense } from 'react'
+import { useState, Suspense, useEffect } from 'react'
 import { Outlet, Link } from 'react-router'
-import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { usePlatformSettings } from '../hooks/usePlatformSettings'
-import LoadingScreen from './LoadingScreen'
 import SidebarNav from './SidebarNav'
 import AccountDropdown from './AccountDropdown'
 import SubscriptionCard from './SubscriptionCard'
@@ -12,10 +10,31 @@ import NotificationDropdown from './NotificationDropdown'
 import CustomerSupportWidget from './CustomerSupportWidget'
 import BannedAccountScreen from './BannedAccountScreen'
 
+function DashboardContentFallback() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+    </div>
+  )
+}
+
 export default function DashboardLayout() {
   const { business, isAccessDenied, banReason, signOut } = useAuth()
   const { platformName, isAnnouncementEnabled, announcementText } = usePlatformSettings()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Accessible dismiss: Close mobile drawer on Escape key
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'Escape' && sidebarOpen) {
+        setSidebarOpen(false)
+      }
+    }
+    if (sidebarOpen) {
+      window.addEventListener('keydown', handleKeyDown)
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [sidebarOpen])
 
   // Defense-in-depth: Immediately lockout dashboard if account access is denied
   if (isAccessDenied) {
@@ -50,55 +69,52 @@ export default function DashboardLayout() {
         </div>
       </aside>
 
-      {/* Mobile sidebar drawer overlay */}
-      <AnimatePresence>
-        {sidebarOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSidebarOpen(false)}
-              className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs lg:hidden"
-            />
-            <motion.aside
-              initial={{ x: -264 }}
-              animate={{ x: 0 }}
-              exit={{ x: -264 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed inset-y-0 left-0 z-50 flex w-64 max-w-[calc(100vw-48px)] flex-col border-r border-border bg-surface shadow-2xl lg:hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]"
-            >
-              <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-5">
-                <Link to="/" className="flex items-center gap-2.5">
-                  <img src="/brand-logo.png" alt="BisnisSehat" className="h-9 w-9 object-contain shrink-0" />
-                  <div>
-                    <span className="block text-sm font-bold text-text-primary leading-none">BisnisSehat</span>
-                    <span className="block text-[10px] font-medium text-text-muted mt-1 leading-none">OS UMKM Modern</span>
-                  </div>
-                </Link>
-                <button
-                  onClick={() => setSidebarOpen(false)}
-                  className="rounded-lg p-1.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"
-                  aria-label="Tutup sidebar"
-                >
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+      {/* Mobile sidebar drawer overlay (Hardware-accelerated CSS transition) */}
+      <div
+        onClick={() => setSidebarOpen(false)}
+        className={`fixed inset-0 z-40 bg-black/50 lg:hidden transition-opacity duration-200 ${
+          sidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+        aria-hidden={!sidebarOpen}
+      />
+      <aside
+        id="mobile-sidebar-drawer"
+        role="dialog"
+        aria-modal={sidebarOpen ? 'true' : 'false'}
+        aria-label="Navigasi Menu Mobile"
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 max-w-[calc(100vw-48px)] flex-col border-r border-border bg-surface shadow-2xl lg:hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] transition-transform duration-200 ease-out will-change-transform ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+        aria-hidden={!sidebarOpen}
+      >
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-5">
+          <Link to="/" className="flex items-center gap-2.5">
+            <img src="/brand-logo.png" alt="BisnisSehat" className="h-9 w-9 object-contain shrink-0" />
+            <div>
+              <span className="block text-sm font-bold text-text-primary leading-none">BisnisSehat</span>
+              <span className="block text-[10px] font-medium text-text-muted mt-1 leading-none">OS UMKM Modern</span>
+            </div>
+          </Link>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="rounded-lg p-1.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"
+            aria-label="Tutup sidebar"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
 
-              <SidebarNav onNavigate={() => setSidebarOpen(false)} />
+        <SidebarNav onNavigate={() => setSidebarOpen(false)} />
 
-              <div className="mt-auto">
-                <SubscriptionCard />
-                <div className="border-t border-border px-3 py-2.5 bg-surface">
-                  <ThemePicker />
-                </div>
-              </div>
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
+        <div className="mt-auto">
+          <SubscriptionCard />
+          <div className="border-t border-border px-3 py-2.5 bg-surface">
+            <ThemePicker />
+          </div>
+        </div>
+      </aside>
 
       {/* Main content column */}
       <div className="flex flex-1 flex-col min-w-0">
@@ -108,6 +124,8 @@ export default function DashboardLayout() {
             {/* Mobile hamburger */}
             <button
               onClick={() => setSidebarOpen(true)}
+              aria-expanded={sidebarOpen}
+              aria-controls="mobile-sidebar-drawer"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-surface text-text-secondary hover:bg-surface-hover hover:text-text-primary lg:hidden transition-colors"
               aria-label="Buka navigasi"
             >
@@ -151,7 +169,7 @@ export default function DashboardLayout() {
 
         {/* Page content */}
         <main className="flex-1 p-3 sm:p-6 lg:p-8 w-full max-w-7xl mx-auto min-w-0">
-          <Suspense fallback={<LoadingScreen />}>
+          <Suspense fallback={<DashboardContentFallback />}>
             <Outlet />
           </Suspense>
         </main>

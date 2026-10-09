@@ -231,12 +231,30 @@ export function aggregateSalesMetrics(orders = []) {
   }
 }
 
+const salesDataCache = new Map()
+const CACHE_TTL_MS = 30000 // 30 seconds
+
+export function invalidateBusinessSalesDataCache(businessId) {
+  if (businessId) {
+    salesDataCache.delete(`${businessId}_true`)
+    salesDataCache.delete(`${businessId}_false`)
+  } else {
+    salesDataCache.clear()
+  }
+}
+
 /**
  * Fetch data penjualan & inventori aktual untuk tenant tertentu
  */
-export async function fetchBusinessSalesData(businessId, { onlyFinal = true } = {}) {
+export async function fetchBusinessSalesData(businessId, { onlyFinal = true, forceRefresh = false } = {}) {
   if (!businessId) {
     throw new Error('Tenant isolation: business_id wajib disertakan.')
+  }
+
+  const cacheKey = `${businessId}_${onlyFinal}`
+  const cached = salesDataCache.get(cacheKey)
+  if (!forceRefresh && cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+    return cached.data
   }
 
   // 1. Ambil orders dan order_items via canonical service (Source of Truth)
@@ -268,8 +286,15 @@ export async function fetchBusinessSalesData(businessId, { onlyFinal = true } = 
     (item) => item.product && item.product.business_id === businessId
   )
 
-  return {
+  const result = {
     orders: orders || [],
     inventory: tenantInventory,
   }
+
+  salesDataCache.set(cacheKey, {
+    data: result,
+    timestamp: Date.now(),
+  })
+
+  return result
 }

@@ -49,10 +49,11 @@ import {
   fetchCanonicalOrders,
   aggregateSalesMetrics,
   fetchBusinessSalesData,
+  invalidateBusinessSalesDataCache,
 } from './canonicalSalesService.js'
 import { injectNativeChart } from './excelChartService.js'
 
-export { isFinalTransaction, fetchCanonicalOrders, aggregateSalesMetrics, fetchBusinessSalesData, injectNativeChart }
+export { isFinalTransaction, fetchCanonicalOrders, aggregateSalesMetrics, fetchBusinessSalesData, invalidateBusinessSalesDataCache, injectNativeChart }
 
 /**
  * Bangun data laporan harian untuk satu bulan tertentu, dibatasi sampai batas tanggal cutoff
@@ -276,7 +277,7 @@ export async function generateSalesWorkbook({
   summarySheet.getCell('B4').value = periodText
   summarySheet.getCell('A4').font = { bold: true }
 
-  summarySheet.getCell('D3').value = 'Tanggal Export:'
+  summarySheet.getCell('D3').value = 'Tanggal Unduh:'
   summarySheet.getCell('E3').value = exportD.toLocaleDateString('id-ID', {
     year: 'numeric',
     month: 'long',

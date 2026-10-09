@@ -11,6 +11,7 @@ import {
   partitionOrdersByMonth,
   generateSalesWorkbook,
   fetchBusinessSalesData,
+  invalidateBusinessSalesDataCache,
   buildDailyReportData,
 } from '../services/excelSalesService.js'
 
@@ -442,6 +443,30 @@ describe('Excel Penjualan Otomatis Test Suite (sheet.md & excell.md)', () => {
     assert.ok(chartXml.includes('<c:barChart>'), 'Must be native bar chart')
     assert.ok(chartXml.includes('Revenue Harian'), 'Must have title Revenue Harian')
     assert.ok(chartXml.includes('&apos;Ringkasan&apos;!$E$12:$E$35'), 'Values reference daily revenue range')
+  })
+
+  // ============================================================
+  // 12. CACHE & TENANT ISOLATION INVALIDATION
+  // ============================================================
+  it('12. invalidateBusinessSalesDataCache provides safe tenant-specific and global cache flushing', async () => {
+    assert.equal(typeof invalidateBusinessSalesDataCache, 'function', 'invalidateBusinessSalesDataCache must be an exported function')
+
+    // Verifies tenant validation on empty or missing businessId
+    await assert.rejects(
+      async () => {
+        await fetchBusinessSalesData('')
+      },
+      {
+        name: 'Error',
+        message: /Tenant isolation: business_id wajib disertakan/,
+      }
+    )
+
+    // Safe execution of tenant-scoped invalidation
+    assert.doesNotThrow(() => invalidateBusinessSalesDataCache('business-test-abc-123'))
+
+    // Safe execution of full cache flush (used upon user signOut / session teardown)
+    assert.doesNotThrow(() => invalidateBusinessSalesDataCache())
   })
 })
 
